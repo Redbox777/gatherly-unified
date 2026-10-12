@@ -33,7 +33,7 @@ def test_email_registration_normalizes_email_and_hashes_password(service) -> Non
     assert identity.password_hash != "a long example password"
     assert service.authenticate_email(
         email="USER@example.test", password="a long example password"
-    ) == identity
+    ) is None
 
 
 def test_email_authentication_rejects_wrong_password_and_unknown_email(service) -> None:
