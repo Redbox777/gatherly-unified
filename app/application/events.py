@@ -1,5 +1,6 @@
 """Use cases for event creation and retrieval."""
 
+from datetime import datetime
 from uuid import UUID
 
 from app.domain.events import Event
@@ -15,7 +16,7 @@ class EventsService:
         self._repository = repository
 
     def create_event(
-        self, *, owner_id: str, title: str, starts_at=None
+        self, *, owner_id: str, title: str, starts_at: datetime | None = None
     ) -> Event:
         event = Event.create(owner_id=owner_id, title=title, starts_at=starts_at)
         self._repository.save(event)
