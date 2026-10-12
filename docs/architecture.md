@@ -21,6 +21,7 @@ Web adapter ───────┘              │
 - Web interface must work on desktop and mobile screens.
 - Both interfaces call the same application layer.
 - PWA support is a later enhancement, not a requirement for the first vertical slice.
+- The web adapter must use an authenticated principal and must never trust a client-supplied owner ID. See [Web authentication and authorization boundary](web-auth-boundary.md).
 
 ## 3. Data
 
