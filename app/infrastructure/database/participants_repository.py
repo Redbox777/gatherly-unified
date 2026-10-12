@@ -11,6 +11,10 @@ class ParticipantsRepository:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
+    @property
+    def connection(self) -> sqlite3.Connection:
+        return self._connection
+
     def add(self, participant: EventParticipant) -> None:
         self._connection.execute(
             "INSERT INTO event_participants(id, event_id, display_name, added_at) "
@@ -22,7 +26,6 @@ class ParticipantsRepository:
                 participant.added_at.isoformat(),
             ),
         )
-        self._connection.commit()
 
     def list_for_event(self, event_id: UUID) -> list[EventParticipant]:
         rows = self._connection.execute(
