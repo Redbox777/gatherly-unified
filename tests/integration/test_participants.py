@@ -3,7 +3,7 @@ import sqlite3
 import pytest
 
 from app.application.events import EventNotFoundError, EventsService
-from app.application.participants import ParticipantsService
+from app.application.participants import DuplicateParticipantError, ParticipantsService
 from app.infrastructure.database.connection import migrate
 from app.infrastructure.database.events_repository import EventsRepository
 from app.infrastructure.database.participants_repository import ParticipantsRepository
@@ -49,7 +49,15 @@ def test_other_user_cannot_list_participants(services) -> None:
         participants.list_participants(event_id=event.id, owner_id="bob")
 
 
-def test_duplicate_participant_name_is_rejected(services) -> None:
+def test_duplicate_participant_name_has_application_error(services) -> None:
+    events, participants = services
+    event = events.create_event(owner_id="alice", title="Game night")
+    participants.add_participant(event_id=event.id, owner_id="alice", display_name="Bob")
+    with pytest.raises(DuplicateParticipantError, match="already exists"):
+        participants.add_participant(event_id=event.id, owner_id="alice", display_name="Bob")
+
+
+def test_unrelated_integrity_errors_are_not_misreported(services) -> None:
     events, participants = services
     event = events.create_event(owner_id="alice", title="Game night")
     participants.add_participant(event_id=event.id, owner_id="alice", display_name="Bob")
