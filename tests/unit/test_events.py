@@ -12,9 +12,19 @@ def test_event_normalizes_title_and_owner() -> None:
     assert event.starts_at is None
 
 
+def test_event_rejects_empty_owner() -> None:
+    with pytest.raises(ValueError, match="owner_id"):
+        Event.create(owner_id="  ", title="Birthday")
+
+
 def test_event_rejects_empty_title() -> None:
     with pytest.raises(ValueError, match="title"):
         Event.create(owner_id="alice", title="  ")
+
+
+def test_event_rejects_title_over_200_characters() -> None:
+    with pytest.raises(ValueError, match="200 characters"):
+        Event.create(owner_id="alice", title="A" * 201)
 
 
 def test_event_rejects_naive_start_time() -> None:
