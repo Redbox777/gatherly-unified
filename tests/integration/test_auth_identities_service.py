@@ -20,15 +20,35 @@ def service(tmp_path):
     connection.close()
 
 
-def test_email_registration_normalizes_email_and_starts_unverified(service) -> None:
+def test_email_registration_normalizes_email_and_hashes_password(service) -> None:
     identity = service.register_email(
         email="  User@Example.Test ",
-        password_hash="argon2id$already-derived",
+        password="a long example password",
         now=NOW,
     )
 
     assert identity.provider_subject == "user@example.test"
     assert identity.verified_at is None
+    assert identity.password_hash is not None
+    assert identity.password_hash != "a long example password"
+    assert service.authenticate_email(
+        email="USER@example.test", password="a long example password"
+    ) == identity
+
+
+def test_email_authentication_rejects_wrong_password_and_unknown_email(service) -> None:
+    service.register_email(
+        email="person@example.test",
+        password="correct password",
+        now=NOW,
+    )
+
+    assert service.authenticate_email(
+        email="person@example.test", password="incorrect password"
+    ) is None
+    assert service.authenticate_email(
+        email="missing@example.test", password="correct password"
+    ) is None
 
 
 def test_telegram_registration_records_verified_identity(service) -> None:
@@ -44,17 +64,16 @@ def test_telegram_registration_records_verified_identity(service) -> None:
 
 
 @pytest.mark.parametrize(
-    ("email", "password_hash"),
+    ("email", "password"),
     [
-        ("", "hash"),
-        ("not-an-email", "hash"),
+        ("", "password"),
+        ("not-an-email", "password"),
         ("person@example.test", ""),
-        ("person@example.test", "  "),
     ],
 )
-def test_email_registration_rejects_invalid_inputs(service, email, password_hash) -> None:
+def test_email_registration_rejects_invalid_inputs(service, email, password) -> None:
     with pytest.raises(ValueError):
-        service.register_email(email=email, password_hash=password_hash, now=NOW)
+        service.register_email(email=email, password=password, now=NOW)
 
 
 def test_telegram_registration_rejects_blank_subject(service) -> None:
