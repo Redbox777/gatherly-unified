@@ -42,7 +42,9 @@ def test_verification_token_marks_email_verified_and_is_one_time(services) -> No
     assert stored is not None
     assert stored["token_hash"] != raw_token
 
-    assert verification_service.verify(raw_token=raw_token, now=NOW + timedelta(minutes=1))
+    assert verification_service.verify(
+        raw_token=raw_token, now=NOW + timedelta(minutes=1)
+    )
     verified = identity_service.find_identity(
         provider="email",
         provider_subject="person@example.test",
@@ -53,7 +55,9 @@ def test_verification_token_marks_email_verified_and_is_one_time(services) -> No
         email="person@example.test", password="a secure example password"
     ) == verified
     with pytest.raises(ValueError, match="unverified email identity"):
-        verification_service.issue(user_id=identity.user_id, now=NOW + timedelta(minutes=2))
+        verification_service.issue(
+            user_id=identity.user_id, now=NOW + timedelta(minutes=2)
+        )
     assert not verification_service.verify(
         raw_token=raw_token, now=NOW + timedelta(minutes=2)
     )
