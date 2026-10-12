@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+import sqlite3
 
 import pytest
 
@@ -65,7 +66,7 @@ def test_same_email_subject_cannot_create_or_merge_another_user(repository) -> N
         now=NOW,
     )
 
-    with pytest.raises(Exception):
+    with pytest.raises(sqlite3.IntegrityError):
         repository.create_user_with_identity(
             provider="email",
             provider_subject="same@example.test",
@@ -101,7 +102,8 @@ def test_invalid_identity_inputs_are_rejected(
             now=NOW,
         )
 
-    assert repository.connection.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+    user_count = repository.connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    assert user_count == 0
 
 
 def test_naive_or_future_verification_time_is_rejected(repository) -> None:
