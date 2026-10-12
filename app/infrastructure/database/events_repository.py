@@ -11,6 +11,10 @@ class EventsRepository:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
+    @property
+    def connection(self) -> sqlite3.Connection:
+        return self._connection
+
     def save(self, event: Event) -> None:
         self._connection.execute(
             "INSERT INTO events(id, owner_id, title, starts_at, created_at) "
@@ -23,7 +27,6 @@ class EventsRepository:
                 event.created_at.isoformat(),
             ),
         )
-        self._connection.commit()
 
     def get_for_owner(self, *, event_id: UUID, owner_id: str) -> Event | None:
         row = self._connection.execute(
