@@ -3,7 +3,7 @@ import sqlite3
 import pytest
 
 from app.application.events import EventNotFoundError, EventsService
-from app.infrastructure.database.connection import connect, migrate
+from app.infrastructure.database.connection import migrate
 from app.infrastructure.database.events_repository import EventsRepository
 
 
