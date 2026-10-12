@@ -28,6 +28,13 @@ class AuthEmailTokensRepository:
             raise ValueError("User ID must not be blank")
         if not token_digest.strip():
             raise ValueError("Token digest must not be blank")
+        identity = self._connection.execute(
+            """SELECT 1 FROM auth_identities
+               WHERE user_id = ? AND provider = 'email' AND verified_at IS NULL""",
+            (user_id,),
+        ).fetchone()
+        if identity is None:
+            raise ValueError("An unverified email identity is required")
         token_id = str(uuid4())
         self._connection.execute(
             """INSERT INTO auth_email_tokens(
