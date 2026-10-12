@@ -49,7 +49,9 @@ def test_migration_is_idempotent() -> None:
     try:
         migrate(connection)
         migrate(connection)
-        versions = connection.execute("SELECT version FROM schema_migrations").fetchall()
-        assert versions == [(1,), (2,)]
+        versions = connection.execute(
+            "SELECT version FROM schema_migrations ORDER BY version"
+        ).fetchall()
+        assert versions == [(1,), (2,), (3,)]
     finally:
         connection.close()
