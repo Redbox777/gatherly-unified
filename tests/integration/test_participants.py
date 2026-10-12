@@ -21,7 +21,7 @@ def services():
     connection.close()
 
 
-def test_owner_can_add_and_list_participants(services) -> None:
+def test_owner_can_add_and_list_participants(services: tuple[EventsService, ParticipantsService]) -> None:
     events, participants = services
     event = events.create_event(owner_id="alice", title="Game night")
     created = participants.add_participant(
@@ -32,7 +32,7 @@ def test_owner_can_add_and_list_participants(services) -> None:
     assert [person.id for person in listed] == [created.id]
 
 
-def test_other_user_cannot_add_participant(services) -> None:
+def test_other_user_cannot_add_participant(services: tuple[EventsService, ParticipantsService]) -> None:
     events, participants = services
     event = events.create_event(owner_id="alice", title="Private event")
     with pytest.raises(EventNotFoundError):
@@ -41,7 +41,7 @@ def test_other_user_cannot_add_participant(services) -> None:
         )
 
 
-def test_other_user_cannot_list_participants(services) -> None:
+def test_other_user_cannot_list_participants(services: tuple[EventsService, ParticipantsService]) -> None:
     events, participants = services
     event = events.create_event(owner_id="alice", title="Private event")
     participants.add_participant(event_id=event.id, owner_id="alice", display_name="Bob")
@@ -49,7 +49,7 @@ def test_other_user_cannot_list_participants(services) -> None:
         participants.list_participants(event_id=event.id, owner_id="bob")
 
 
-def test_duplicate_participant_name_has_application_error(services) -> None:
+def test_duplicate_participant_name_has_application_error(services: tuple[EventsService, ParticipantsService]) -> None:
     events, participants = services
     event = events.create_event(owner_id="alice", title="Game night")
     participants.add_participant(event_id=event.id, owner_id="alice", display_name="Bob")
