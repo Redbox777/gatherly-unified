@@ -5,6 +5,7 @@ from uuid import UUID
 
 from app.application.events import EventsService
 from app.domain.participants import EventParticipant
+from app.infrastructure.database.connection import transaction
 from app.infrastructure.database.participants_repository import ParticipantsRepository
 
 
@@ -27,7 +28,8 @@ class ParticipantsService:
             event_id=event_id, display_name=display_name
         )
         try:
-            self._repository.add(participant)
+            with transaction(self._repository.connection):
+                self._repository.add(participant)
         except sqlite3.IntegrityError as exc:
             if (
                 str(exc)
