@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -6,7 +6,7 @@ from app.infrastructure.database.auth_sessions_repository import AuthSessionsRep
 from app.infrastructure.database.connection import connect, migrate
 
 
-NOW = datetime(2026, 10, 12, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 12, 12, 0, tzinfo=UTC)
 
 
 @pytest.fixture
