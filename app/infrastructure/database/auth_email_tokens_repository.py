@@ -28,26 +28,29 @@ class AuthEmailTokensRepository:
             raise ValueError("User ID must not be blank")
         if not token_digest.strip():
             raise ValueError("Token digest must not be blank")
-        identity = self._connection.execute(
-            """SELECT 1 FROM auth_identities
-               WHERE user_id = ? AND provider = 'email' AND verified_at IS NULL""",
-            (user_id,),
-        ).fetchone()
-        if identity is None:
-            raise ValueError("An unverified email identity is required")
         token_id = str(uuid4())
-        self._connection.execute(
-            """INSERT INTO auth_email_tokens(
-                id, user_id, token_hash, purpose, created_at, expires_at, consumed_at
-            ) VALUES (?, ?, ?, 'verify_email', ?, ?, NULL)""",
-            (
-                token_id,
-                user_id,
-                token_digest,
-                self._format(now),
-                self._format(expires_at),
-            ),
-        )
+        with transaction(self._connection):
+            identity = self._connection.execute(
+                """SELECT 1 FROM auth_identities
+                   WHERE user_id = ? AND provider = 'email'
+                     AND verified_at IS NULL""",
+                (user_id,),
+            ).fetchone()
+            if identity is None:
+                raise ValueError("An unverified email identity is required")
+            self._connection.execute(
+                """INSERT INTO auth_email_tokens(
+                    id, user_id, token_hash, purpose, created_at, expires_at,
+                    consumed_at
+                ) VALUES (?, ?, ?, 'verify_email', ?, ?, NULL)""",
+                (
+                    token_id,
+                    user_id,
+                    token_digest,
+                    self._format(now),
+                    self._format(expires_at),
+                ),
+            )
         return token_id
 
     def consume_verification_token(self, *, raw_token: str, now: datetime) -> bool:
