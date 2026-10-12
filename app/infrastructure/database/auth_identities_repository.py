@@ -94,6 +94,9 @@ class AuthIdentitiesRepository:
         ).fetchone()
         if row is None:
             return None
+        created_at = self._parse(row["created_at"])
+        if created_at is None:
+            raise ValueError("Identity creation timestamp is missing")
         return AuthIdentity(
             identity_id=str(row["id"]),
             user_id=str(row["user_id"]),
@@ -101,7 +104,7 @@ class AuthIdentitiesRepository:
             provider_subject=str(row["provider_subject"]),
             password_hash=row["password_hash"],
             verified_at=self._parse(row["verified_at"]),
-            created_at=self._parse(row["created_at"]),
+            created_at=created_at,
         )
 
     @classmethod
