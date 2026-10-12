@@ -1,7 +1,7 @@
 """Event domain model and validation."""
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 
@@ -28,11 +28,11 @@ class Event:
         if starts_at is not None and starts_at.tzinfo is None:
             raise ValueError("starts_at must be timezone-aware")
         if starts_at is not None:
-            starts_at = starts_at.astimezone(timezone.utc)
+            starts_at = starts_at.astimezone(UTC)
         return cls(
             id=uuid4(),
             owner_id=normalized_owner,
             title=normalized_title,
             starts_at=starts_at,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
