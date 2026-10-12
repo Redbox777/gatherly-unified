@@ -1,7 +1,7 @@
 """Persistence operations for server-managed authentication sessions."""
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import sqlite3
 from uuid import uuid4
 
@@ -90,6 +90,6 @@ class AuthSessionsRepository:
     @classmethod
     def _format(cls, value: datetime) -> str:
         cls._require_aware(value)
-        return value.astimezone(timezone.utc).isoformat(timespec="microseconds").replace(
+        return value.astimezone(UTC).isoformat(timespec="microseconds").replace(
             "+00:00", "Z"
         )
