@@ -49,6 +49,11 @@ def test_verification_token_marks_email_verified_and_is_one_time(services) -> No
     )
     assert verified is not None
     assert verified.verified_at == NOW + timedelta(minutes=1)
+    assert identity_service.authenticate_email(
+        email="person@example.test", password="a secure example password"
+    ) == verified
+    with pytest.raises(ValueError, match="unverified email identity"):
+        verification_service.issue(user_id=identity.user_id, now=NOW + timedelta(minutes=2))
     assert not verification_service.verify(
         raw_token=raw_token, now=NOW + timedelta(minutes=2)
     )
