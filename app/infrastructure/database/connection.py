@@ -31,6 +31,56 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
         CREATE INDEX idx_event_participants_event ON event_participants(event_id, added_at);
         """,
     ),
+    (
+        3,
+        """
+        CREATE TABLE users (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE auth_identities (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            provider TEXT NOT NULL CHECK (provider IN ('email', 'telegram')),
+            provider_subject TEXT NOT NULL CHECK (length(trim(provider_subject)) > 0),
+            password_hash TEXT NULL,
+            verified_at TEXT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(provider, provider_subject),
+            CHECK (
+                (provider = 'email' AND password_hash IS NOT NULL)
+                OR (provider = 'telegram' AND password_hash IS NULL)
+            )
+        );
+        CREATE INDEX idx_auth_identities_user ON auth_identities(user_id);
+
+        CREATE TABLE auth_sessions (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            token_hash TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            revoked_at TEXT NULL,
+            CHECK (expires_at > created_at)
+        );
+        CREATE INDEX idx_auth_sessions_user_expiry
+            ON auth_sessions(user_id, expires_at);
+
+        CREATE TABLE auth_email_tokens (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            token_hash TEXT NOT NULL UNIQUE,
+            purpose TEXT NOT NULL CHECK (purpose IN ('verify_email', 'reset_password')),
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            consumed_at TEXT NULL,
+            CHECK (expires_at > created_at)
+        );
+        CREATE INDEX idx_auth_email_tokens_user_purpose
+            ON auth_email_tokens(user_id, purpose);
+        """,
+    ),
 )
 
 
