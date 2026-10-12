@@ -21,7 +21,7 @@ Web adapter ───────┘              │
 - Web interface must work on desktop and mobile screens.
 - Both interfaces call the same application layer.
 - PWA support is a later enhancement, not a requirement for the first vertical slice.
-- The web adapter must use an authenticated principal and must never trust a client-supplied owner ID. See [Web authentication and authorization boundary](web-auth-boundary.md).
+- Web authentication decision: support both Telegram sign-in and separate email/password accounts, linked to one internal Gatherly user ID. See [Web authentication and authorization boundary](web-auth-boundary.md).
 
 ## 3. Data
 
@@ -47,6 +47,5 @@ Implement a minimal, testable path: create an event, persist it, then retrieve i
 
 ## 6. Decisions still open
 
-- Web authentication: compare Telegram-based sign-in with a separate account/session model before implementation.
 - Deployment target and production database: start with SQLite for the initial single-instance foundation; reassess if concurrent multi-user deployment requires PostgreSQL.
 - Expense split modes and invitation/participant identity model must be specified before those modules are implemented.
