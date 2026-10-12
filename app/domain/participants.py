@@ -1,7 +1,7 @@
 """Event participant value object."""
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 
@@ -23,5 +23,5 @@ class EventParticipant:
             id=uuid4(),
             event_id=event_id,
             display_name=name,
-            added_at=datetime.now(timezone.utc),
+            added_at=datetime.now(UTC),
         )
