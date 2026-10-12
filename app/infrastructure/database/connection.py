@@ -1,4 +1,4 @@
-"""SQLite connection and schema migration support."""
+from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
@@ -16,6 +16,19 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             created_at TEXT NOT NULL
         );
         CREATE INDEX idx_events_owner_created ON events(owner_id, created_at);
+        """,
+    ),
+    (
+        2,
+        """
+        CREATE TABLE event_participants (
+            id TEXT PRIMARY KEY,
+            event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            display_name TEXT NOT NULL CHECK (length(trim(display_name)) BETWEEN 1 AND 120),
+            added_at TEXT NOT NULL,
+            UNIQUE(event_id, display_name)
+        );
+        CREATE INDEX idx_event_participants_event ON event_participants(event_id, added_at);
         """,
     ),
 )
