@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import UTC
 
 import pytest
 
@@ -32,6 +33,7 @@ def test_owner_can_add_and_list_participants(
     listed = participants.list_participants(event_id=event.id, owner_id="alice")
     assert created.display_name == "Bob"
     assert [person.id for person in listed] == [created.id]
+    assert listed[0].added_at.tzinfo == UTC
 
 
 def test_other_user_cannot_add_participant(
