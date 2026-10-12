@@ -14,20 +14,6 @@ NOW = datetime(2026, 10, 12, 12, 0, tzinfo=UTC)
 
 
 @pytest.fixture
-def authentication(tmp_path):
-    connection = connect(tmp_path / "authentication.sqlite3")
-    migrate(connection)
-    identities_repository = AuthIdentitiesRepository(connection)
-    identities = AuthIdentitiesService(identities_repository)
-    sessions = AuthSessionsService(
-        AuthSessionsRepository(connection),
-        lifetime=timedelta(hours=2),
-    )
-    yield authentication, connection
-    connection.close()
-
-
-@pytest.fixture
 def authentication_service(tmp_path):
     connection = connect(tmp_path / "authentication-service.sqlite3")
     migrate(connection)
