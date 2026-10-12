@@ -60,7 +60,11 @@ class AuthIdentitiesService:
             provider="email",
             provider_subject=normalized_email,
         )
-        if identity is None or identity.password_hash is None:
+        if (
+            identity is None
+            or identity.password_hash is None
+            or identity.verified_at is None
+        ):
             return None
         if not verify_password(password, identity.password_hash):
             return None
