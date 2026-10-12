@@ -1,5 +1,7 @@
+from contextlib import contextmanager
 from pathlib import Path
 import sqlite3
+from collections.abc import Iterator
 
 
 MIGRATIONS: tuple[tuple[int, str], ...] = (
@@ -65,3 +67,23 @@ def migrate(connection: sqlite3.Connection) -> None:
         except sqlite3.Error:
             connection.rollback()
             raise
+
+@contextmanager
+def transaction(connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+    """Run a group of database operations atomically.
+
+    The caller owns the transaction boundary. Repositories must not commit
+    when this helper is used, because doing so would break atomicity.
+    """
+    if connection.in_transaction:
+        # Nested use is deliberately rejected rather than silently committing
+        # or accidentally taking ownership of a caller's transaction.
+        raise RuntimeError("Cannot start a transaction while another is active")
+    try:
+        connection.execute("BEGIN")
+        yield connection
+        connection.commit()
+    except BaseException:
+        connection.rollback()
+        raise
+
