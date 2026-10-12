@@ -58,6 +58,8 @@ class AuthSessionsRepository:
     def get_active_user_id(self, *, raw_token: str, now: datetime) -> str | None:
         """Return the session owner only when the token is valid and active."""
         self._require_aware(now)
+        if not raw_token or not raw_token.strip():
+            return None
         row = self._connection.execute(
             """SELECT user_id FROM auth_sessions
             WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ?""",
@@ -68,6 +70,8 @@ class AuthSessionsRepository:
     def revoke(self, *, raw_token: str, now: datetime) -> bool:
         """Revoke a session once; return False for unknown or already revoked tokens."""
         self._require_aware(now)
+        if not raw_token or not raw_token.strip():
+            return False
         cursor = self._connection.execute(
             """UPDATE auth_sessions SET revoked_at = ?
             WHERE token_hash = ? AND revoked_at IS NULL""",
