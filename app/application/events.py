@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import UUID
 
 from app.domain.events import Event
+from app.infrastructure.database.connection import transaction
 from app.infrastructure.database.events_repository import EventsRepository
 
 
@@ -19,7 +20,8 @@ class EventsService:
         self, *, owner_id: str, title: str, starts_at: datetime | None = None
     ) -> Event:
         event = Event.create(owner_id=owner_id, title=title, starts_at=starts_at)
-        self._repository.save(event)
+        with transaction(self._repository.connection):
+            self._repository.save(event)
         return event
 
     def get_event(self, *, event_id: UUID, owner_id: str) -> Event:
