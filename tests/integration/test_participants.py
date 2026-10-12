@@ -63,5 +63,5 @@ def test_duplicate_participant_name_has_application_error(
     participants.add_participant(event_id=event.id, owner_id="alice", display_name="Bob")
     with pytest.raises(DuplicateParticipantError, match="already exists"):
         participants.add_participant(
-            event_id=event.id, owner_id="alice", display_name="Bob"
+            event_id=event.id, owner_id="alice", display_name=" Bob "
         )
