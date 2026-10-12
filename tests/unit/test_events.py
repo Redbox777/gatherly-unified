@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -23,8 +23,6 @@ def test_event_rejects_naive_start_time() -> None:
 
 
 def test_event_converts_start_time_to_utc() -> None:
-    from datetime import timedelta
-
     local = datetime(2026, 1, 1, 12, tzinfo=timezone(timedelta(hours=3)))
     event = Event.create(owner_id="alice", title="Meeting", starts_at=local)
-    assert event.starts_at == datetime(2026, 1, 1, 9, tzinfo=timezone.utc)
+    assert event.starts_at == datetime(2026, 1, 1, 9, tzinfo=UTC)
