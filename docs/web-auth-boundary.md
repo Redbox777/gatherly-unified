@@ -2,35 +2,45 @@
 
 ## Status
 
-**Design contract; no web routes are exposed yet.** Do not treat this document as an implemented login system.
+**Decision: support both Telegram sign-in and separate Gatherly accounts.** Both methods must resolve to the same internal Gatherly user account. This is a design decision, not an implemented login system.
 
-The product decision between Telegram-based sign-in and a separate account/session model remains open. The web adapter must not invent identity or ship routes that assume every request is trusted while that decision is pending.
+The separate-account method will use verified email plus password, with secure server-managed sessions and a password-reset flow. Telegram sign-in will use Telegram's supported identity-verification flow; the server must verify the returned identity and must never trust client-provided Telegram IDs or profile fields on their own.
+
+## Account model
+
+- Every person has one internal, stable Gatherly user ID.
+- A verified email/password identity and a verified Telegram identity are login methods linked to that internal account; they are not separate copies of the person's data.
+- Do not automatically merge accounts just because a Telegram profile contains an email or display name that matches another account.
+- Linking a new login method requires the user to be authenticated to the existing account and to prove control of the new method.
+- Account recovery and unlinking must not leave an account without a usable login method. High-risk linking/unlinking actions should require recent re-authentication.
+- Keep credentials and external identities in separate records from profile/business data. Store only what is required.
 
 ## Request flow
 
 ```text
-HTTP request
-    |
-    v
-Authentication adapter -- verifies a session/token
-    |
-    v
-Authenticated Principal (stable internal user ID)
-    |
-    v
-Web handler -- validates transport input only
-    |
-    v
-Application service -- applies use-case rules and ownership checks
-    |
-    v
-Repository
+Telegram sign-in ─┐
+                  ├─> Verify identity ─> Internal Gatherly user ID
+Email/password ───┘                              |
+                                                 v
+                                      Server-managed session
+                                                 |
+                                                 v
+HTTP request -> Authentication adapter -> Authenticated Principal
+                                                 |
+                                                 v
+                                      Web handler (input only)
+                                                 |
+                                                 v
+                                  Application service / ownership
+                                                 |
+                                                 v
+                                            Repository
 ```
 
 ### Identity rules
 
 - Never accept `owner_id`, `user_id`, or an equivalent identity field from request JSON, query parameters, or URL paths as proof of identity.
-- The authentication adapter must derive the principal from a cryptographically verified session or token. A client-supplied user ID is not a principal.
+- The authentication adapter must derive the principal from a verified session. A client-supplied user ID is not a principal.
 - Web handlers pass the verified principal's internal user ID to application services. They must not duplicate business rules or bypass service-level ownership checks.
 - Every object read and mutation must be scoped to the authenticated owner. Continue using generic not-found behavior for objects the principal does not own, so the API does not reveal whether another user's object exists.
 - Missing, expired, malformed, or invalid credentials must be rejected before calling application services. No fallback to a default user, development identity, or unauthenticated write path is allowed.
@@ -44,22 +54,22 @@ Repository
 
 ## Session and browser protections
 
-The final controls depend on the authentication method, but must be reviewed before launch:
-
-- If browser cookies carry sessions, use `HttpOnly`, `Secure` in production, an appropriate `SameSite` policy, session expiry and rotation, and CSRF protection for state-changing requests.
-- If bearer tokens are used, verify signature, issuer, audience, expiry, and relevant scopes; define revocation/rotation behavior and avoid storing long-lived credentials in browser-accessible storage.
-- Rate-limit login, verification-code, and recovery endpoints; avoid revealing whether an account exists.
-- Use HTTPS in production. Never log authorization headers, cookies, login codes, bot tokens, or session secrets.
+- Use server-managed sessions in `HttpOnly` cookies; set `Secure` in production, use an appropriate `SameSite` policy, expire and rotate sessions, and protect state-changing requests against CSRF.
+- Store password hashes using a current password-hashing algorithm designed for passwords (prefer Argon2id through a maintained library); never store plaintext or reversibly encrypted passwords.
+- Rate-limit login, password-reset, verification, and account-linking attempts; avoid revealing whether an email/account exists.
+- Use single-use, expiring, securely generated reset/verification tokens; store token hashes rather than raw tokens.
+- Require HTTPS in production. Never log authorization headers, cookies, login codes, passwords, bot tokens, or session secrets.
 - Configure trusted origins explicitly; do not enable permissive credentialed CORS.
+- Do not store long-lived session credentials in browser-accessible storage.
 
 ## Implementation gate
 
 Before adding protected web endpoints:
 
-1. Choose the sign-in and account-linking model.
-2. Define the stable internal user ID and how an external Telegram/account identity maps to it.
-3. Implement and test the authentication adapter and principal creation.
-4. Add tests proving unauthenticated requests never reach application services and that one user's principal cannot read or mutate another user's objects.
+1. Define the account, credential, external-identity, and session records in a versioned migration.
+2. Implement email verification, password hashing/login, reset flow, Telegram identity verification, and secure account linking without automatic account merges.
+3. Create the internal principal only after successful authentication; rotate the session on login and privilege changes.
+4. Add tests proving invalid/unauthenticated requests never reach application services, sessions expire, account linking requires proof of both identities, and one user's principal cannot read or mutate another user's objects.
 5. Only then expose event/participant routes and connect the web UI.
 
 Until these steps are complete, this repository has no production-ready web authentication. The existing application services and their ownership checks remain the security boundary for business operations; the future HTTP adapter must preserve that boundary.
