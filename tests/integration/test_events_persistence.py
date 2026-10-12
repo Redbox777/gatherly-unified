@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -21,6 +22,20 @@ def test_create_and_retrieve_event_for_owner(service: EventsService) -> None:
     fetched = service.get_event(event_id=created.id, owner_id="alice")
     assert fetched.id == created.id
     assert fetched.title == "Weekend trip"
+
+
+def test_start_time_remains_utc_after_persistence(service: EventsService) -> None:
+    local_start = datetime(2026, 10, 20, 18, 30, tzinfo=timezone(timedelta(hours=3)))
+    created = service.create_event(
+        owner_id="alice",
+        title="Dinner",
+        starts_at=local_start,
+    )
+
+    fetched = service.get_event(event_id=created.id, owner_id="alice")
+
+    assert fetched.starts_at == datetime(2026, 10, 20, 15, 30, tzinfo=UTC)
+    assert fetched.created_at.tzinfo is not None
 
 
 def test_other_owner_cannot_retrieve_event(service: EventsService) -> None:
