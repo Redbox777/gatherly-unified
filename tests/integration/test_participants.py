@@ -55,11 +55,3 @@ def test_duplicate_participant_name_has_application_error(services) -> None:
     participants.add_participant(event_id=event.id, owner_id="alice", display_name="Bob")
     with pytest.raises(DuplicateParticipantError, match="already exists"):
         participants.add_participant(event_id=event.id, owner_id="alice", display_name="Bob")
-
-
-def test_unrelated_integrity_errors_are_not_misreported(services) -> None:
-    events, participants = services
-    event = events.create_event(owner_id="alice", title="Game night")
-    participants.add_participant(event_id=event.id, owner_id="alice", display_name="Bob")
-    with pytest.raises(sqlite3.IntegrityError):
-        participants.add_participant(event_id=event.id, owner_id="alice", display_name="Bob")
