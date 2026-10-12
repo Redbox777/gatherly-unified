@@ -1,10 +1,15 @@
 """Use cases for adding and listing event participants."""
 
+import sqlite3
 from uuid import UUID
 
 from app.application.events import EventsService
 from app.domain.participants import EventParticipant
 from app.infrastructure.database.participants_repository import ParticipantsRepository
+
+
+class DuplicateParticipantError(ValueError):
+    """Raised when an event already has a participant with the same display name."""
 
 
 class ParticipantsService:
@@ -21,7 +26,18 @@ class ParticipantsService:
         participant = EventParticipant.create(
             event_id=event_id, display_name=display_name
         )
-        self._repository.add(participant)
+        try:
+            self._repository.add(participant)
+        except sqlite3.IntegrityError as exc:
+            if (
+                str(exc)
+                == "UNIQUE constraint failed: event_participants.event_id, "
+                "event_participants.display_name"
+            ):
+                raise DuplicateParticipantError(
+                    "A participant with this name already exists for the event"
+                ) from exc
+            raise
         return participant
 
     def list_participants(
