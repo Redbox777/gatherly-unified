@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from app.infrastructure.database.connection import connect, migrate
+from app.infrastructure.database.connection import connect, migrate, transaction
 
 
 def test_connect_enables_foreign_keys_and_busy_timeout(tmp_path) -> None:
@@ -103,3 +103,52 @@ def test_duplicate_participant_name_is_rejected_by_database(tmp_path) -> None:
             )
     finally:
         connection.close()
+
+
+def test_transaction_commits_successful_work(tmp_path) -> None:
+    connection = connect(tmp_path / "transaction.sqlite3")
+    try:
+        migrate(connection)
+        with transaction(connection):
+            connection.execute(
+                """
+                INSERT INTO events(id, owner_id, title, starts_at, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("event-1", "owner-1", "Game night", None, "2026-10-12T00:00:00+00:00"),
+            )
+        assert connection.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
+    finally:
+        connection.close()
+
+
+def test_transaction_rolls_back_all_work_on_error(tmp_path) -> None:
+    connection = connect(tmp_path / "transaction.sqlite3")
+    try:
+        migrate(connection)
+        with pytest.raises(RuntimeError, match="abort transaction"):
+            with transaction(connection):
+                connection.execute(
+                    """
+                    INSERT INTO events(id, owner_id, title, starts_at, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    ("event-1", "owner-1", "Game night", None, "2026-10-12T00:00:00+00:00"),
+                )
+                raise RuntimeError("abort transaction")
+        assert connection.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 0
+    finally:
+        connection.close()
+
+
+def test_transaction_rejects_nested_transaction(tmp_path) -> None:
+    connection = connect(tmp_path / "transaction.sqlite3")
+    try:
+        migrate(connection)
+        with transaction(connection):
+            with pytest.raises(RuntimeError, match="another is active"):
+                with transaction(connection):
+                    pass
+    finally:
+        connection.close()
+
