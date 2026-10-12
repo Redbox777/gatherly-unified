@@ -152,3 +152,36 @@ def test_transaction_rejects_nested_transaction(tmp_path) -> None:
     finally:
         connection.close()
 
+
+def test_transaction_rolls_back_related_event_and_participants(tmp_path) -> None:
+    connection = connect(tmp_path / "transaction.sqlite3")
+    try:
+        migrate(connection)
+        with pytest.raises(sqlite3.IntegrityError):
+            with transaction(connection):
+                connection.execute(
+                    """
+                    INSERT INTO events(id, owner_id, title, starts_at, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    ("event-1", "owner-1", "Game night", None, "2026-10-12T00:00:00+00:00"),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO event_participants(id, event_id, display_name, added_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    ("participant-1", "event-1", "Alice", "2026-10-12T00:00:00+00:00"),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO event_participants(id, event_id, display_name, added_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    ("participant-2", "event-1", "Alice", "2026-10-12T00:01:00+00:00"),
+                )
+
+        assert connection.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM event_participants").fetchone()[0] == 0
+    finally:
+        connection.close()
