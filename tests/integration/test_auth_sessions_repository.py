@@ -59,3 +59,10 @@ def test_session_creation_rejects_naive_or_past_expiry(repository) -> None:
 
     with pytest.raises(ValueError, match="after creation"):
         repository.create(user_id="user-1", now=NOW, expires_at=NOW)
+
+
+def test_blank_tokens_fail_closed(repository) -> None:
+    assert repository.get_active_user_id(raw_token="", now=NOW) is None
+    assert repository.get_active_user_id(raw_token="   ", now=NOW) is None
+    assert not repository.revoke(raw_token="", now=NOW)
+    assert not repository.revoke(raw_token="   ", now=NOW)
