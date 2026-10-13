@@ -147,7 +147,11 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=503, detail="Email delivery is temporarily unavailable"
             ) from None
-        return {"message": "If registration can be completed, verification instructions will be sent."}
+        return {
+            "message": (
+                "If registration can be completed, verification instructions will be sent."
+            )
+        }
 
     @app.post("/auth/verify-email")
     def verify_email(payload: EmailTokenRequest, deps: ServiceDependency) -> dict[str, str]:
