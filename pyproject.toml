@@ -8,7 +8,10 @@ version = "0.1.0"
 description = "Modular Gatherly application with Telegram and responsive web interfaces"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+  "fastapi>=0.115,<1.0",
+  "uvicorn[standard]>=0.30,<1.0",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -16,6 +19,7 @@ dev = [
   "pytest-cov>=5.0",
   "ruff>=0.6",
   "mypy>=1.11",
+  "httpx>=0.27",
 ]
 
 [tool.setuptools.packages.find]
