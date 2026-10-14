@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sqlite3
 from typing import Annotated, cast
+from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
@@ -97,6 +98,24 @@ def _email_sender() -> SmtpEmailSender:
 def create_app(database_path: str | Path | None = None) -> FastAPI:
     """Create an API app; tests may inject a temporary SQLite database path."""
     app = FastAPI(title="Gatherly Authentication API", version="0.1.0")
+
+    @app.middleware("http")
+    async def validate_browser_origin(request: Request, call_next):
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            origin = request.headers.get("origin")
+            if origin:
+                origin_parts = urlsplit(origin)
+                request_parts = urlsplit(str(request.base_url))
+                if (
+                    origin_parts.scheme not in {"http", "https"}
+                    or origin_parts.netloc != request_parts.netloc
+                ):
+                    return Response(
+                        content='{"detail":"Cross-origin request rejected"}',
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        media_type="application/json",
+                    )
+        return await call_next(request)
     path = database_path or os.environ.get("GATHERLY_DATABASE_PATH", "var/gatherly.sqlite3")
     connection = connect(path)
     migrate(connection)
