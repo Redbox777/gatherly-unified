@@ -1,5 +1,6 @@
 """HTTP adapter for email authentication and server-managed sessions."""
 
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 import os
 from pathlib import Path
@@ -100,7 +101,9 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     app = FastAPI(title="Gatherly Authentication API", version="0.1.0")
 
     @app.middleware("http")
-    async def validate_browser_origin(request: Request, call_next):
+    async def validate_browser_origin(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             origin = request.headers.get("origin")
             if origin:
