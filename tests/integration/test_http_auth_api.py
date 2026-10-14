@@ -182,3 +182,27 @@ def test_auth_me_rejects_missing_and_forged_session_tokens(tmp_path) -> None:
 
     assert missing.status_code == 401
     assert forged.status_code == 401
+
+
+
+def test_state_changing_auth_request_rejects_cross_origin(tmp_path) -> None:
+    app = create_app(tmp_path / "csrf-origin.sqlite3")
+    with TestClient(app) as client:
+        response = client.post(
+            "/auth/logout",
+            headers={"Origin": "https://attacker.example"},
+        )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Cross-origin request rejected"}
+
+
+def test_state_changing_auth_request_allows_same_origin(tmp_path) -> None:
+    app = create_app(tmp_path / "same-origin.sqlite3")
+    with TestClient(app) as client:
+        response = client.post(
+            "/auth/logout",
+            headers={"Origin": "http://testserver"},
+        )
+
+    assert response.status_code == 200
