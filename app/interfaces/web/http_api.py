@@ -108,6 +108,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         "/auth/login",
         "/auth/register",
         "/auth/password-reset/request",
+        "/auth/password-reset/confirm",
+        "/auth/verify-email",
     }
     request_times: dict[tuple[str, str], deque[float]] = defaultdict(deque)
     request_times_lock = Lock()
