@@ -87,3 +87,69 @@ def test_registration_verification_login_and_logout_flow(
         assert logout.status_code == 200
         after_logout = client.get("/auth/me")
         assert after_logout.status_code == 401
+
+
+def test_password_reset_http_flow_invalidates_old_password(
+    tmp_path, monkeypatch
+) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "password-reset-http.sqlite3")
+
+    with TestClient(app) as client:
+        registration = client.post(
+            "/auth/register",
+            json={
+                "email": "reset@example.test",
+                "password": "original password long enough",
+            },
+        )
+        assert registration.status_code == 202
+        verification_body = sender.messages[-1][2]
+        verification_token = verification_body.split("token=", maxsplit=1)[1].splitlines()[0]
+        verification = client.post(
+            "/auth/verify-email", json={"token": verification_token}
+        )
+        assert verification.status_code == 200
+
+        request_reset = client.post(
+            "/auth/password-reset/request",
+            json={"email": "reset@example.test"},
+        )
+        assert request_reset.status_code == 202
+        assert request_reset.json() == {
+            "message": (
+                "If an eligible account exists for that email address, "
+                "password-reset instructions will be sent."
+            )
+        }
+        assert len(sender.messages) == 2
+
+        reset_body = sender.messages[-1][2]
+        reset_token = reset_body.split("token=", maxsplit=1)[1].splitlines()[0]
+        confirmation = client.post(
+            "/auth/password-reset/confirm",
+            json={
+                "token": reset_token,
+                "new_password": "replacement password long enough",
+            },
+        )
+        assert confirmation.status_code == 200
+
+        old_password_login = client.post(
+            "/auth/login",
+            json={
+                "email": "reset@example.test",
+                "password": "original password long enough",
+            },
+        )
+        new_password_login = client.post(
+            "/auth/login",
+            json={
+                "email": "reset@example.test",
+                "password": "replacement password long enough",
+            },
+        )
+        assert old_password_login.status_code == 401
+        assert new_password_login.status_code == 200
