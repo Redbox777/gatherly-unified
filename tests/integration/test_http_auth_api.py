@@ -206,3 +206,29 @@ def test_state_changing_auth_request_allows_same_origin(tmp_path) -> None:
         )
 
     assert response.status_code == 200
+
+
+
+def test_login_rate_limit_returns_retry_after_header(tmp_path) -> None:
+    app = create_app(tmp_path / "login-rate-limit.sqlite3")
+    with TestClient(app) as client:
+        responses = [
+            client.post(
+                "/auth/login",
+                json={"email": "nobody@example.test", "password": "wrong password"},
+            )
+            for _ in range(6)
+        ]
+
+    assert [response.status_code for response in responses] == [
+        401,
+        401,
+        401,
+        401,
+        401,
+        429,
+    ]
+    assert responses[-1].headers["retry-after"] == "60"
+    assert responses[-1].json() == {
+        "detail": "Too many requests; try again later"
+    }
