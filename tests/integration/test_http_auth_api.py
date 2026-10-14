@@ -37,6 +37,7 @@ def test_registration_verification_login_and_logout_flow(
     tmp_path, monkeypatch
 ) -> None:
     sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "auth-flow.sqlite3")
 
