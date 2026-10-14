@@ -66,6 +66,10 @@ def test_registration_verification_login_and_logout_flow(
         token = email_body.split("token=", maxsplit=1)[1].splitlines()[0]
         verification = client.post("/auth/verify-email", json={"token": token})
         assert verification.status_code == 200
+        replayed_verification = client.post(
+            "/auth/verify-email", json={"token": token}
+        )
+        assert replayed_verification.status_code == 400
 
         login = client.post(
             "/auth/login",
@@ -87,6 +91,10 @@ def test_registration_verification_login_and_logout_flow(
         assert logout.status_code == 200
         after_logout = client.get("/auth/me")
         assert after_logout.status_code == 401
+        invalid_session = client.get(
+            "/auth/me", cookies={"gatherly_session": "forged-session-token"}
+        )
+        assert invalid_session.status_code == 401
 
 
 def test_password_reset_http_flow_invalidates_old_password(
@@ -136,6 +144,14 @@ def test_password_reset_http_flow_invalidates_old_password(
             },
         )
         assert confirmation.status_code == 200
+        replayed_reset = client.post(
+            "/auth/password-reset/confirm",
+            json={
+                "token": reset_token,
+                "new_password": "another replacement password",
+            },
+        )
+        assert replayed_reset.status_code == 400
 
         old_password_login = client.post(
             "/auth/login",
@@ -153,3 +169,16 @@ def test_password_reset_http_flow_invalidates_old_password(
         )
         assert old_password_login.status_code == 401
         assert new_password_login.status_code == 200
+
+
+
+def test_auth_me_rejects_missing_and_forged_session_tokens(tmp_path) -> None:
+    app = create_app(tmp_path / "invalid-session.sqlite3")
+    with TestClient(app) as client:
+        missing = client.get("/auth/me")
+        forged = client.get(
+            "/auth/me", cookies={"gatherly_session": "not-a-real-session"}
+        )
+
+    assert missing.status_code == 401
+    assert forged.status_code == 401
