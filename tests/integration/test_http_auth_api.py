@@ -232,3 +232,22 @@ def test_login_rate_limit_returns_retry_after_header(tmp_path) -> None:
     assert responses[-1].json() == {
         "detail": "Too many requests; try again later"
     }
+
+
+
+def test_email_verification_endpoint_is_rate_limited(tmp_path) -> None:
+    app = create_app(tmp_path / "verification-rate-limit.sqlite3")
+    with TestClient(app) as client:
+        responses = [
+            client.post("/auth/verify-email", json={"token": "invalid-token"})
+            for _ in range(6)
+        ]
+
+    assert [response.status_code for response in responses] == [
+        400,
+        400,
+        400,
+        400,
+        400,
+        429,
+    ]
