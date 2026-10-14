@@ -1,10 +1,13 @@
 """HTTP adapter for email authentication and server-managed sessions."""
 
+from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 import os
 from pathlib import Path
 import sqlite3
+from threading import Lock
+from time import monotonic
 from typing import Annotated, cast
 from urllib.parse import urlsplit
 
@@ -99,11 +102,40 @@ def _email_sender() -> SmtpEmailSender:
 def create_app(database_path: str | Path | None = None) -> FastAPI:
     """Create an API app; tests may inject a temporary SQLite database path."""
     app = FastAPI(title="Gatherly Authentication API", version="0.1.0")
+    rate_limit_window_seconds = 60.0
+    rate_limit_max_requests = 5
+    rate_limit_paths = {
+        "/auth/login",
+        "/auth/register",
+        "/auth/password-reset/request",
+    }
+    request_times: dict[tuple[str, str], deque[float]] = defaultdict(deque)
+    request_times_lock = Lock()
 
     @app.middleware("http")
     async def validate_browser_origin(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
+        if request.method == "POST" and request.url.path in rate_limit_paths:
+            client_host = request.client.host if request.client else "unknown"
+            key = (client_host, request.url.path)
+            current_time = monotonic()
+            with request_times_lock:
+                timestamps = request_times[key]
+                while (
+                    timestamps
+                    and current_time - timestamps[0] >= rate_limit_window_seconds
+                ):
+                    timestamps.popleft()
+                if len(timestamps) >= rate_limit_max_requests:
+                    return Response(
+                        content='{"detail":"Too many requests; try again later"}',
+                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                        headers={"Retry-After": str(int(rate_limit_window_seconds))},
+                        media_type="application/json",
+                    )
+                timestamps.append(current_time)
+
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             origin = request.headers.get("origin")
             if origin:
