@@ -81,6 +81,17 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON auth_email_tokens(user_id, purpose);
         """,
     ),
+    (
+        4,
+        """
+        CREATE TABLE auth_telegram_login_payloads (
+            payload_hash TEXT PRIMARY KEY,
+            consumed_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_auth_telegram_login_payloads_consumed
+            ON auth_telegram_login_payloads(consumed_at);
+        """,
+    ),
 )
 
 
@@ -118,6 +129,7 @@ def migrate(connection: sqlite3.Connection) -> None:
             connection.rollback()
             raise
 
+
 @contextmanager
 def transaction(connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     """Run a group of database operations atomically.
@@ -136,4 +148,3 @@ def transaction(connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     except BaseException:
         connection.rollback()
         raise
-
