@@ -101,6 +101,25 @@ def test_expired_telegram_payload_does_not_create_session(
         assert client.get("/auth/me").status_code == 401
 
 
+def test_future_telegram_payload_does_not_create_session(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    app = create_app(tmp_path / "future-telegram-login.sqlite3")
+    future_date = int(NOW.timestamp()) + 3600
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/auth/telegram/login",
+            json=signed_payload(auth_date=future_date),
+        )
+
+        assert response.status_code == 401
+        assert "gatherly_session" not in response.cookies
+        assert client.get("/auth/me").status_code == 401
+
+
 def test_missing_telegram_bot_token_rejects_login(
     tmp_path, monkeypatch
 ) -> None:
