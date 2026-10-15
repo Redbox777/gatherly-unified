@@ -17,7 +17,7 @@ def signed_payload(*, auth_date: int) -> dict[str, str]:
         "first_name": "Example",
         "auth_date": str(auth_date),
     }
-    check_string = "\\n".join(f"{key}={value}" for key, value in sorted(payload.items()))
+    check_string = "\n".join(f"{key}={value}" for key, value in sorted(payload.items()))
     secret_key = hashlib.sha256(BOT_TOKEN.encode("utf-8")).digest()
     payload["hash"] = hmac.new(
         secret_key, check_string.encode("utf-8"), hashlib.sha256
