@@ -37,7 +37,7 @@ def verify_telegram_login(
     if age < timedelta(0) or age > max_age:
         return False
 
-    check_string = "\\n".join(
+    check_string = "\n".join(
         f"{key}={value}"
         for key, value in sorted(payload.items())
         if key != "hash"
