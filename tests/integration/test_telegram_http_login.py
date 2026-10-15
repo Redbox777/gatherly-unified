@@ -80,3 +80,37 @@ def test_existing_telegram_identity_reuses_same_account(
         second_user = client.get("/auth/me").json()["user_id"]
 
         assert second_user == first_user
+
+
+def test_expired_telegram_payload_does_not_create_session(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    app = create_app(tmp_path / "expired-telegram-login.sqlite3")
+    expired_date = int(NOW.timestamp()) - 3600
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/auth/telegram/login",
+            json=signed_payload(auth_date=expired_date),
+        )
+
+        assert response.status_code == 401
+        assert "gatherly_session" not in response.cookies
+        assert client.get("/auth/me").status_code == 401
+
+
+def test_missing_telegram_bot_token_rejects_login(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    app = create_app(tmp_path / "missing-telegram-token.sqlite3")
+
+    with TestClient(app) as client:
+        response = client.post("/auth/telegram/login", json=signed_payload())
+
+        assert response.status_code == 401
+        assert "gatherly_session" not in response.cookies
+        assert client.get("/auth/me").status_code == 401
