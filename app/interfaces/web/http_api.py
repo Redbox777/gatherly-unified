@@ -3,6 +3,7 @@
 from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+import hashlib
 import os
 from pathlib import Path
 import sqlite3
@@ -259,6 +260,25 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         ):
             raise HTTPException(status_code=401, detail="Invalid Telegram login")
         verified_at = datetime.fromtimestamp(int(payload.auth_date), tz=UTC)
+        signature_hash = hashlib.sha256(payload.hash.encode("ascii")).hexdigest()
+        try:
+            # Keep the one-time-use record only for the Login Widget validity
+            # window, while the unique key makes concurrent replays atomic.
+            deps.connection.execute(
+                "DELETE FROM auth_telegram_login_payloads WHERE consumed_at < ?",
+                ((now.timestamp() - 600),),
+            )
+            deps.connection.execute(
+                "INSERT INTO auth_telegram_login_payloads(payload_hash, consumed_at) "
+                "VALUES (?, ?)",
+                (signature_hash, now.isoformat()),
+            )
+            deps.connection.commit()
+        except sqlite3.IntegrityError:
+            deps.connection.rollback()
+            raise HTTPException(
+                status_code=401, detail="Invalid Telegram login"
+            ) from None
         try:
             session = deps.authentication.login_telegram(
                 telegram_subject=payload.id, now=now, verified_at=verified_at
