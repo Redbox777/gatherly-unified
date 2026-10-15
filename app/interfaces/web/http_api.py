@@ -12,7 +12,7 @@ from typing import Annotated, cast
 from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.auth_identities_service import AuthIdentitiesService
 from app.application.auth_sessions_service import AuthSessionsService
@@ -27,6 +27,7 @@ from app.infrastructure.database.auth_identities_repository import AuthIdentitie
 from app.infrastructure.database.auth_sessions_repository import AuthSessionsRepository
 from app.infrastructure.database.connection import connect, migrate
 from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
+from app.interfaces.telegram.login_verification import verify_telegram_login
 
 
 SESSION_COOKIE = "gatherly_session"
@@ -47,6 +48,14 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=1024)
+
+
+class TelegramLoginRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    id: str = Field(min_length=1, max_length=32)
+    auth_date: str = Field(min_length=1, max_length=16)
+    hash: str = Field(min_length=64, max_length=64)
 
 
 class EmailTokenRequest(BaseModel):
@@ -106,6 +115,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     rate_limit_max_requests = 5
     rate_limit_paths = {
         "/auth/login",
+        "/auth/telegram/login",
         "/auth/register",
         "/auth/password-reset/request",
         "/auth/password-reset/confirm",
@@ -232,6 +242,39 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             max_age=max(0, int((session.expires_at - session.created_at).total_seconds())),
         )
         return {"message": "Signed in"}
+
+    @app.post("/auth/telegram/login")
+    def login_telegram(
+        payload: TelegramLoginRequest, response: Response, deps: ServiceDependency
+    ) -> dict[str, str]:
+        now = datetime.now(UTC)
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        telegram_payload = {
+            key: value
+            for key, value in payload.model_dump().items()
+            if isinstance(value, str)
+        }
+        if not verify_telegram_login(
+            payload=telegram_payload, bot_token=bot_token, now=now
+        ):
+            raise HTTPException(status_code=401, detail="Invalid Telegram login")
+        verified_at = datetime.fromtimestamp(int(payload.auth_date), tz=UTC)
+        try:
+            session = deps.authentication.login_telegram(
+                telegram_subject=payload.id, now=now, verified_at=verified_at
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=401, detail="Invalid Telegram login") from error
+        response.set_cookie(
+            key=SESSION_COOKIE,
+            value=session.raw_token,
+            httponly=True,
+            secure=os.environ.get("COOKIE_SECURE", "true").casefold() == "true",
+            samesite="lax",
+            path=SESSION_COOKIE_PATH,
+            max_age=max(0, int((session.expires_at - session.created_at).total_seconds())),
+        )
+        return {"message": "Signed in with Telegram"}
 
     @app.post("/auth/logout")
     def logout(request: Request, response: Response, deps: ServiceDependency) -> dict[str, str]:
