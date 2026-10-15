@@ -11,10 +11,12 @@ BOT_TOKEN = "123456:example-test-token"
 NOW = datetime.now(UTC)
 
 
-def signed_payload(*, auth_date: int | None = None) -> dict[str, str]:
+def signed_payload(
+    *, auth_date: int | None = None, first_name: str = "Example"
+) -> dict[str, str]:
     payload = {
         "id": "123456789",
-        "first_name": "Example",
+        "first_name": first_name,
         "auth_date": str(auth_date if auth_date is not None else int(NOW.timestamp())),
     }
     check_string = "\n".join(
@@ -75,11 +77,34 @@ def test_existing_telegram_identity_reuses_same_account(
         first_user = client.get("/auth/me").json()["user_id"]
 
         client.post("/auth/logout")
-        second_response = client.post("/auth/telegram/login", json=signed_payload())
+        second_response = client.post(
+            "/auth/telegram/login",
+            json=signed_payload(first_name="Example Updated"),
+        )
         assert second_response.status_code == 200
         second_user = client.get("/auth/me").json()["user_id"]
 
         assert second_user == first_user
+
+
+def test_replayed_telegram_payload_is_rejected(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    app = create_app(tmp_path / "replayed-telegram-login.sqlite3")
+    payload = signed_payload()
+
+    with TestClient(app) as client:
+        first_response = client.post("/auth/telegram/login", json=payload)
+        assert first_response.status_code == 200
+        client.post("/auth/logout")
+
+        replay_response = client.post("/auth/telegram/login", json=payload)
+
+        assert replay_response.status_code == 401
+        assert "gatherly_session" not in replay_response.cookies
+        assert client.get("/auth/me").status_code == 401
 
 
 def test_expired_telegram_payload_does_not_create_session(
