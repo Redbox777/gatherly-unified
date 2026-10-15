@@ -266,7 +266,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             # window, while the unique key makes concurrent replays atomic.
             deps.connection.execute(
                 "DELETE FROM auth_telegram_login_payloads WHERE consumed_at < ?",
-                ((now.timestamp() - 600),),
+                (datetime.fromtimestamp(now.timestamp() - 600, tz=UTC).isoformat(),),
             )
             deps.connection.execute(
                 "INSERT INTO auth_telegram_login_payloads(payload_hash, consumed_at) "
