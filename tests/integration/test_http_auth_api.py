@@ -121,6 +121,16 @@ def test_password_reset_http_flow_invalidates_old_password(
         )
         assert verification.status_code == 200
 
+        existing_login = client.post(
+            "/auth/login",
+            json={
+                "email": "reset@example.test",
+                "password": "original password long enough",
+            },
+        )
+        assert existing_login.status_code == 200
+        assert client.get("/auth/me").status_code == 200
+
         request_reset = client.post(
             "/auth/password-reset/request",
             json={"email": "reset@example.test"},
@@ -144,6 +154,7 @@ def test_password_reset_http_flow_invalidates_old_password(
             },
         )
         assert confirmation.status_code == 200
+        assert client.get("/auth/me").status_code == 401
         replayed_reset = client.post(
             "/auth/password-reset/confirm",
             json={
