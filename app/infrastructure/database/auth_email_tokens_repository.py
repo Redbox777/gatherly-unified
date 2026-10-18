@@ -127,7 +127,7 @@ class AuthEmailTokensRepository:
     def consume_password_reset_token(
         self, *, raw_token: str, password_hash: str, now: datetime
     ) -> bool:
-        """Atomically consume a reset token and replace the verified email password."""
+        """Consume a reset token, replace the password, and revoke all sessions."""
         self._require_aware(now)
         if not password_hash.strip():
             raise ValueError("Password hash must not be blank")
@@ -141,6 +141,7 @@ class AuthEmailTokensRepository:
             ).fetchone()
             if row is None:
                 return False
+            user_id = str(row["user_id"])
             cursor = self._connection.execute(
                 """UPDATE auth_email_tokens SET consumed_at = ?
                    WHERE id = ? AND consumed_at IS NULL AND expires_at > ?""",
@@ -152,10 +153,15 @@ class AuthEmailTokensRepository:
                 """UPDATE auth_identities SET password_hash = ?
                    WHERE user_id = ? AND provider = 'email'
                      AND verified_at IS NOT NULL""",
-                (password_hash, str(row["user_id"])),
+                (password_hash, user_id),
             )
             if identity.rowcount != 1:
                 raise RuntimeError("Reset token has no verified email identity")
+            self._connection.execute(
+                """UPDATE auth_sessions SET revoked_at = ?
+                   WHERE user_id = ? AND revoked_at IS NULL""",
+                (self._format(now), user_id),
+            )
         return True
 
     @staticmethod
