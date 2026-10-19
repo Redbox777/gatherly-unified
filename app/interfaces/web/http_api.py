@@ -61,6 +61,11 @@ class CreateEventRequest(BaseModel):
     starts_at: datetime | None = None
 
 
+class UpdateEventRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    starts_at: datetime | None = None
+
+
 class AddParticipantRequest(BaseModel):
     display_name: str = Field(min_length=1, max_length=120)
 
@@ -417,6 +422,50 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             "starts_at": event.starts_at.isoformat() if event.starts_at else None,
             "created_at": event.created_at.isoformat(),
         }
+
+    @app.patch("/events/{event_id}")
+    def update_event(
+        event_id: UUID,
+        payload: UpdateEventRequest,
+        request: Request,
+        deps: ServiceDependency,
+    ) -> dict[str, str | None]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        try:
+            event = deps.events.update_event(
+                event_id=event_id, owner_id=user_id,
+                title=payload.title, starts_at=payload.starts_at,
+            )
+        except EventNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Event not found") from error
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail="Invalid event data") from error
+        return {
+            "id": str(event.id), "title": event.title,
+            "starts_at": event.starts_at.isoformat() if event.starts_at else None,
+            "created_at": event.created_at.isoformat(),
+        }
+
+    @app.delete("/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
+    def delete_event(
+        event_id: UUID, request: Request, deps: ServiceDependency
+    ) -> Response:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        try:
+            deps.events.delete_event(event_id=event_id, owner_id=user_id)
+        except EventNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Event not found") from error
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.post("/events/{event_id}/participants", status_code=status.HTTP_201_CREATED)
     def add_event_participant(
