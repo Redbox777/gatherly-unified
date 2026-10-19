@@ -233,8 +233,9 @@ def test_authenticated_password_change_revokes_all_sessions(
         )
         assert changed.status_code == 200
         assert changed.json() == {"message": "Password updated; sign in again"}
-        assert "gatherly_session" in changed.cookies
-        assert changed.cookies.get("gatherly_session") == ""
+        set_cookie = changed.headers.get("set-cookie", "")
+        assert "gatherly_session=" in set_cookie
+        assert "Max-Age=0" in set_cookie
         assert client.get("/auth/me").status_code == 401
         assert other_client.get("/auth/me").status_code == 401
 
