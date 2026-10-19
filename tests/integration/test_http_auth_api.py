@@ -340,3 +340,34 @@ def test_email_verification_endpoint_is_rate_limited(tmp_path) -> None:
         400,
         429,
     ]
+
+
+def test_authenticated_user_can_create_and_retrieve_owned_event(tmp_path, monkeypatch) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "events-http.sqlite3")
+    with TestClient(app) as client:
+        registration = client.post("/auth/register", json={"email": "event@example.test", "password": "original password long enough"})
+        assert registration.status_code == 202
+        token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+        assert client.post("/auth/verify-email", json={"token": token}).status_code == 200
+        assert client.post("/auth/login", json={"email": "event@example.test", "password": "original password long enough"}).status_code == 200
+        created = client.post("/events", json={"title": "Weekend trip"})
+        assert created.status_code == 201
+        body = created.json()
+        assert body["title"] == "Weekend trip"
+        assert body["id"]
+        fetched = client.get(f"/events/{body['id']}")
+        assert fetched.status_code == 200
+        assert fetched.json()["id"] == body["id"]
+
+
+def test_event_routes_require_authentication_and_hide_other_owners(tmp_path, monkeypatch) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "event-ownership-http.sqlite3")
+    with TestClient(app) as client:
+        assert client.post("/events", json={"title": "No session"}).status_code == 401
+        assert client.get("/events/00000000-0000-0000-0000-000000000001").status_code == 401
