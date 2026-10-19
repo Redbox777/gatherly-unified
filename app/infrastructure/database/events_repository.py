@@ -45,6 +45,25 @@ class EventsRepository:
             created_at=datetime.fromisoformat(row["created_at"]),
         )
 
+    def list_for_owner(self, *, owner_id: str) -> list[Event]:
+        rows = self._connection.execute(
+            "SELECT id, owner_id, title, starts_at, created_at FROM events "
+            "WHERE owner_id = ? ORDER BY created_at DESC, id DESC",
+            (owner_id.strip(),),
+        ).fetchall()
+        return [
+            Event(
+                id=UUID(row["id"]),
+                owner_id=row["owner_id"],
+                title=row["title"],
+                starts_at=datetime.fromisoformat(row["starts_at"])
+                if row["starts_at"]
+                else None,
+                created_at=datetime.fromisoformat(row["created_at"]),
+            )
+            for row in rows
+        ]
+
     def update_for_owner(
         self, *, event_id: UUID, owner_id: str, title: str, starts_at: datetime | None
     ) -> bool:
