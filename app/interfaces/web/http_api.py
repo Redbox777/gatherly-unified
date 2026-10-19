@@ -3,6 +3,7 @@
 from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from uuid import UUID
 import hashlib
 import os
 from pathlib import Path
@@ -19,6 +20,8 @@ from app.application.auth_identities_service import AuthIdentitiesService
 from app.application.auth_sessions_service import AuthSessionsService
 from app.application.authentication_service import AuthenticationService
 from app.application.email_verification_service import EmailVerificationService
+from app.application.events import EventNotFoundError, EventsService
+from app.application.participants import ParticipantsService
 from app.application.password_reset_request_service import PasswordResetRequestService
 from app.application.password_reset_service import PasswordResetService
 from app.infrastructure.database.auth_email_tokens_repository import (
@@ -27,6 +30,8 @@ from app.infrastructure.database.auth_email_tokens_repository import (
 from app.infrastructure.database.auth_identities_repository import AuthIdentitiesRepository
 from app.infrastructure.database.auth_sessions_repository import AuthSessionsRepository
 from app.infrastructure.database.connection import connect, migrate
+from app.infrastructure.database.events_repository import EventsRepository
+from app.infrastructure.database.participants_repository import ParticipantsRepository
 from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
 from app.interfaces.telegram.login_verification import verify_telegram_login
 
@@ -49,6 +54,11 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=1024)
+
+
+class CreateEventRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    starts_at: datetime | None = None
 
 
 class ChangePasswordRequest(BaseModel):
@@ -90,6 +100,10 @@ class Dependencies:
         self.resets = PasswordResetService(token_repository)
         self.sessions = AuthSessionsService(session_repository)
         self.authentication = AuthenticationService(self.identities, self.sessions)
+        self.events = EventsService(EventsRepository(connection))
+        self.participants = ParticipantsService(
+            self.events, ParticipantsRepository(connection)
+        )
         self.email_sender = _email_sender()
         self.reset_requests = PasswordResetRequestService(
             identities=self.identities,
@@ -354,6 +368,31 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             path=SESSION_COOKIE_PATH,
         )
         return {"message": "Password updated; sign in again"}
+
+
+    @app.post("/events", status_code=status.HTTP_201_CREATED)
+    def create_event(payload: CreateEventRequest, request: Request, deps: ServiceDependency) -> dict[str, str | None]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(raw_token=token, now=datetime.now(UTC))
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        try:
+            event = deps.events.create_event(owner_id=user_id, title=payload.title, starts_at=payload.starts_at)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail="Invalid event data") from error
+        return {"id": str(event.id), "title": event.title, "starts_at": event.starts_at.isoformat() if event.starts_at else None, "created_at": event.created_at.isoformat()}
+
+    @app.get("/events/{event_id}")
+    def get_event(event_id: UUID, request: Request, deps: ServiceDependency) -> dict[str, str | None]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(raw_token=token, now=datetime.now(UTC))
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        try:
+            event = deps.events.get_event(event_id=event_id, owner_id=user_id)
+        except EventNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Event not found") from error
+        return {"id": str(event.id), "title": event.title, "starts_at": event.starts_at.isoformat() if event.starts_at else None, "created_at": event.created_at.isoformat()}
 
     @app.post("/auth/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
     def request_password_reset(
