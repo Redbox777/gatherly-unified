@@ -27,6 +27,13 @@ class ParticipantsRepository:
             ),
         )
 
+    def delete_for_event(self, *, participant_id: UUID, event_id: UUID) -> bool:
+        cursor = self._connection.execute(
+            "DELETE FROM event_participants WHERE id = ? AND event_id = ?",
+            (str(participant_id), str(event_id)),
+        )
+        return cursor.rowcount == 1
+
     def list_for_event(self, event_id: UUID) -> list[EventParticipant]:
         rows = self._connection.execute(
             "SELECT id, event_id, display_name, added_at FROM event_participants "
