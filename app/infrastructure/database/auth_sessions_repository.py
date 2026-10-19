@@ -6,6 +6,7 @@ import sqlite3
 from uuid import uuid4
 
 from app.domain.auth_tokens import hash_token, issue_token
+from app.infrastructure.database.connection import transaction
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,18 +36,19 @@ class AuthSessionsRepository:
         self._validate_times(now=now, expires_at=expires_at)
         issued = issue_token()
         session_id = str(uuid4())
-        self._connection.execute(
-            """INSERT INTO auth_sessions(
-                id, user_id, token_hash, created_at, expires_at, revoked_at
-            ) VALUES (?, ?, ?, ?, ?, NULL)""",
-            (
-                session_id,
-                user_id,
-                issued.digest,
-                self._format(now),
-                self._format(expires_at),
-            ),
-        )
+        with transaction(self._connection):
+            self._connection.execute(
+                """INSERT INTO auth_sessions(
+                    id, user_id, token_hash, created_at, expires_at, revoked_at
+                ) VALUES (?, ?, ?, ?, ?, NULL)""",
+                (
+                    session_id,
+                    user_id,
+                    issued.digest,
+                    self._format(now),
+                    self._format(expires_at),
+                ),
+            )
         return CreatedSession(
             session_id=session_id,
             user_id=user_id,
