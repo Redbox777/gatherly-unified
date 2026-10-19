@@ -407,7 +407,12 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             event = deps.events.get_event(event_id=event_id, owner_id=user_id)
         except EventNotFoundError as error:
             raise HTTPException(status_code=404, detail="Event not found") from error
-        return {"id": str(event.id), "title": event.title, "starts_at": event.starts_at.isoformat() if event.starts_at else None, "created_at": event.created_at.isoformat()}
+        return {
+            "id": str(event.id),
+            "title": event.title,
+            "starts_at": event.starts_at.isoformat() if event.starts_at else None,
+            "created_at": event.created_at.isoformat(),
+        }
 
     @app.post("/auth/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
     def request_password_reset(
