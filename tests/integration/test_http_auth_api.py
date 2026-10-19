@@ -641,3 +641,84 @@ def test_authenticated_user_with_no_events_gets_empty_list(tmp_path, monkeypatch
         response = client.get("/events")
         assert response.status_code == 200
         assert response.json() == []
+
+
+def test_event_owner_can_remove_participant(tmp_path, monkeypatch) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "participant-remove.sqlite3")
+
+    with TestClient(app) as client:
+        email = "participant-remove@example.test"
+        password = "original password long enough"
+        assert client.post(
+            "/auth/register", json={"email": email, "password": password}
+        ).status_code == 202
+        token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+        assert client.post("/auth/verify-email", json={"token": token}).status_code == 200
+        assert client.post(
+            "/auth/login", json={"email": email, "password": password}
+        ).status_code == 200
+
+        event = client.post("/events", json={"title": "Dinner"})
+        participant = client.post(
+            f"/events/{event.json()['id']}/participants",
+            json={"display_name": "Alex"},
+        )
+        assert participant.status_code == 201
+
+        removed = client.delete(
+            f"/events/{event.json()['id']}/participants/{participant.json()['id']}"
+        )
+        assert removed.status_code == 204
+        assert client.get(f"/events/{event.json()['id']}/participants").json() == []
+
+
+def test_only_event_owner_can_remove_participant(tmp_path, monkeypatch) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "participant-remove-owner-only.sqlite3")
+
+    with TestClient(app) as owner, TestClient(app) as other:
+        for client, email, password in (
+            (owner, "participant-owner@example.test", "owner password long enough"),
+            (other, "participant-other@example.test", "other password long enough"),
+        ):
+            assert client.post(
+                "/auth/register", json={"email": email, "password": password}
+            ).status_code == 202
+            token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+            assert client.post("/auth/verify-email", json={"token": token}).status_code == 200
+            assert client.post(
+                "/auth/login", json={"email": email, "password": password}
+            ).status_code == 200
+
+        event = owner.post("/events", json={"title": "Private dinner"})
+        participant = owner.post(
+            f"/events/{event.json()['id']}/participants",
+            json={"display_name": "Alex"},
+        )
+        assert participant.status_code == 201
+
+        response = other.delete(
+            f"/events/{event.json()['id']}/participants/{participant.json()['id']}"
+        )
+        assert response.status_code == 404
+        assert owner.get(f"/events/{event.json()['id']}/participants").json()[0][
+            "id"
+        ] == participant.json()["id"]
+
+
+def test_participant_removal_requires_authentication(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: FakeEmailSender())
+    app = create_app(tmp_path / "participant-remove-auth.sqlite3")
+
+    with TestClient(app) as client:
+        response = client.delete(
+            "/events/00000000-0000-0000-0000-000000000001/participants/"
+            "00000000-0000-0000-0000-000000000002"
+        )
+        assert response.status_code == 401
