@@ -385,3 +385,67 @@ def test_event_routes_require_authentication_and_hide_other_owners(tmp_path, mon
     with TestClient(app) as client:
         assert client.post("/events", json={"title": "No session"}).status_code == 401
         assert client.get("/events/00000000-0000-0000-0000-000000000001").status_code == 401
+
+
+
+def test_authenticated_owner_can_add_and_list_event_participants(
+    tmp_path, monkeypatch
+) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "participants-http.sqlite3")
+    with TestClient(app) as client:
+        registration = client.post(
+            "/auth/register",
+            json={
+                "email": "participants@example.test",
+                "password": "original password long enough",
+            },
+        )
+        assert registration.status_code == 202
+        token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+        assert client.post(
+            "/auth/verify-email", json={"token": token}
+        ).status_code == 200
+        assert client.post(
+            "/auth/login",
+            json={
+                "email": "participants@example.test",
+                "password": "original password long enough",
+            },
+        ).status_code == 200
+
+        event_response = client.post("/events", json={"title": "Dinner"})
+        assert event_response.status_code == 201
+        event_id = event_response.json()["id"]
+
+        added = client.post(
+            f"/events/{event_id}/participants", json={"display_name": "  Alex  "}
+        )
+        assert added.status_code == 201
+        participant = added.json()
+        assert participant["display_name"] == "Alex"
+        assert participant["event_id"] == event_id
+        assert participant["id"]
+
+        listed = client.get(f"/events/{event_id}/participants")
+        assert listed.status_code == 200
+        assert [item["id"] for item in listed.json()] == [participant["id"]]
+
+        duplicate = client.post(
+            f"/events/{event_id}/participants", json={"display_name": "Alex"}
+        )
+        assert duplicate.status_code == 409
+
+
+def test_event_participant_routes_require_authentication(tmp_path) -> None:
+    app = create_app(tmp_path / "participants-unauthenticated.sqlite3")
+    with TestClient(app) as client:
+        event_id = "00000000-0000-0000-0000-000000000001"
+        added = client.post(
+            f"/events/{event_id}/participants", json={"display_name": "Alex"}
+        )
+        listed = client.get(f"/events/{event_id}/participants")
+    assert added.status_code == 401
+    assert listed.status_code == 401
