@@ -404,6 +404,25 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             "created_at": event.created_at.isoformat(),
         }
 
+    @app.get("/events")
+    def list_events(request: Request, deps: ServiceDependency) -> list[dict[str, str | None]]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        events = deps.events.list_events(owner_id=user_id)
+        return [
+            {
+                "id": str(event.id),
+                "title": event.title,
+                "starts_at": event.starts_at.isoformat() if event.starts_at else None,
+                "created_at": event.created_at.isoformat(),
+            }
+            for event in events
+        ]
+
     @app.get("/events/{event_id}")
     def get_event(
         event_id: UUID, request: Request, deps: ServiceDependency
