@@ -1,4 +1,4 @@
-"""Use cases for event creation and retrieval."""
+"""Use cases for event creation, retrieval, updates, and deletion."""
 
 from datetime import datetime
 from uuid import UUID
@@ -30,3 +30,40 @@ class EventsService:
             # Deliberately do not reveal whether another user's event exists.
             raise EventNotFoundError("Event not found")
         return event
+
+    def update_event(
+        self,
+        *,
+        event_id: UUID,
+        owner_id: str,
+        title: str,
+        starts_at: datetime | None = None,
+    ) -> Event:
+        existing = self.get_event(event_id=event_id, owner_id=owner_id)
+        updated = Event(
+            id=existing.id,
+            owner_id=existing.owner_id,
+            title=Event.create(
+                owner_id=owner_id, title=title, starts_at=starts_at
+            ).title,
+            starts_at=starts_at.astimezone() if starts_at and starts_at.tzinfo else starts_at,
+            created_at=existing.created_at,
+        )
+        with transaction(self._repository.connection):
+            changed = self._repository.update_for_owner(
+                event_id=event_id,
+                owner_id=owner_id,
+                title=updated.title,
+                starts_at=updated.starts_at,
+            )
+            if not changed:
+                raise EventNotFoundError("Event not found")
+        return updated
+
+    def delete_event(self, *, event_id: UUID, owner_id: str) -> None:
+        with transaction(self._repository.connection):
+            deleted = self._repository.delete_for_owner(
+                event_id=event_id, owner_id=owner_id
+            )
+            if not deleted:
+                raise EventNotFoundError("Event not found")
