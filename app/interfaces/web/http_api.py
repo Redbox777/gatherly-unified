@@ -51,6 +51,11 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=1024)
+    new_password: str = Field(min_length=12, max_length=1024)
+
+
 class TelegramLoginRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -120,6 +125,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         "/auth/register",
         "/auth/password-reset/request",
         "/auth/password-reset/confirm",
+        "/auth/password/change",
         "/auth/verify-email",
     }
     request_times: dict[tuple[str, str], deque[float]] = defaultdict(deque)
@@ -318,6 +324,36 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         if user_id is None:
             raise HTTPException(status_code=401, detail="Authentication required")
         return {"user_id": user_id}
+
+    @app.post("/auth/password/change")
+    def change_password(
+        payload: ChangePasswordRequest,
+        request: Request,
+        response: Response,
+        deps: ServiceDependency,
+    ) -> dict[str, str]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        changed = deps.identities.change_email_password(
+            user_id=user_id,
+            current_password=payload.current_password,
+            new_password=payload.new_password,
+            now=datetime.now(UTC),
+        )
+        if not changed:
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+        response.delete_cookie(
+            key=SESSION_COOKIE,
+            httponly=True,
+            secure=os.environ.get("COOKIE_SECURE", "true").casefold() == "true",
+            samesite="lax",
+            path=SESSION_COOKIE_PATH,
+        )
+        return {"message": "Password updated; sign in again"}
 
     @app.post("/auth/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
     def request_password_reset(
