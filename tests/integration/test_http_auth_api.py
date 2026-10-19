@@ -568,3 +568,76 @@ def test_event_update_and_delete_are_owner_only(tmp_path, monkeypatch) -> None:
         assert other.delete(f"/events/{event_id}").status_code == 404
         assert owner.get(f"/events/{event_id}").json()["title"] == "Owner event"
         assert owner.delete(f"/events/{event_id}").status_code == 204
+
+
+def test_authenticated_user_can_list_only_their_own_events(tmp_path, monkeypatch) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "event-list-http.sqlite3")
+
+    with TestClient(app) as owner, TestClient(app) as other:
+        assert owner.get("/events").status_code == 401
+
+        for client, email, password in (
+            (owner, "list-owner@example.test", "owner password long enough"),
+            (other, "list-other@example.test", "other password long enough"),
+        ):
+            assert client.post(
+                "/auth/register", json={"email": email, "password": password}
+            ).status_code == 202
+            token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+            assert client.post("/auth/verify-email", json={"token": token}).status_code == 200
+            assert client.post(
+                "/auth/login", json={"email": email, "password": password}
+            ).status_code == 200
+
+        first = owner.post("/events", json={"title": "First event"})
+        second = owner.post("/events", json={"title": "Second event"})
+        foreign = other.post("/events", json={"title": "Other user's event"})
+        assert first.status_code == second.status_code == foreign.status_code == 201
+
+        owner_events = owner.get("/events")
+        assert owner_events.status_code == 200
+        assert {event["id"] for event in owner_events.json()} == {
+            first.json()["id"],
+            second.json()["id"],
+        }
+        assert {event["title"] for event in owner_events.json()} == {
+            "First event",
+            "Second event",
+        }
+        assert all(event["title"] != "Other user's event" for event in owner_events.json())
+
+        other_events = other.get("/events")
+        assert other_events.status_code == 200
+        assert [event["id"] for event in other_events.json()] == [foreign.json()["id"]]
+
+
+def test_authenticated_user_with_no_events_gets_empty_list(tmp_path, monkeypatch) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "event-list-empty-http.sqlite3")
+
+    with TestClient(app) as client:
+        assert client.post(
+            "/auth/register",
+            json={
+                "email": "empty-list@example.test",
+                "password": "original password long enough",
+            },
+        ).status_code == 202
+        token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+        assert client.post("/auth/verify-email", json={"token": token}).status_code == 200
+        assert client.post(
+            "/auth/login",
+            json={
+                "email": "empty-list@example.test",
+                "password": "original password long enough",
+            },
+        ).status_code == 200
+
+        response = client.get("/events")
+        assert response.status_code == 200
+        assert response.json() == []
