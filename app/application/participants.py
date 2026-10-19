@@ -1,4 +1,4 @@
-"""Use cases for adding and listing event participants."""
+"""Use cases for adding, listing, and removing event participants."""
 
 import sqlite3
 from uuid import UUID
@@ -41,6 +41,17 @@ class ParticipantsService:
                 ) from exc
             raise
         return participant
+
+    def remove_participant(
+        self, *, event_id: UUID, owner_id: str, participant_id: UUID
+    ) -> None:
+        self._events.get_event(event_id=event_id, owner_id=owner_id)
+        with transaction(self._repository.connection):
+            removed = self._repository.delete_for_event(
+                participant_id=participant_id, event_id=event_id
+            )
+            if not removed:
+                raise LookupError("Participant not found")
 
     def list_participants(
         self, *, event_id: UUID, owner_id: str
