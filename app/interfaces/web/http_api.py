@@ -518,6 +518,32 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             "added_at": participant.added_at.isoformat(),
         }
 
+    @app.delete(
+        "/events/{event_id}/participants/{participant_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    def remove_event_participant(
+        event_id: UUID,
+        participant_id: UUID,
+        request: Request,
+        deps: ServiceDependency,
+    ) -> Response:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        try:
+            deps.participants.remove_participant(
+                event_id=event_id, owner_id=user_id, participant_id=participant_id
+            )
+        except EventNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Event not found") from error
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="Participant not found") from error
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
     @app.get("/events/{event_id}/participants")
     def list_event_participants(
         event_id: UUID, request: Request, deps: ServiceDependency
