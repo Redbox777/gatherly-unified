@@ -70,6 +70,33 @@ class AuthIdentitiesService:
             return None
         return identity
 
+    def change_email_password(
+        self,
+        *,
+        user_id: str,
+        current_password: str,
+        new_password: str,
+        now: datetime,
+    ) -> bool:
+        """Change a verified email password after checking the current password."""
+        if len(new_password) < 12:
+            raise ValueError("New password must contain at least 12 characters")
+        identity = self._repository.find_email_identity_by_user_id(user_id=user_id)
+        if (
+            identity is None
+            or identity.password_hash is None
+            or identity.verified_at is None
+            or not verify_password(current_password, identity.password_hash)
+        ):
+            return False
+        new_hash = hash_password(new_password)
+        return self._repository.update_password_and_revoke_sessions(
+            user_id=user_id,
+            current_password_hash=identity.password_hash,
+            new_password_hash=new_hash,
+            now=now,
+        )
+
     def find_identity(
         self, *, provider: str, provider_subject: str
     ) -> AuthIdentity | None:
