@@ -182,6 +182,86 @@ def test_password_reset_http_flow_invalidates_old_password(
         assert new_password_login.status_code == 200
 
 
+def test_authenticated_password_change_revokes_all_sessions(
+    tmp_path, monkeypatch
+) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "password-change-http.sqlite3")
+
+    with TestClient(app) as client, TestClient(app) as other_client:
+        registration = client.post(
+            "/auth/register",
+            json={
+                "email": "change@example.test",
+                "password": "original password long enough",
+            },
+        )
+        assert registration.status_code == 202
+        verification_token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+        assert client.post(
+            "/auth/verify-email", json={"token": verification_token}
+        ).status_code == 200
+
+        credentials = {
+            "email": "change@example.test",
+            "password": "original password long enough",
+        }
+        assert client.post("/auth/login", json=credentials).status_code == 200
+        assert other_client.post("/auth/login", json=credentials).status_code == 200
+        assert client.get("/auth/me").status_code == 200
+        assert other_client.get("/auth/me").status_code == 200
+
+        wrong_password = client.post(
+            "/auth/password/change",
+            json={
+                "current_password": "incorrect current password",
+                "new_password": "replacement password long enough",
+            },
+        )
+        assert wrong_password.status_code == 400
+        assert client.get("/auth/me").status_code == 200
+        assert other_client.get("/auth/me").status_code == 200
+
+        changed = client.post(
+            "/auth/password/change",
+            json={
+                "current_password": credentials["password"],
+                "new_password": "replacement password long enough",
+            },
+        )
+        assert changed.status_code == 200
+        assert changed.json() == {"message": "Password updated; sign in again"}
+        assert "gatherly_session" in changed.cookies
+        assert changed.cookies.get("gatherly_session") == ""
+        assert client.get("/auth/me").status_code == 401
+        assert other_client.get("/auth/me").status_code == 401
+
+        old_password_login = client.post("/auth/login", json=credentials)
+        new_password_login = client.post(
+            "/auth/login",
+            json={
+                "email": "change@example.test",
+                "password": "replacement password long enough",
+            },
+        )
+        assert old_password_login.status_code == 401
+        assert new_password_login.status_code == 200
+
+
+def test_password_change_requires_authentication(tmp_path) -> None:
+    app = create_app(tmp_path / "password-change-unauthenticated.sqlite3")
+    with TestClient(app) as client:
+        response = client.post(
+            "/auth/password/change",
+            json={
+                "current_password": "old password long enough",
+                "new_password": "replacement password long enough",
+            },
+        )
+    assert response.status_code == 401
+
 
 def test_auth_me_rejects_missing_and_forged_session_tokens(tmp_path) -> None:
     app = create_app(tmp_path / "invalid-session.sqlite3")
@@ -193,7 +273,6 @@ def test_auth_me_rejects_missing_and_forged_session_tokens(tmp_path) -> None:
 
     assert missing.status_code == 401
     assert forged.status_code == 401
-
 
 
 def test_state_changing_auth_request_rejects_cross_origin(tmp_path) -> None:
@@ -219,7 +298,6 @@ def test_state_changing_auth_request_allows_same_origin(tmp_path) -> None:
     assert response.status_code == 200
 
 
-
 def test_login_rate_limit_returns_retry_after_header(tmp_path) -> None:
     app = create_app(tmp_path / "login-rate-limit.sqlite3")
     with TestClient(app) as client:
@@ -243,7 +321,6 @@ def test_login_rate_limit_returns_retry_after_header(tmp_path) -> None:
     assert responses[-1].json() == {
         "detail": "Too many requests; try again later"
     }
-
 
 
 def test_email_verification_endpoint_is_rate_limited(tmp_path) -> None:
