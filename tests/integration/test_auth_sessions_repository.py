@@ -17,6 +17,7 @@ def repository(tmp_path):
         "INSERT INTO users(id, created_at) VALUES (?, ?)",
         ("user-1", NOW.isoformat()),
     )
+    connection.commit()
     yield AuthSessionsRepository(connection)
     connection.close()
 
