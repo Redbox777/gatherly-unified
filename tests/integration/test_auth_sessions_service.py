@@ -18,6 +18,7 @@ def service(tmp_path):
         "INSERT INTO users(id, created_at) VALUES (?, ?)",
         ("user-1", NOW.isoformat()),
     )
+    connection.commit()
     instance = AuthSessionsService(
         AuthSessionsRepository(connection),
         lifetime=timedelta(hours=2),
