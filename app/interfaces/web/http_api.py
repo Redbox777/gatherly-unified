@@ -21,7 +21,7 @@ from app.application.auth_sessions_service import AuthSessionsService
 from app.application.authentication_service import AuthenticationService
 from app.application.email_verification_service import EmailVerificationService
 from app.application.events import EventNotFoundError, EventsService
-from app.application.participants import ParticipantsService
+from app.application.participants import DuplicateParticipantError, ParticipantsService
 from app.application.password_reset_request_service import PasswordResetRequestService
 from app.application.password_reset_service import PasswordResetService
 from app.infrastructure.database.auth_email_tokens_repository import (
@@ -59,6 +59,10 @@ class LoginRequest(BaseModel):
 class CreateEventRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     starts_at: datetime | None = None
+
+
+class AddParticipantRequest(BaseModel):
+    display_name: str = Field(min_length=1, max_length=120)
 
 
 class ChangePasswordRequest(BaseModel):
@@ -413,6 +417,64 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             "starts_at": event.starts_at.isoformat() if event.starts_at else None,
             "created_at": event.created_at.isoformat(),
         }
+
+    @app.post("/events/{event_id}/participants", status_code=status.HTTP_201_CREATED)
+    def add_event_participant(
+        event_id: UUID,
+        payload: AddParticipantRequest,
+        request: Request,
+        deps: ServiceDependency,
+    ) -> dict[str, str]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        try:
+            participant = deps.participants.add_participant(
+                event_id=event_id,
+                owner_id=user_id,
+                display_name=payload.display_name,
+            )
+        except EventNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Event not found") from error
+        except DuplicateParticipantError as error:
+            raise HTTPException(status_code=409, detail="Participant already exists") from error
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail="Invalid participant data") from error
+        return {
+            "id": str(participant.id),
+            "event_id": str(participant.event_id),
+            "display_name": participant.display_name,
+            "added_at": participant.added_at.isoformat(),
+        }
+
+    @app.get("/events/{event_id}/participants")
+    def list_event_participants(
+        event_id: UUID, request: Request, deps: ServiceDependency
+    ) -> list[dict[str, str]]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        try:
+            participants = deps.participants.list_participants(
+                event_id=event_id, owner_id=user_id
+            )
+        except EventNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Event not found") from error
+        return [
+            {
+                "id": str(participant.id),
+                "event_id": str(participant.event_id),
+                "display_name": participant.display_name,
+                "added_at": participant.added_at.isoformat(),
+            }
+            for participant in participants
+        ]
 
     @app.post("/auth/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
     def request_password_reset(
