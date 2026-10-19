@@ -94,7 +94,50 @@ class AuthIdentitiesRepository:
         ).fetchone()
         if row is None:
             return None
-        created_at = self._parse(row["created_at"])
+        return self._identity_from_row(row)
+
+    def find_email_identity_by_user_id(self, *, user_id: str) -> AuthIdentity | None:
+        """Find the account's email identity without exposing other providers."""
+        row = self._connection.execute(
+            """SELECT id, user_id, provider, provider_subject, password_hash,
+                      verified_at, created_at
+               FROM auth_identities
+               WHERE user_id = ? AND provider = 'email'""",
+            (user_id,),
+        ).fetchone()
+        return self._identity_from_row(row) if row is not None else None
+
+    def update_password_and_revoke_sessions(
+        self,
+        *,
+        user_id: str,
+        current_password_hash: str,
+        new_password_hash: str,
+        now: datetime,
+    ) -> bool:
+        """Compare-and-swap the password and revoke sessions in one transaction."""
+        self._require_aware(now)
+        if not current_password_hash.strip() or not new_password_hash.strip():
+            raise ValueError("Password hashes must not be blank")
+        with transaction(self._connection):
+            cursor = self._connection.execute(
+                """UPDATE auth_identities SET password_hash = ?
+                   WHERE user_id = ? AND provider = 'email'
+                     AND verified_at IS NOT NULL AND password_hash = ?""",
+                (new_password_hash, user_id, current_password_hash),
+            )
+            if cursor.rowcount != 1:
+                return False
+            self._connection.execute(
+                """UPDATE auth_sessions SET revoked_at = ?
+                   WHERE user_id = ? AND revoked_at IS NULL""",
+                (self._format(now), user_id),
+            )
+        return True
+
+    @classmethod
+    def _identity_from_row(cls, row: sqlite3.Row) -> AuthIdentity:
+        created_at = cls._parse(row["created_at"])
         if created_at is None:
             raise ValueError("Identity creation timestamp is missing")
         return AuthIdentity(
@@ -103,7 +146,7 @@ class AuthIdentitiesRepository:
             provider=str(row["provider"]),
             provider_subject=str(row["provider_subject"]),
             password_hash=row["password_hash"],
-            verified_at=self._parse(row["verified_at"]),
+            verified_at=cls._parse(row["verified_at"]),
             created_at=created_at,
         )
 
