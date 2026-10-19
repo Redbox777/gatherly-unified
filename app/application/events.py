@@ -1,4 +1,4 @@
-"""Use cases for event creation, retrieval, updates, and deletion."""
+"""Use cases for event creation, retrieval, listing, updates, and deletion."""
 
 from datetime import datetime
 from uuid import UUID
@@ -30,6 +30,9 @@ class EventsService:
             # Deliberately do not reveal whether another user's event exists.
             raise EventNotFoundError("Event not found")
         return event
+
+    def list_events(self, *, owner_id: str) -> list[Event]:
+        return self._repository.list_for_owner(owner_id=owner_id)
 
     def update_event(
         self,
