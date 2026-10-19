@@ -44,3 +44,24 @@ class EventsRepository:
             starts_at=starts_at,
             created_at=datetime.fromisoformat(row["created_at"]),
         )
+
+    def update_for_owner(
+        self, *, event_id: UUID, owner_id: str, title: str, starts_at: datetime | None
+    ) -> bool:
+        cursor = self._connection.execute(
+            "UPDATE events SET title = ?, starts_at = ? WHERE id = ? AND owner_id = ?",
+            (
+                title,
+                starts_at.isoformat() if starts_at else None,
+                str(event_id),
+                owner_id.strip(),
+            ),
+        )
+        return cursor.rowcount == 1
+
+    def delete_for_owner(self, *, event_id: UUID, owner_id: str) -> bool:
+        cursor = self._connection.execute(
+            "DELETE FROM events WHERE id = ? AND owner_id = ?",
+            (str(event_id), owner_id.strip()),
+        )
+        return cursor.rowcount == 1
