@@ -514,3 +514,57 @@ def test_event_participant_routes_require_authentication(tmp_path) -> None:
         listed = client.get(f"/events/{event_id}/participants")
     assert added.status_code == 401
     assert listed.status_code == 401
+
+
+def test_event_owner_can_update_and_delete_event(tmp_path, monkeypatch) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "event-update-delete.sqlite3")
+    with TestClient(app) as client:
+        assert client.post("/auth/register", json={
+            "email": "event-edit@example.test",
+            "password": "original password long enough",
+        }).status_code == 202
+        token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+        assert client.post("/auth/verify-email", json={"token": token}).status_code == 200
+        assert client.post("/auth/login", json={
+            "email": "event-edit@example.test",
+            "password": "original password long enough",
+        }).status_code == 200
+        created = client.post("/events", json={"title": "Old title"})
+        event_id = created.json()["id"]
+        updated = client.patch(f"/events/{event_id}", json={"title": "New title"})
+        assert updated.status_code == 200
+        assert updated.json()["title"] == "New title"
+        assert client.get(f"/events/{event_id}").json()["title"] == "New title"
+        assert client.delete(f"/events/{event_id}").status_code == 204
+        assert client.get(f"/events/{event_id}").status_code == 404
+
+
+def test_event_update_and_delete_are_owner_only(tmp_path, monkeypatch) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "event-edit-owner-only.sqlite3")
+    with TestClient(app) as owner, TestClient(app) as other:
+        for client, email, password in (
+            (owner, "event-owner@example.test", "owner password long enough"),
+            (other, "event-other@example.test", "other password long enough"),
+        ):
+            assert client.post("/auth/register", json={
+                "email": email, "password": password,
+            }).status_code == 202
+            token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+            assert client.post("/auth/verify-email", json={"token": token}).status_code == 200
+            assert client.post("/auth/login", json={
+                "email": email, "password": password,
+            }).status_code == 200
+        created = owner.post("/events", json={"title": "Owner event"})
+        event_id = created.json()["id"]
+        assert other.patch(f"/events/{event_id}", json={
+            "title": "Hijacked",
+        }).status_code == 404
+        assert other.delete(f"/events/{event_id}").status_code == 404
+        assert owner.get(f"/events/{event_id}").json()["title"] == "Owner event"
+        assert owner.delete(f"/events/{event_id}").status_code == 204
