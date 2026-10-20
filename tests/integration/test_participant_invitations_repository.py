@@ -182,7 +182,10 @@ def test_expired_or_revoked_invitation_cannot_be_accepted(
         now=invitation.expires_at,
     )
     assert repository.revoke_for_owner(
-        invitation_id=invitation.id, event_id=EVENT_ID, owner_id="owner-1", now=NOW + timedelta(minutes=1)
+        invitation_id=invitation.id,
+        event_id=EVENT_ID,
+        owner_id="owner-1",
+        now=NOW + timedelta(minutes=1),
     )
     assert not repository.accept_for_verified_user(
         token_hash="digest-1",
