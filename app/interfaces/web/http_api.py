@@ -756,6 +756,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
           if (response.ok) {
             authenticated = true;
             credentials.hidden = true;
+            email.disabled = true;
+            password.disabled = true;
             button.textContent = "Accept invitation";
           }
         })
@@ -780,6 +782,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
               showStatus(login.status === 401 ? "Email or password is incorrect. Check the account and try again." : "Could not sign in. Please try again.");
               return;
             }
+            authenticated = true;
           }
           const acceptance = await fetch("/participant-invitations/accept", {
             method: "POST",
@@ -795,6 +798,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
           } else if (acceptance.status === 401) {
             authenticated = false;
             credentials.hidden = false;
+            email.disabled = false;
+            password.disabled = false;
             showStatus("Please sign in to accept this invitation.");
           } else {
             showStatus("Could not accept the invitation. Please try again later.");
