@@ -176,6 +176,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         "/auth/password-reset/confirm",
         "/auth/password/change",
         "/auth/verify-email",
+        "/auth/verification/request",
         "/participant-invitations/accept",
     }
     # Bound memory if requests arrive from many distinct client addresses.
@@ -304,6 +305,45 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         return {
             "message": (
                 "If registration can be completed, verification instructions will be sent."
+            )
+        }
+
+    @app.post("/auth/verification/request", status_code=status.HTTP_202_ACCEPTED)
+    def request_verification(
+        payload: PasswordResetRequest, deps: ServiceDependency
+    ) -> dict[str, str]:
+        normalized_email = payload.email.strip().casefold()
+        identity = deps.identities.find_identity(
+            provider="email", provider_subject=normalized_email
+        )
+        if identity is not None and identity.verified_at is None:
+            now = datetime.now(UTC)
+            token = deps.verification.issue(user_id=identity.user_id, now=now)
+            verify_url = os.environ.get(
+                "EMAIL_VERIFICATION_URL", "http://localhost:8000/auth/verify-email"
+            )
+            try:
+                deps.email_sender.send_text(
+                    recipient=identity.provider_subject,
+                    subject="Verify your Gatherly email",
+                    body=(
+                        "Confirm your email address using this one-time token:\n\n"
+                        f"{verify_url}?token={token}\n\n"
+                        "If you did not create this account, you can ignore this email."
+                    ),
+                )
+            except Exception as error:
+                logger.warning(
+                    "Registration verification email delivery failed (%s)",
+                    type(error).__name__,
+                )
+                raise HTTPException(
+                    status_code=503, detail="Email delivery is temporarily unavailable"
+                ) from None
+        return {
+            "message": (
+                "If an unverified account exists for that email address, "
+                "verification instructions will be sent."
             )
         }
 
