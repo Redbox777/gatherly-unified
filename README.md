@@ -1,28 +1,30 @@
 # Gatherly Unified
 
-A clean, modular foundation for Gatherly with shared application logic and separate Telegram and responsive web interfaces.
+A modular backend foundation for Gatherly with shared application logic and web/Telegram authentication adapters.
 
 ## Project principles
 
 - New database; no legacy database or data import.
 - Modular monolith with explicit domain, application, infrastructure, and interface layers.
-- Responsive web interface for desktop and mobile browsers; PWA can be added later.
 - Telegram and web interfaces use the same application services.
 - Configuration through environment variables; never commit secrets.
 - Versioned database migrations and automated tests from the beginning.
 
 ## Implemented foundation
 
-- Event domain model with input validation and UTC-normalized start times.
-- SQLite persistence and versioned migrations for events and event participants.
-- Event creation and owner-scoped retrieval.
-- Participant add/list operations with event ownership checks.
-- Atomic application-level transactions and database integrity constraints.
-- Unit and integration tests, plus CI checks for linting, typing, and tests.
+- Event creation and owner-scoped event management.
+- Event-scoped participant records that remain stable when linked to an account.
+- Email registration, verification, login, server-managed sessions, password reset/change, and Telegram login.
+- Participant invitation lifecycle: owner-only creation/revocation, one-time token hashes, verified-email acceptance, and atomic participant linking.
+- Invitation email delivery through the SMTP adapter; failed delivery revokes the newly issued invitation before returning an error.
+- SQLite persistence, versioned migrations, and integration tests.
+- CI checks for linting, typing, and tests.
 
-## Current scope
+## Participant invitation configuration
 
-This is the backend foundation, not a finished user-facing application. Telegram handlers, web routes, authentication, and the remaining product modules are not implemented yet.
+Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_SENDER` for real email delivery. Set `PARTICIPANT_INVITATION_URL` to the web client's invitation-acceptance page. The example value is a local development placeholder, not a page served by this backend.
+
+The web client must require the invitee to sign in and then submit the token to `POST /participant-invitations/accept`. The API derives the account ID from the session; clients must not submit a user ID. Invitation creation is available at `POST /events/{event_id}/participants/{participant_id}/invitation`; owner revocation is `DELETE /events/{event_id}/participant-invitations/{invitation_id}`.
 
 ## Development
 
@@ -35,4 +37,4 @@ mypy app
 pytest
 ```
 
-See [architecture decisions](docs/architecture.md) for design constraints and open decisions.
+See [participant invitation lifecycle](docs/participant-invitations.md) and [architecture decisions](docs/architecture.md) for security and design constraints.
