@@ -17,13 +17,15 @@ class ParticipantsRepository:
 
     def add(self, participant: EventParticipant) -> None:
         self._connection.execute(
-            "INSERT INTO event_participants(id, event_id, display_name, added_at) "
-            "VALUES (?, ?, ?, ?)",
+            "INSERT INTO event_participants("
+            "id, event_id, display_name, added_at, linked_user_id"
+            ") VALUES (?, ?, ?, ?, ?)",
             (
                 str(participant.id),
                 str(participant.event_id),
                 participant.display_name,
                 participant.added_at.isoformat(),
+                str(participant.linked_user_id) if participant.linked_user_id else None,
             ),
         )
 
@@ -34,9 +36,20 @@ class ParticipantsRepository:
         )
         return cursor.rowcount == 1
 
+    def link_to_user(
+        self, *, participant_id: UUID, event_id: UUID, user_id: UUID
+    ) -> bool:
+        cursor = self._connection.execute(
+            "UPDATE event_participants SET linked_user_id = ? "
+            "WHERE id = ? AND event_id = ? AND linked_user_id IS NULL",
+            (str(user_id), str(participant_id), str(event_id)),
+        )
+        return cursor.rowcount == 1
+
     def list_for_event(self, event_id: UUID) -> list[EventParticipant]:
         rows = self._connection.execute(
-            "SELECT id, event_id, display_name, added_at FROM event_participants "
+            "SELECT id, event_id, display_name, added_at, linked_user_id "
+            "FROM event_participants "
             "WHERE event_id = ? ORDER BY added_at, id",
             (str(event_id),),
         ).fetchall()
@@ -46,6 +59,9 @@ class ParticipantsRepository:
                 event_id=UUID(row["event_id"]),
                 display_name=row["display_name"],
                 added_at=datetime.fromisoformat(row["added_at"]),
+                linked_user_id=(
+                    UUID(row["linked_user_id"]) if row["linked_user_id"] else None
+                ),
             )
             for row in rows
         ]
