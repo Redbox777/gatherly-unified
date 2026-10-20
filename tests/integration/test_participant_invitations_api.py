@@ -122,3 +122,83 @@ def test_invitation_acceptance_page_is_served_without_reflecting_token(tmp_path)
     assert "history.replaceState" in response.text
     assert 'fetch("/participant-invitations/accept"' in response.text
     assert "fetch(\"/auth/login\"" in response.text
+
+
+def test_invitation_rejects_wrong_signed_in_account_and_ignores_client_user_id(
+    tmp_path, monkeypatch
+) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "participant-invitation-account-scope.sqlite3")
+
+    with TestClient(app) as client:
+        _register_and_sign_in(client, sender, "owner@example.test")
+        event = client.post("/events", json={"title": "Game night"}).json()
+        participant = client.post(
+            f"/events/{event['id']}/participants", json={"display_name": "Alice"}
+        ).json()
+        created = client.post(
+            f"/events/{event['id']}/participants/{participant['id']}/invitation",
+            json={"email": "invitee@example.test"},
+        )
+        assert created.status_code == 201
+        invitation_token = (
+            sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+        )
+
+        wrong_account = client.post(
+            "/participant-invitations/accept",
+            json={"token": invitation_token, "user_id": "invitee-user"},
+        )
+        assert wrong_account.status_code == 400
+        row = app.state.auth_dependencies.connection.execute(
+            "SELECT accepted_at FROM participant_invitations"
+        ).fetchone()
+        assert row["accepted_at"] is None
+
+        _register_and_sign_in(client, sender, "invitee@example.test")
+        accepted = client.post(
+            "/participant-invitations/accept",
+            json={"token": invitation_token, "user_id": "owner-user"},
+        )
+        assert accepted.status_code == 200
+        linked = app.state.auth_dependencies.connection.execute(
+            "SELECT linked_user_id FROM event_participants WHERE id = ?",
+            (participant["id"],),
+        ).fetchone()["linked_user_id"]
+        assert linked is not None
+        identity = app.state.auth_dependencies.connection.execute(
+            "SELECT provider_subject FROM auth_identities WHERE user_id = ?",
+            (linked,),
+        ).fetchone()
+        assert identity["provider_subject"] == "invitee@example.test"
+
+
+def test_invitation_cannot_target_participant_from_another_event(
+    tmp_path, monkeypatch
+) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "participant-invitation-cross-event.sqlite3")
+
+    with TestClient(app) as client:
+        _register_and_sign_in(client, sender, "owner@example.test")
+        first_event = client.post("/events", json={"title": "First"}).json()
+        participant = client.post(
+            f"/events/{first_event['id']}/participants",
+            json={"display_name": "Alice"},
+        ).json()
+        second_event = client.post("/events", json={"title": "Second"}).json()
+
+        response = client.post(
+            f"/events/{second_event['id']}/participants/{participant['id']}/invitation",
+            json={"email": "invitee@example.test"},
+        )
+
+        assert response.status_code == 404
+        assert app.state.auth_dependencies.connection.execute(
+            "SELECT COUNT(*) FROM participant_invitations"
+        ).fetchone()[0] == 0
+
