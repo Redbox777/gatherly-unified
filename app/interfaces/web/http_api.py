@@ -11,7 +11,7 @@ import sqlite3
 from threading import Lock
 from time import monotonic
 from typing import Annotated, cast
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -627,8 +627,6 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             "PARTICIPANT_INVITATION_URL", "http://localhost:8000/accept-invitation"
         )
         separator = "&" if "?" in invitation_url else "?"
-        from urllib.parse import urlencode
-
         link = f"{invitation_url}{separator}{urlencode({'token': created.raw_token})}"
         try:
             deps.email_sender.send_text(
