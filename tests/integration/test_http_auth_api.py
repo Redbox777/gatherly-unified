@@ -248,6 +248,54 @@ def test_registration_verification_login_and_logout_flow(
         assert invalid_session.status_code == 401
 
 
+def test_password_reset_delivery_failure_logs_safely_and_keeps_generic_response(
+    tmp_path, monkeypatch, caplog
+) -> None:
+    class ToggleEmailSender:
+        def __init__(self) -> None:
+            self.fail = False
+            self.messages: list[tuple[str, str, str]] = []
+
+        def send_text(self, recipient: str, subject: str, body: str) -> None:
+            if self.fail:
+                raise OSError(f"SMTP unavailable for {recipient}")
+            self.messages.append((recipient, subject, body))
+
+    sender = ToggleEmailSender()
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "password-reset-delivery-failure.sqlite3")
+
+    with TestClient(app) as client:
+        registration = client.post(
+            "/auth/register",
+            json={
+                "email": "reset-private@example.test",
+                "password": "correct horse battery staple",
+            },
+        )
+        assert registration.status_code == 202
+        verification_token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+        assert client.post(
+            "/auth/verify-email", json={"token": verification_token}
+        ).status_code == 200
+
+        sender.fail = True
+        failed_delivery = client.post(
+            "/auth/password-reset/request",
+            json={"email": "reset-private@example.test"},
+        )
+        unknown_account = client.post(
+            "/auth/password-reset/request",
+            json={"email": "unknown@example.test"},
+        )
+
+    assert failed_delivery.status_code == unknown_account.status_code == 202
+    assert failed_delivery.json() == unknown_account.json()
+    assert "Password reset email delivery failed (OSError)" in caplog.text
+    assert "reset-private@example.test" not in caplog.text
+    assert "SMTP unavailable" not in caplog.text
+
+
 def test_password_reset_http_flow_invalidates_old_password(
     tmp_path, monkeypatch
 ) -> None:
