@@ -1,6 +1,6 @@
 """HTTP adapter for email authentication and server-managed sessions."""
 
-from collections import OrderedDict, defaultdict, deque
+from collections import OrderedDict, deque
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from uuid import UUID
