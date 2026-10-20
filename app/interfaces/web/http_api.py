@@ -1,6 +1,6 @@
 """HTTP adapter for email authentication and server-managed sessions."""
 
-from collections import defaultdict, deque
+from collections import OrderedDict, defaultdict, deque
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from uuid import UUID
@@ -178,7 +178,9 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         "/auth/verify-email",
         "/participant-invitations/accept",
     }
-    request_times: dict[tuple[str, str], deque[float]] = defaultdict(deque)
+    # Bound memory if requests arrive from many distinct client addresses.
+    rate_limit_max_tracked_keys = 10_000
+    request_times: OrderedDict[tuple[str, str], deque[float]] = OrderedDict()
     request_times_lock = Lock()
 
     @app.middleware("http")
@@ -190,7 +192,13 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             key = (client_host, request.url.path)
             current_time = monotonic()
             with request_times_lock:
-                timestamps = request_times[key]
+                timestamps = request_times.get(key)
+                if timestamps is None:
+                    if len(request_times) >= rate_limit_max_tracked_keys:
+                        request_times.popitem(last=False)
+                    timestamps = deque()
+                    request_times[key] = timestamps
+                request_times.move_to_end(key)
                 while (
                     timestamps
                     and current_time - timestamps[0] >= rate_limit_window_seconds
