@@ -45,7 +45,18 @@ Web adapter ───────┘              │
 
 Implement a minimal, testable path: create an event, persist it, then retrieve it under the correct owner. Add participant management only after event ownership and authorization behavior are covered by tests.
 
-## 6. Decisions still open
+## 6. Participant identity model
+
+Use a hybrid model for event participants:
+
+- An event participant may be a named guest without a Gatherly account.
+- A participant may optionally be linked to an internal Gatherly user ID after that identity is verified and the user accepts or otherwise authorizes the link.
+- Keep the event-scoped participant record distinct from the user account. A display name is not proof of identity and must never be used to auto-link accounts.
+- Invitations and invitation acceptance are a separate future workflow; do not imply that adding a guest grants that person account access.
+- Expense records should reference the event participant record, so named guests and registered users can both take part in a split. Linking a participant to a user must preserve the participant's existing event and expense history.
+- Define uniqueness, permissions, invitation expiry/revocation, and account-linking behavior before implementing invitations or expenses.
+
+## 7. Decisions still open
 
 - Deployment target and production database: start with SQLite for the initial single-instance foundation; reassess if concurrent multi-user deployment requires PostgreSQL.
-- Expense split modes and invitation/participant identity model must be specified before those modules are implemented.
+- Expense split modes, rounding rules, and invitation lifecycle must be specified before those modules are implemented.
