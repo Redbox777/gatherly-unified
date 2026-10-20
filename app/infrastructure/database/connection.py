@@ -177,7 +177,7 @@ def transaction(connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
         # or accidentally taking ownership of a caller's transaction.
         raise RuntimeError("Cannot start a transaction while another is active")
     try:
-        connection.execute("BEGIN")
+        connection.execute("BEGIN IMMEDIATE")
         yield connection
         connection.commit()
     except BaseException:
