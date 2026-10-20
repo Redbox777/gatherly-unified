@@ -295,8 +295,27 @@ def test_password_reset_http_flow_invalidates_old_password(
         }
         assert len(sender.messages) == 2
 
+        first_reset_body = sender.messages[-1][2]
+        first_reset_token = first_reset_body.split("token=", maxsplit=1)[1].splitlines()[0]
+        second_request = client.post(
+            "/auth/password-reset/request",
+            json={"email": "reset@example.test"},
+        )
+        assert second_request.status_code == 202
+        assert second_request.json() == request_reset.json()
+        assert len(sender.messages) == 3
+
         reset_body = sender.messages[-1][2]
         reset_token = reset_body.split("token=", maxsplit=1)[1].splitlines()[0]
+        stale_confirmation = client.post(
+            "/auth/password-reset/confirm",
+            json={
+                "token": first_reset_token,
+                "new_password": "stale replacement password",
+            },
+        )
+        assert stale_confirmation.status_code == 400
+
         confirmation = client.post(
             "/auth/password-reset/confirm",
             json={
