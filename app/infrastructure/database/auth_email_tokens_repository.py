@@ -79,6 +79,14 @@ class AuthEmailTokensRepository:
             if identity is None:
                 requirement = "verified" if require_verified else "unverified"
                 raise ValueError(f"A {requirement} email identity is required")
+            if purpose == "verify_email":
+                # A resend invalidates earlier outstanding verification links.
+                self._connection.execute(
+                    """UPDATE auth_email_tokens SET consumed_at = ?
+                       WHERE user_id = ? AND purpose = 'verify_email'
+                         AND consumed_at IS NULL""",
+                    (self._format(now), user_id),
+                )
             self._connection.execute(
                 """INSERT INTO auth_email_tokens(
                     id, user_id, token_hash, purpose, created_at, expires_at,
