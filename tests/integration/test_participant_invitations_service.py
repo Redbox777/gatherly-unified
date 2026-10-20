@@ -109,9 +109,18 @@ def test_acceptance_uses_authenticated_user_and_rejects_bad_token_generically(se
 
     db.execute("INSERT INTO users(id, created_at) VALUES (?, ?)", ("user-1", NOW.isoformat()))
     db.execute(
-        "INSERT INTO auth_identities(id, user_id, provider, provider_subject, password_hash, verified_at, created_at) "
-        "VALUES (?, ?, 'email', ?, ?, ?, ?)",
-        ("identity-1", "user-1", "ALICE@example.test", "scrypt$test", NOW.isoformat(), NOW.isoformat()),
+        """INSERT INTO auth_identities(
+               id, user_id, provider, provider_subject, password_hash,
+               verified_at, created_at
+           ) VALUES (?, ?, 'email', ?, ?, ?, ?)""",
+        (
+            "identity-1",
+            "user-1",
+            "ALICE@example.test",
+            "scrypt$test",
+            NOW.isoformat(),
+            NOW.isoformat(),
+        ),
     )
     db.commit()
     assert service.accept_invitation(
