@@ -58,6 +58,52 @@ def test_registration_email_failure_logs_without_sensitive_details(
     assert "SMTP unavailable" not in caplog.text
 
 
+def test_registration_can_recover_after_email_delivery_failure(
+    tmp_path, monkeypatch
+) -> None:
+    class FailOnceEmailSender:
+        def __init__(self) -> None:
+            self.messages: list[tuple[str, str, str]] = []
+            self.fail_next = True
+
+        def send_text(self, recipient: str, subject: str, body: str) -> None:
+            if self.fail_next:
+                self.fail_next = False
+                raise OSError("temporary SMTP outage")
+            self.messages.append((recipient, subject, body))
+
+    sender = FailOnceEmailSender()
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "verification-resend.sqlite3")
+
+    with TestClient(app) as client:
+        registration = client.post(
+            "/auth/register",
+            json={
+                "email": "retry@example.test",
+                "password": "correct horse battery staple",
+            },
+        )
+        assert registration.status_code == 503
+
+        resend = client.post(
+            "/auth/verification/request", json={"email": "retry@example.test"}
+        )
+        assert resend.status_code == 202
+        assert len(sender.messages) == 1
+        assert sender.messages[0][0] == "retry@example.test"
+
+        token = sender.messages[0][2].split("token=", maxsplit=1)[1].splitlines()[0]
+        verification = client.post("/auth/verify-email", json={"token": token})
+        assert verification.status_code == 200
+
+        unknown = client.post(
+            "/auth/verification/request", json={"email": "unknown@example.test"}
+        )
+        assert unknown.status_code == 202
+        assert unknown.json() == resend.json()
+
+
 def test_registration_verification_login_and_logout_flow(
     tmp_path, monkeypatch
 ) -> None:
