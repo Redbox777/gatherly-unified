@@ -101,11 +101,11 @@ def test_non_owner_cannot_create_or_revoke_invitation(
     invitation = _invitation()
 
     assert not repository.create_for_owner(
-        invitation, owner_id="other-owner", now=NOW
+        invitation, owner_id="other-owner", event_id=EVENT_ID, now=NOW
     )
-    assert repository.create_for_owner(invitation, owner_id="owner-1", now=NOW)
+    assert repository.create_for_owner(invitation, owner_id="owner-1", event_id=EVENT_ID, now=NOW)
     assert not repository.revoke_for_owner(
-        invitation_id=invitation.id, event_id=EVENT_ID, owner_id="other-owner", now=NOW
+        invitation_id=invitation.id, event_id=EVENT_ID, owner_id="other-owner", event_id=EVENT_ID, now=NOW
     )
     assert repository.get_by_token_hash("digest-1").revoked_at is None
 
@@ -131,7 +131,7 @@ def test_acceptance_requires_matching_verified_email_and_is_single_use(
 ) -> None:
     repository = ParticipantInvitationsRepository(connection)
     invitation = _invitation()
-    assert repository.create_for_owner(invitation, owner_id="owner-1", now=NOW)
+    assert repository.create_for_owner(invitation, owner_id="owner-1", event_id=EVENT_ID, now=NOW)
     user_id = _verified_user(connection, email="ALICE@example.test")
 
     assert repository.accept_for_verified_user(
@@ -155,7 +155,7 @@ def test_acceptance_rejects_unverified_or_mismatched_account(
 ) -> None:
     repository = ParticipantInvitationsRepository(connection)
     invitation = _invitation()
-    assert repository.create_for_owner(invitation, owner_id="owner-1", now=NOW)
+    assert repository.create_for_owner(invitation, owner_id="owner-1", event_id=EVENT_ID, now=NOW)
     user_id = _verified_user(connection, email="bob@example.test")
 
     assert not repository.accept_for_verified_user(
@@ -173,7 +173,7 @@ def test_expired_or_revoked_invitation_cannot_be_accepted(
 ) -> None:
     repository = ParticipantInvitationsRepository(connection)
     invitation = _invitation()
-    assert repository.create_for_owner(invitation, owner_id="owner-1", now=NOW)
+    assert repository.create_for_owner(invitation, owner_id="owner-1", event_id=EVENT_ID, now=NOW)
     user_id = _verified_user(connection, email="alice@example.test")
 
     assert not repository.accept_for_verified_user(
@@ -182,7 +182,7 @@ def test_expired_or_revoked_invitation_cannot_be_accepted(
         now=invitation.expires_at,
     )
     assert repository.revoke_for_owner(
-        invitation_id=invitation.id, event_id=EVENT_ID, owner_id="owner-1", now=NOW + timedelta(minutes=1)
+        invitation_id=invitation.id, event_id=EVENT_ID, owner_id="owner-1", event_id=EVENT_ID, now=NOW + timedelta(minutes=1)
     )
     assert not repository.accept_for_verified_user(
         token_hash="digest-1",
@@ -196,7 +196,7 @@ def test_failed_participant_link_rolls_back_invitation_acceptance(
 ) -> None:
     repository = ParticipantInvitationsRepository(connection)
     invitation = _invitation()
-    assert repository.create_for_owner(invitation, owner_id="owner-1", now=NOW)
+    assert repository.create_for_owner(invitation, owner_id="owner-1", event_id=EVENT_ID, now=NOW)
     user_id = _verified_user(connection, email="alice@example.test")
     connection.execute(
         """CREATE TRIGGER reject_participant_link
