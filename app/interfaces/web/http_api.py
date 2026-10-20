@@ -193,9 +193,28 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             current_time = monotonic()
             with request_times_lock:
                 timestamps = request_times.get(key)
-                if timestamps is None:
-                    if len(request_times) >= rate_limit_max_tracked_keys:
-                        request_times.popitem(last=False)
+                if timestamps is None and len(request_times) >= rate_limit_max_tracked_keys:
+                    # Reclaim expired entries before applying the bounded fallback.
+                    for tracked_key, tracked_times in list(request_times.items()):
+                        while (
+                            tracked_times
+                            and current_time - tracked_times[0] >= rate_limit_window_seconds
+                        ):
+                            tracked_times.popleft()
+                        if not tracked_times:
+                            del request_times[tracked_key]
+                    timestamps = request_times.get(key)
+                    if timestamps is None:
+                        # Never evict an active client's counter to grant a fresh quota.
+                        # Under key exhaustion, new clients share a per-route overflow bucket.
+                        key = ("\\x00overflow", request.url.path)
+                        timestamps = request_times.get(key)
+                        if timestamps is None:
+                            if len(request_times) >= rate_limit_max_tracked_keys:
+                                request_times.popitem(last=False)
+                            timestamps = deque()
+                            request_times[key] = timestamps
+                elif timestamps is None:
                     timestamps = deque()
                     request_times[key] = timestamps
                 request_times.move_to_end(key)
