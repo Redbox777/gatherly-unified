@@ -18,8 +18,6 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-logger = logging.getLogger(__name__)
-
 from app.application.auth_identities_service import AuthIdentitiesService
 from app.application.auth_sessions_service import AuthSessionsService
 from app.application.authentication_service import AuthenticationService
@@ -46,6 +44,8 @@ from app.infrastructure.database.participant_invitations_repository import (
 from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
 from app.interfaces.telegram.login_verification import verify_telegram_login
 
+
+logger = logging.getLogger(__name__)
 
 SESSION_COOKIE = "gatherly_session"
 SESSION_COOKIE_PATH = "/"
