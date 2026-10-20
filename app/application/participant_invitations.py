@@ -13,6 +13,10 @@ from app.infrastructure.database.participant_invitations_repository import (
 from app.infrastructure.database.participants_repository import ParticipantsRepository
 
 
+class ParticipantAlreadyLinkedError(ValueError):
+    """Raised when an account is already linked to this participant record."""
+
+
 @dataclass(frozen=True, slots=True)
 class CreatedParticipantInvitation:
     """An invitation plus its one-time raw token for a delivery adapter."""
@@ -45,11 +49,18 @@ class ParticipantInvitationsService:
         now: datetime,
     ) -> CreatedParticipantInvitation:
         self._events.get_event(event_id=event_id, owner_id=owner_id)
-        participant_ids = {
-            participant.id for participant in self._participants.list_for_event(event_id)
-        }
-        if participant_id not in participant_ids:
+        participant = next(
+            (
+                item
+                for item in self._participants.list_for_event(event_id)
+                if item.id == participant_id
+            ),
+            None,
+        )
+        if participant is None:
             raise LookupError("Participant not found")
+        if participant.linked_user_id is not None:
+            raise ParticipantAlreadyLinkedError("Participant is already linked")
 
         issued = issue_token()
         invitation = ParticipantInvitation.create(
