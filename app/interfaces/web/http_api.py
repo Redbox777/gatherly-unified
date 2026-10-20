@@ -212,7 +212,14 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                         timestamps = request_times.get(key)
                         if timestamps is None:
                             if len(request_times) >= rate_limit_max_tracked_keys:
-                                request_times.popitem(last=False)
+                                # Preserve every active client's counter. If no slot is
+                                # available for the shared overflow bucket, fail closed.
+                                return Response(
+                                    content='{"detail":"Too many requests; try again later"}',
+                                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                                    headers={"Retry-After": str(int(rate_limit_window_seconds))},
+                                    media_type="application/json",
+                                )
                             timestamps = deque()
                             request_times[key] = timestamps
                 elif timestamps is None:
