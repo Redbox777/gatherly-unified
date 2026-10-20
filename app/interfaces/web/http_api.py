@@ -712,11 +712,14 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
   <title>Accept Gatherly invitation</title>
   <style>
     :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
-    main { width: min(100%, 28rem); box-sizing: border-box; padding: 1.5rem; border: 1px solid #8886; border-radius: 1rem; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center;
+      padding: 1rem; }
+    main { width: min(100%, 28rem); box-sizing: border-box; padding: 1.5rem;
+      border: 1px solid #8886; border-radius: 1rem; }
     h1 { font-size: 1.5rem; margin-top: 0; }
     label { display: block; margin-top: 1rem; }
-    input, button { box-sizing: border-box; width: 100%; padding: .75rem; margin-top: .35rem; font: inherit; }
+    input, button { box-sizing: border-box; width: 100%; padding: .75rem;
+      margin-top: .35rem; font: inherit; }
     button { margin-top: 1.25rem; cursor: pointer; }
     #status { min-height: 1.5em; overflow-wrap: anywhere; }
   </style>
@@ -731,7 +734,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
           <input id="email" name="email" type="email" autocomplete="username" required maxlength="254">
         </label>
         <label for="password">Password
-          <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024">
+          <input id="password" name="password" type="password"
+            autocomplete="current-password" required maxlength="1024">
         </label>
       </div>
       <button id="submit" type="submit">Sign in and accept invitation</button>
@@ -766,7 +770,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         if (!token) {
-          showStatus("This invitation link is missing its token. Ask the event owner for a new invitation.");
+          showStatus("This invitation link is missing its token. " +
+            "Ask the event owner for a new invitation.");
           return;
         }
         button.disabled = true;
@@ -779,7 +784,9 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
               body: JSON.stringify({ email: email.value, password: password.value })
             });
             if (!login.ok) {
-              showStatus(login.status === 401 ? "Email or password is incorrect. Check the account and try again." : "Could not sign in. Please try again.");
+              showStatus(login.status === 401
+                ? "Email or password is incorrect. Check the account and try again."
+                : "Could not sign in. Please try again.");
               return;
             }
             authenticated = true;
@@ -791,10 +798,12 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             body: JSON.stringify({ token })
           });
           if (acceptance.ok) {
-            showStatus("Invitation accepted. This participant record is now linked to your account.");
+            showStatus("Invitation accepted. This participant record " +
+              "is now linked to your account.");
             form.hidden = true;
           } else if (acceptance.status === 400) {
-            showStatus("This invitation is invalid, expired, revoked, or already used. Ask the event owner for a new one.");
+            showStatus("This invitation is invalid, expired, revoked, or already used. " +
+              "Ask the event owner for a new one.");
           } else if (acceptance.status === 401) {
             authenticated = false;
             credentials.hidden = false;
