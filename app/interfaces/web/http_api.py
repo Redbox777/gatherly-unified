@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from uuid import UUID
 import hashlib
+import logging
 import os
 from pathlib import Path
 import sqlite3
@@ -16,6 +17,8 @@ from urllib.parse import urlencode, urlsplit
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, Field
+
+logger = logging.getLogger(__name__)
 
 from app.application.auth_identities_service import AuthIdentitiesService
 from app.application.auth_sessions_service import AuthSessionsService
@@ -645,7 +648,11 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                     "The link expires in seven days and can be used only once."
                 ),
             )
-        except Exception:
+        except Exception as error:
+            # Keep operational visibility without logging recipient, token, or message.
+            logger.warning(
+                "Invitation email delivery failed (%s)", type(error).__name__
+            )
             # A failed delivery must not leave the newly issued token usable.
             try:
                 revoked = deps.participant_invitations.revoke_invitation(
