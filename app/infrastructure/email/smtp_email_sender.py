@@ -25,6 +25,8 @@ class SmtpEmailSender:
             raise ValueError("SMTP port must be between 1 and 65535")
         if timeout <= 0:
             raise ValueError("SMTP timeout must be positive")
+        if username and not use_starttls:
+            raise ValueError("SMTP authentication requires STARTTLS")
         self._host = host
         self._port = port
         self._username = username
