@@ -39,13 +39,17 @@ class ParticipantInvitationsRepository:
             raise ValueError("Only a usable invitation can be created")
         with transaction(self._connection):
             participant = self._connection.execute(
-                """SELECT 1
+                """SELECT p.linked_user_id
                    FROM event_participants AS p
                    JOIN events AS e ON e.id = p.event_id
                    WHERE p.id = ? AND p.event_id = ? AND e.owner_id = ?""",
                 (str(invitation.participant_id), str(event_id), normalized_owner),
             ).fetchone()
-            if participant is None or invitation.created_by_owner_id != normalized_owner:
+            if (
+                participant is None
+                or participant["linked_user_id"] is not None
+                or invitation.created_by_owner_id != normalized_owner
+            ):
                 return False
             self._connection.execute(
                 """UPDATE participant_invitations
