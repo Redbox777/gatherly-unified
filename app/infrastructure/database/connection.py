@@ -101,6 +101,32 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON event_participants(linked_user_id);
         """,
     ),
+    (
+        6,
+        """
+        CREATE TABLE participant_invitations (
+            id TEXT PRIMARY KEY,
+            participant_id TEXT NOT NULL
+                REFERENCES event_participants(id) ON DELETE CASCADE,
+            target_email TEXT NOT NULL
+                CHECK (length(trim(target_email)) > 0),
+            token_hash TEXT NOT NULL UNIQUE
+                CHECK (length(trim(token_hash)) > 0),
+            created_by_owner_id TEXT NOT NULL
+                CHECK (length(trim(created_by_owner_id)) > 0),
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            accepted_at TEXT NULL,
+            revoked_at TEXT NULL,
+            CHECK (expires_at > created_at),
+            CHECK (accepted_at IS NULL OR revoked_at IS NULL)
+        );
+        CREATE INDEX idx_participant_invitations_participant
+            ON participant_invitations(participant_id, created_at);
+        CREATE INDEX idx_participant_invitations_target_email
+            ON participant_invitations(target_email);
+        """,
+    ),
 )
 
 
