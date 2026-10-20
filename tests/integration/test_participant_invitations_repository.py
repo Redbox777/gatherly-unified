@@ -282,3 +282,26 @@ def test_concurrent_acceptance_consumes_invitation_exactly_once(tmp_path) -> Non
             verification_connection.close()
     finally:
         first_connection.close()
+
+
+
+def test_cannot_create_invitation_after_participant_is_linked(
+    connection: sqlite3.Connection,
+) -> None:
+    repository = ParticipantInvitationsRepository(connection)
+    user_id = _verified_user(connection, email="alice@example.test")
+    connection.execute(
+        "UPDATE event_participants SET linked_user_id = ? WHERE id = ?",
+        (user_id, str(PARTICIPANT_ID)),
+    )
+    connection.commit()
+
+    assert not repository.create_for_owner(
+        _invitation(),
+        owner_id="owner-1",
+        event_id=EVENT_ID,
+        now=NOW,
+    )
+    assert connection.execute(
+        "SELECT COUNT(*) FROM participant_invitations"
+    ).fetchone()[0] == 0
