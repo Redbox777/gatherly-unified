@@ -22,6 +22,7 @@ from app.application.authentication_service import AuthenticationService
 from app.application.email_verification_service import EmailVerificationService
 from app.application.events import EventNotFoundError, EventsService
 from app.application.participants import DuplicateParticipantError, ParticipantsService
+from app.application.participant_invitations import ParticipantInvitationsService
 from app.application.password_reset_request_service import PasswordResetRequestService
 from app.application.password_reset_service import PasswordResetService
 from app.infrastructure.database.auth_email_tokens_repository import (
@@ -32,6 +33,9 @@ from app.infrastructure.database.auth_sessions_repository import AuthSessionsRep
 from app.infrastructure.database.connection import connect, migrate
 from app.infrastructure.database.events_repository import EventsRepository
 from app.infrastructure.database.participants_repository import ParticipantsRepository
+from app.infrastructure.database.participant_invitations_repository import (
+    ParticipantInvitationsRepository,
+)
 from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
 from app.interfaces.telegram.login_verification import verify_telegram_login
 
@@ -68,6 +72,14 @@ class UpdateEventRequest(BaseModel):
 
 class AddParticipantRequest(BaseModel):
     display_name: str = Field(min_length=1, max_length=120)
+
+
+class CreateParticipantInvitationRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+
+
+class AcceptParticipantInvitationRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=512)
 
 
 class ChangePasswordRequest(BaseModel):
@@ -110,8 +122,15 @@ class Dependencies:
         self.sessions = AuthSessionsService(session_repository)
         self.authentication = AuthenticationService(self.identities, self.sessions)
         self.events = EventsService(EventsRepository(connection))
-        self.participants = ParticipantsService(
-            self.events, ParticipantsRepository(connection)
+        participant_repository = ParticipantsRepository(connection)
+        self.participants = ParticipantsService(self.events, participant_repository)
+        self.participant_invitations_repository = ParticipantInvitationsRepository(
+            connection
+        )
+        self.participant_invitations = ParticipantInvitationsService(
+            events=self.events,
+            participants=participant_repository,
+            invitations=self.participant_invitations_repository,
         )
         self.email_sender = _email_sender()
         self.reset_requests = PasswordResetRequestService(
@@ -150,6 +169,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         "/auth/password-reset/confirm",
         "/auth/password/change",
         "/auth/verify-email",
+        "/participant-invitations/accept",
     }
     request_times: dict[tuple[str, str], deque[float]] = defaultdict(deque)
     request_times_lock = Lock()
@@ -569,6 +589,132 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             }
             for participant in participants
         ]
+
+    @app.post(
+        "/events/{event_id}/participants/{participant_id}/invitation",
+        status_code=status.HTTP_201_CREATED,
+    )
+    def create_participant_invitation(
+        event_id: UUID,
+        participant_id: UUID,
+        payload: CreateParticipantInvitationRequest,
+        request: Request,
+        deps: ServiceDependency,
+    ) -> dict[str, str]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        owner_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        now = datetime.now(UTC)
+        try:
+            created = deps.participant_invitations.create_invitation(
+                event_id=event_id,
+                participant_id=participant_id,
+                owner_id=owner_id,
+                target_email=payload.email,
+                now=now,
+            )
+        except EventNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Event not found") from error
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="Participant not found") from error
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail="Invalid invitation data") from error
+
+        invitation_url = os.environ.get(
+            "PARTICIPANT_INVITATION_URL", "http://localhost:8000/accept-invitation"
+        )
+        separator = "&" if "?" in invitation_url else "?"
+        from urllib.parse import urlencode
+
+        link = f"{invitation_url}{separator}{urlencode({'token': created.raw_token})}"
+        try:
+            deps.email_sender.send_text(
+                recipient=created.invitation.target_email,
+                subject="You have a Gatherly participant invitation",
+                body=(
+                    "An event owner invited you to link your Gatherly account to an "
+                    "event participant record.\n\n"
+                    f"Sign in to Gatherly and open this link to accept the invitation:\n{link}\n\n"
+                    "The link expires in seven days and can be used only once."
+                ),
+            )
+        except Exception:
+            # A failed delivery must not leave the newly issued token usable.
+            try:
+                revoked = deps.participant_invitations.revoke_invitation(
+                    event_id=event_id,
+                    invitation_id=created.invitation.id,
+                    owner_id=owner_id,
+                    now=datetime.now(UTC),
+                )
+            except Exception:
+                revoked = False
+            if not revoked:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Invitation delivery failed and invitation state could not be confirmed",
+                ) from None
+            raise HTTPException(
+                status_code=503, detail="Invitation email delivery is unavailable"
+            ) from None
+        return {
+            "id": str(created.invitation.id),
+            "expires_at": created.invitation.expires_at.isoformat(),
+            "message": "Invitation sent",
+        }
+
+    @app.delete(
+        "/events/{event_id}/participant-invitations/{invitation_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    def revoke_participant_invitation(
+        event_id: UUID,
+        invitation_id: UUID,
+        request: Request,
+        deps: ServiceDependency,
+    ) -> Response:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        owner_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        try:
+            revoked = deps.participant_invitations.revoke_invitation(
+                event_id=event_id,
+                invitation_id=invitation_id,
+                owner_id=owner_id,
+                now=datetime.now(UTC),
+            )
+        except EventNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Event not found") from error
+        if not revoked:
+            raise HTTPException(status_code=404, detail="Invitation not found")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.post("/participant-invitations/accept")
+    def accept_participant_invitation(
+        payload: AcceptParticipantInvitationRequest,
+        request: Request,
+        deps: ServiceDependency,
+    ) -> dict[str, str]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        accepted = deps.participant_invitations.accept_invitation(
+            raw_token=payload.token,
+            authenticated_user_id=user_id,
+            now=datetime.now(UTC),
+        )
+        if not accepted:
+            raise HTTPException(status_code=400, detail="Invalid or unavailable invitation")
+        return {"message": "Invitation accepted"}
 
     @app.post("/auth/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
     def request_password_reset(
