@@ -22,7 +22,10 @@ from app.application.authentication_service import AuthenticationService
 from app.application.email_verification_service import EmailVerificationService
 from app.application.events import EventNotFoundError, EventsService
 from app.application.participants import DuplicateParticipantError, ParticipantsService
-from app.application.participant_invitations import ParticipantInvitationsService
+from app.application.participant_invitations import (
+    ParticipantAlreadyLinkedError,
+    ParticipantInvitationsService,
+)
 from app.application.password_reset_request_service import PasswordResetRequestService
 from app.application.password_reset_service import PasswordResetService
 from app.infrastructure.database.auth_email_tokens_repository import (
@@ -620,6 +623,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Event not found") from error
         except LookupError as error:
             raise HTTPException(status_code=404, detail="Participant not found") from error
+        except ParticipantAlreadyLinkedError as error:
+            raise HTTPException(status_code=409, detail="Participant is already linked") from error
         except ValueError as error:
             raise HTTPException(status_code=422, detail="Invalid invitation data") from error
 
