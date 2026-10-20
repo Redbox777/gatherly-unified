@@ -27,9 +27,10 @@ class ParticipantInvitationsRepository:
         invitation: ParticipantInvitation,
         *,
         owner_id: str,
+        event_id: UUID,
         now: datetime,
     ) -> bool:
-        """Replace prior pending invitations and create one in a single transaction."""
+        """Replace prior pending invitations for this event and create one transactionally."""
         self._require_aware(now)
         normalized_owner = owner_id.strip()
         if not normalized_owner:
@@ -41,8 +42,8 @@ class ParticipantInvitationsRepository:
                 """SELECT 1
                    FROM event_participants AS p
                    JOIN events AS e ON e.id = p.event_id
-                   WHERE p.id = ? AND e.owner_id = ?""",
-                (str(invitation.participant_id), normalized_owner),
+                   WHERE p.id = ? AND p.event_id = ? AND e.owner_id = ?""",
+                (str(invitation.participant_id), str(event_id), normalized_owner),
             ).fetchone()
             if participant is None or invitation.created_by_owner_id != normalized_owner:
                 return False
@@ -93,10 +94,11 @@ class ParticipantInvitationsRepository:
         self,
         *,
         invitation_id: UUID,
+        event_id: UUID,
         owner_id: str,
         now: datetime,
     ) -> bool:
-        """Revoke a pending invitation only when the caller owns its event."""
+        """Revoke a pending invitation only within the specified owned event."""
         self._require_aware(now)
         normalized_owner = owner_id.strip()
         if not normalized_owner:
@@ -109,9 +111,9 @@ class ParticipantInvitationsRepository:
                          SELECT 1 FROM event_participants AS p
                          JOIN events AS e ON e.id = p.event_id
                          WHERE p.id = participant_invitations.participant_id
-                           AND e.owner_id = ?
+                           AND p.event_id = ? AND e.owner_id = ?
                      )""",
-                (self._format(now), str(invitation_id), normalized_owner),
+                (self._format(now), str(invitation_id), str(event_id), normalized_owner),
             )
             return cursor.rowcount == 1
 
