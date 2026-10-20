@@ -103,3 +103,37 @@ def test_participant_can_be_linked_to_an_existing_account() -> None:
         )
     finally:
         connection.close()
+
+
+def test_linking_requires_matching_event_and_existing_account() -> None:
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
+    migrate(connection)
+    try:
+        events = EventsService(EventsRepository(connection))
+        repository = ParticipantsRepository(connection)
+        participants = ParticipantsService(events, repository)
+        event = events.create_event(owner_id="alice", title="Game night")
+        other_event = events.create_event(owner_id="alice", title="Another event")
+        guest = participants.add_participant(
+            event_id=event.id, owner_id="alice", display_name="Bob"
+        )
+        user_id = uuid4()
+        connection.execute(
+            "INSERT INTO users(id, created_at) VALUES (?, ?)",
+            (str(user_id), "2026-10-20T00:00:00Z"),
+        )
+
+        assert not repository.link_to_user(
+            participant_id=guest.id, event_id=other_event.id, user_id=user_id
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            repository.link_to_user(
+                participant_id=guest.id, event_id=event.id, user_id=uuid4()
+            )
+        assert participants.list_participants(
+            event_id=event.id, owner_id="alice"
+        )[0].linked_user_id is None
+    finally:
+        connection.close()
