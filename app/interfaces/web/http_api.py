@@ -293,7 +293,11 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                     "If you did not create this account, you can ignore this email."
                 ),
             )
-        except Exception:
+        except Exception as error:
+            logger.warning(
+                "Registration verification email delivery failed (%s)",
+                type(error).__name__,
+            )
             raise HTTPException(
                 status_code=503, detail="Email delivery is temporarily unavailable"
             ) from None
