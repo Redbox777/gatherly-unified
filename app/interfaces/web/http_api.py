@@ -14,6 +14,7 @@ from typing import Annotated, cast
 from urllib.parse import urlencode, urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.auth_identities_service import AuthIdentitiesService
@@ -697,6 +698,119 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         if not revoked:
             raise HTTPException(status_code=404, detail="Invitation not found")
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.get("/accept-invitation", response_class=HTMLResponse)
+    def accept_invitation_page() -> HTMLResponse:
+        """Serve a minimal same-origin page for signing in and accepting an invite."""
+        return HTMLResponse(
+            content="""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Accept Gatherly invitation</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
+    main { width: min(100%, 28rem); box-sizing: border-box; padding: 1.5rem; border: 1px solid #8886; border-radius: 1rem; }
+    h1 { font-size: 1.5rem; margin-top: 0; }
+    label { display: block; margin-top: 1rem; }
+    input, button { box-sizing: border-box; width: 100%; padding: .75rem; margin-top: .35rem; font: inherit; }
+    button { margin-top: 1.25rem; cursor: pointer; }
+    #status { min-height: 1.5em; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Accept your Gatherly invitation</h1>
+    <p>Sign in to the account whose verified email received this invitation.</p>
+    <form id="accept-form">
+      <div id="credentials">
+        <label for="email">Email
+          <input id="email" name="email" type="email" autocomplete="username" required maxlength="254">
+        </label>
+        <label for="password">Password
+          <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024">
+        </label>
+      </div>
+      <button id="submit" type="submit">Sign in and accept invitation</button>
+    </form>
+    <p id="status" role="status" aria-live="polite"></p>
+  </main>
+  <script>
+    (() => {
+      const token = new URL(window.location.href).searchParams.get("token") || "";
+      window.history.replaceState({}, document.title, window.location.pathname);
+      const form = document.getElementById("accept-form");
+      const credentials = document.getElementById("credentials");
+      const email = document.getElementById("email");
+      const password = document.getElementById("password");
+      const button = document.getElementById("submit");
+      const status = document.getElementById("status");
+      let authenticated = false;
+
+      const showStatus = (message) => { status.textContent = message; };
+      fetch("/auth/me", { credentials: "same-origin" })
+        .then((response) => {
+          if (response.ok) {
+            authenticated = true;
+            credentials.hidden = true;
+            button.textContent = "Accept invitation";
+          }
+        })
+        .catch(() => {});
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!token) {
+          showStatus("This invitation link is missing its token. Ask the event owner for a new invitation.");
+          return;
+        }
+        button.disabled = true;
+        try {
+          if (!authenticated) {
+            const login = await fetch("/auth/login", {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email: email.value, password: password.value })
+            });
+            if (!login.ok) {
+              showStatus(login.status === 401 ? "Email or password is incorrect. Check the account and try again." : "Could not sign in. Please try again.");
+              return;
+            }
+          }
+          const acceptance = await fetch("/participant-invitations/accept", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token })
+          });
+          if (acceptance.ok) {
+            showStatus("Invitation accepted. This participant record is now linked to your account.");
+            form.hidden = true;
+          } else if (acceptance.status === 400) {
+            showStatus("This invitation is invalid, expired, revoked, or already used. Ask the event owner for a new one.");
+          } else if (acceptance.status === 401) {
+            authenticated = false;
+            credentials.hidden = false;
+            showStatus("Please sign in to accept this invitation.");
+          } else {
+            showStatus("Could not accept the invitation. Please try again later.");
+          }
+        } catch (_) {
+          showStatus("Network error. Check your connection and try again.");
+        } finally {
+          button.disabled = false;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>""",
+            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+        )
 
     @app.post("/participant-invitations/accept")
     def accept_participant_invitation(
