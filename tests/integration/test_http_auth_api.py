@@ -33,6 +33,31 @@ def test_password_reset_request_has_generic_response(tmp_path) -> None:
     assert first.json() == second.json()
 
 
+def test_registration_email_failure_logs_without_sensitive_details(
+    tmp_path, monkeypatch, caplog
+) -> None:
+    class FailingEmailSender:
+        def send_text(self, recipient: str, subject: str, body: str) -> None:
+            raise OSError(f"SMTP unavailable for {recipient}")
+
+    monkeypatch.setattr(http_api, "_email_sender", FailingEmailSender)
+    app = create_app(tmp_path / "registration-email-failure.sqlite3")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/auth/register",
+            json={
+                "email": "private-person@example.test",
+                "password": "correct horse battery staple",
+            },
+        )
+
+    assert response.status_code == 503
+    assert "Registration verification email delivery failed (OSError)" in caplog.text
+    assert "private-person@example.test" not in caplog.text
+    assert "SMTP unavailable" not in caplog.text
+
+
 def test_registration_verification_login_and_logout_flow(
     tmp_path, monkeypatch
 ) -> None:
