@@ -39,7 +39,7 @@ Transitions:
 - At most one active invitation exists per participant at a time.
 - If the participant is already linked to any account, creating or accepting another invitation fails without changing the existing link.
 - Invalid, expired, revoked, and already-consumed tokens return a generic failure to avoid leaking invitation state to unauthorised callers.
-- Email delivery is an adapter concern. Delivery failure must not leave a token usable if the application reports the invitation creation as failed; implementation must define transaction/outbox behavior before enabling delivery in production.
+- Email delivery is an adapter concern. The initial HTTP adapter sends after the invitation record commits; if SMTP delivery fails, it revokes the newly created invitation before returning a delivery error. A failed resend may therefore invalidate the previous invitation, because issuing the replacement revokes the old token first. If revocation cannot be confirmed, the API returns a distinct server error and does not claim the invitation was safely cancelled. A durable transactional outbox is a future improvement; raw bearer tokens must not be stored in an outbox or logs.
 
 ## Data and consistency
 
@@ -70,6 +70,6 @@ Before exposing an endpoint, cover at least:
 2. Add repository operations with atomic state transitions.
 3. Add application use cases for create, accept, and revoke.
 4. Add unit/integration tests for lifecycle and authorization.
-5. Add email delivery adapter only after transaction/outbox behavior is settled.
+5. Define delivery-failure behavior; the initial adapter sends synchronously after persistence and revokes the new token on failure, without persisting raw tokens.
 6. Add authenticated API routes and expose only the minimum response fields.
 7. Run ruff check ., mypy app, and pytest; do not proceed unless all pass.
