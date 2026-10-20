@@ -92,6 +92,15 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON auth_telegram_login_payloads(consumed_at);
         """,
     ),
+    (
+        5,
+        """
+        ALTER TABLE event_participants
+        ADD COLUMN linked_user_id TEXT NULL REFERENCES users(id) ON DELETE SET NULL;
+        CREATE INDEX idx_event_participants_linked_user
+            ON event_participants(linked_user_id);
+        """,
+    ),
 )
 
 
