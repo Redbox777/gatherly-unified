@@ -632,8 +632,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         invitation_url = os.environ.get(
             "PARTICIPANT_INVITATION_URL", "http://localhost:8000/accept-invitation"
         )
-        separator = "&" if "?" in invitation_url else "?"
-        link = f"{invitation_url}{separator}{urlencode({'token': created.raw_token})}"
+        # Put the bearer token in the fragment so it is not sent in the HTTP request URL.
+        link = f"{invitation_url}#{urlencode({'token': created.raw_token})}"
         try:
             deps.email_sender.send_text(
                 recipient=created.invitation.target_email,
@@ -740,7 +740,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
   </main>
   <script>
     (() => {
-      const token = new URL(window.location.href).searchParams.get("token") || "";
+      const token = new URLSearchParams(window.location.hash.slice(1)).get("token") || "";
       window.history.replaceState({}, document.title, window.location.pathname);
       const form = document.getElementById("accept-form");
       const credentials = document.getElementById("credentials");
