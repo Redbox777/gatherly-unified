@@ -731,7 +731,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     <form id="accept-form">
       <div id="credentials">
         <label for="email">Email
-          <input id="email" name="email" type="email" autocomplete="username" required maxlength="254">
+          <input id="email" name="email" type="email"
+            autocomplete="username" required maxlength="254">
         </label>
         <label for="password">Password
           <input id="password" name="password" type="password"
