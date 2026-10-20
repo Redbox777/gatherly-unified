@@ -1,6 +1,7 @@
 """Coordinate password-reset requests without exposing account existence."""
 
 from datetime import datetime
+import logging
 from typing import Protocol
 from urllib.parse import urlencode
 
@@ -13,6 +14,9 @@ class EmailSender(Protocol):
 
     def send_text(self, *, recipient: str, subject: str, body: str) -> None:
         """Deliver a plain-text message."""
+
+
+logger = logging.getLogger(__name__)
 
 
 GENERIC_RESPONSE = (
@@ -67,8 +71,10 @@ class PasswordResetRequestService:
                     "If you did not request this, you can ignore this email."
                 ),
             )
-        except Exception:
-            # Do not let SMTP failures create a public account-existence signal.
-            # Production deployment should also alert through a private monitoring path.
-            pass
+        except Exception as error:
+            # Keep operational diagnostics without exposing the address or SMTP detail.
+            logger.warning(
+                "Password reset email delivery failed (%s)",
+                type(error).__name__,
+            )
         return GENERIC_RESPONSE
