@@ -34,8 +34,6 @@ class ParticipantInvitationsRepository:
         normalized_owner = owner_id.strip()
         if not normalized_owner:
             raise ValueError("Owner ID must not be blank")
-        if invitation.created_by_owner_id != normalized_owner:
-            raise ValueError("Invitation creator must match the event owner")
         if not invitation.is_usable(now=now):
             raise ValueError("Only a usable invitation can be created")
         with transaction(self._connection):
@@ -46,7 +44,7 @@ class ParticipantInvitationsRepository:
                    WHERE p.id = ? AND e.owner_id = ?""",
                 (str(invitation.participant_id), normalized_owner),
             ).fetchone()
-            if participant is None:
+            if participant is None or invitation.created_by_owner_id != normalized_owner:
                 return False
             self._connection.execute(
                 """UPDATE participant_invitations
@@ -103,18 +101,19 @@ class ParticipantInvitationsRepository:
         normalized_owner = owner_id.strip()
         if not normalized_owner:
             return False
-        cursor = self._connection.execute(
-            """UPDATE participant_invitations SET revoked_at = ?
-               WHERE id = ? AND accepted_at IS NULL AND revoked_at IS NULL
-                 AND EXISTS (
-                     SELECT 1 FROM event_participants AS p
-                     JOIN events AS e ON e.id = p.event_id
-                     WHERE p.id = participant_invitations.participant_id
-                       AND e.owner_id = ?
-                 )""",
-            (self._format(now), str(invitation_id), normalized_owner),
-        )
-        return cursor.rowcount == 1
+        with transaction(self._connection):
+            cursor = self._connection.execute(
+                """UPDATE participant_invitations SET revoked_at = ?
+                   WHERE id = ? AND accepted_at IS NULL AND revoked_at IS NULL
+                     AND EXISTS (
+                         SELECT 1 FROM event_participants AS p
+                         JOIN events AS e ON e.id = p.event_id
+                         WHERE p.id = participant_invitations.participant_id
+                           AND e.owner_id = ?
+                     )""",
+                (self._format(now), str(invitation_id), normalized_owner),
+            )
+            return cursor.rowcount == 1
 
     def accept_for_verified_user(
         self,
