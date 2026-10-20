@@ -104,6 +104,42 @@ def test_registration_can_recover_after_email_delivery_failure(
         assert unknown.json() == resend.json()
 
 
+def test_resending_verification_invalidates_previous_token(
+    tmp_path, monkeypatch
+) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "verification-token-rotation.sqlite3")
+
+    with TestClient(app) as client:
+        registration = client.post(
+            "/auth/register",
+            json={
+                "email": "rotate@example.test",
+                "password": "correct horse battery staple",
+            },
+        )
+        assert registration.status_code == 202
+        first_token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+
+        resend = client.post(
+            "/auth/verification/request", json={"email": "rotate@example.test"}
+        )
+        assert resend.status_code == 202
+        second_token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+        assert second_token != first_token
+
+        old_verification = client.post(
+            "/auth/verify-email", json={"token": first_token}
+        )
+        assert old_verification.status_code == 400
+
+        new_verification = client.post(
+            "/auth/verify-email", json={"token": second_token}
+        )
+        assert new_verification.status_code == 200
+
+
 def test_registration_verification_login_and_logout_flow(
     tmp_path, monkeypatch
 ) -> None:
