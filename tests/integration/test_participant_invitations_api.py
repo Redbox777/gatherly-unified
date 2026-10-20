@@ -82,7 +82,7 @@ def test_invitation_api_requires_owner_and_accepts_only_authenticated_session(
         assert participant_row["linked_user_id"] is not None
 
 
-def test_delivery_failure_revokes_new_invitation(tmp_path, monkeypatch) -> None:
+def test_delivery_failure_revokes_new_invitation(tmp_path, monkeypatch, caplog) -> None:
     sender = FakeEmailSender()
     monkeypatch.setenv("COOKIE_SECURE", "false")
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
@@ -100,6 +100,9 @@ def test_delivery_failure_revokes_new_invitation(tmp_path, monkeypatch) -> None:
             json={"email": "invitee@example.test"},
         )
         assert response.status_code == 503
+        assert "Invitation email delivery failed (OSError)" in caplog.text
+        assert "invitee@example.test" not in caplog.text
+        assert "SMTP unavailable" not in caplog.text
         row = app.state.auth_dependencies.connection.execute(
             "SELECT accepted_at, revoked_at FROM participant_invitations"
         ).fetchone()
