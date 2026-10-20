@@ -34,6 +34,8 @@ class ParticipantInvitationsRepository:
         normalized_owner = owner_id.strip()
         if not normalized_owner:
             raise ValueError("Owner ID must not be blank")
+        if invitation.created_by_owner_id != normalized_owner:
+            raise ValueError("Invitation creator must match the event owner")
         if not invitation.is_usable(now=now):
             raise ValueError("Only a usable invitation can be created")
         with transaction(self._connection):
@@ -176,8 +178,8 @@ class ParticipantInvitationsRepository:
             target_email=str(row["target_email"]),
             token_hash=str(row["token_hash"]),
             created_by_owner_id=str(row["created_by_owner_id"]),
-            created_at=cls._parse(row["created_at"]),
-            expires_at=cls._parse(row["expires_at"]),
+            created_at=cls._parse_required(row["created_at"]),
+            expires_at=cls._parse_required(row["expires_at"]),
             accepted_at=cls._parse(row["accepted_at"]),
             revoked_at=cls._parse(row["revoked_at"]),
         )
@@ -193,6 +195,12 @@ class ParticipantInvitationsRepository:
         return value.astimezone(UTC).isoformat(timespec="microseconds").replace(
             "+00:00", "Z"
         )
+
+    @classmethod
+    def _parse_required(cls, value: str) -> datetime:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        cls._require_aware(parsed)
+        return parsed
 
     @classmethod
     def _parse(cls, value: str | None) -> datetime | None:
