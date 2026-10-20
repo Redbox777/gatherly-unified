@@ -24,7 +24,7 @@ A modular backend foundation for Gatherly with shared application logic and web/
 
 Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_SENDER` for real email delivery. Set `PARTICIPANT_INVITATION_URL` to the web client's invitation-acceptance page. The example value is a local development placeholder, not a page served by this backend.
 
-The web client must require the invitee to sign in and then submit the token to `POST /participant-invitations/accept`. The API derives the account ID from the session; clients must not submit a user ID. Invitation creation is available at `POST /events/{event_id}/participants/{participant_id}/invitation`; owner revocation is `DELETE /events/{event_id}/participant-invitations/{invitation_id}`.
+The backend serves a minimal same-origin acceptance page at `GET /accept-invitation`. Invitation links place the bearer token in the URL fragment, which is not sent in the HTTP request; the page removes it from browser history and submits it to `POST /participant-invitations/accept` after sign-in. The API derives the account ID from the session; clients must not submit a user ID. Invitation creation is available at `POST /events/{event_id}/participants/{participant_id}/invitation`; owner revocation is `DELETE /events/{event_id}/participant-invitations/{invitation_id}`.
 
 ## Development
 
