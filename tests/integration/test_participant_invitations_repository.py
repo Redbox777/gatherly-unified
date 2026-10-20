@@ -265,14 +265,20 @@ def test_concurrent_acceptance_consumes_invitation_exactly_once(tmp_path) -> Non
                 executor.map(accept, (first_connection, second_connection))
             )
         assert sorted(outcomes) == [False, True]
-        assert first_repository.get_by_token_hash("digest-1").accepted_at == (
-            NOW + timedelta(minutes=1)
-        )
-        linked_user = first_connection.execute(
-            "SELECT linked_user_id FROM event_participants WHERE id = ?",
-            (str(PARTICIPANT_ID),),
-        ).fetchone()["linked_user_id"]
-        assert linked_user == user_id
+        verification_connection = connect(database_path)
+        try:
+            verification_repository = ParticipantInvitationsRepository(
+                verification_connection
+            )
+            assert verification_repository.get_by_token_hash(
+                "digest-1"
+            ).accepted_at == NOW + timedelta(minutes=1)
+            linked_user = verification_connection.execute(
+                "SELECT linked_user_id FROM event_participants WHERE id = ?",
+                (str(PARTICIPANT_ID),),
+            ).fetchone()["linked_user_id"]
+            assert linked_user == user_id
+        finally:
+            verification_connection.close()
     finally:
-        if first_connection:
-            first_connection.close()
+        first_connection.close()
