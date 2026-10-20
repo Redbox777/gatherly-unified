@@ -12,6 +12,7 @@ from app.infrastructure.database.participant_invitations_repository import (
 
 
 NOW = datetime(2026, 10, 12, 12, 0, tzinfo=UTC)
+EVENT_ID = UUID("00000000-0000-0000-0000-000000000010")
 PARTICIPANT_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
@@ -24,13 +25,13 @@ def connection():
     db.execute(
         """INSERT INTO events(id, owner_id, title, starts_at, created_at)
            VALUES (?, ?, ?, ?, ?)""",
-        ("event-1", "owner-1", "Game night", None, NOW.isoformat()),
+        (str(EVENT_ID), "owner-1", "Game night", None, NOW.isoformat()),
     )
     db.execute(
         """INSERT INTO event_participants(
                id, event_id, display_name, added_at, linked_user_id
            ) VALUES (?, ?, ?, ?, NULL)""",
-        (str(PARTICIPANT_ID), "event-1", "Alice", NOW.isoformat()),
+        (str(PARTICIPANT_ID), str(EVENT_ID), "Alice", NOW.isoformat()),
     )
     db.commit()
     yield db
@@ -82,7 +83,7 @@ def test_create_and_load_invitation_persists_only_digest(
     repository = ParticipantInvitationsRepository(connection)
     invitation = _invitation()
 
-    assert repository.create_for_owner(invitation, owner_id="owner-1", now=NOW)
+    assert repository.create_for_owner(invitation, owner_id="owner-1", event_id=EVENT_ID, now=NOW)
     loaded = repository.get_by_token_hash("digest-1")
 
     assert loaded == invitation
@@ -104,7 +105,7 @@ def test_non_owner_cannot_create_or_revoke_invitation(
     )
     assert repository.create_for_owner(invitation, owner_id="owner-1", now=NOW)
     assert not repository.revoke_for_owner(
-        invitation_id=invitation.id, owner_id="other-owner", now=NOW
+        invitation_id=invitation.id, event_id=EVENT_ID, owner_id="other-owner", now=NOW
     )
     assert repository.get_by_token_hash("digest-1").revoked_at is None
 
@@ -116,9 +117,9 @@ def test_new_invitation_revokes_previous_pending_invitation(
     first = _invitation(token_hash="digest-1")
     second = _invitation(token_hash="digest-2", now=NOW + timedelta(minutes=1))
 
-    assert repository.create_for_owner(first, owner_id="owner-1", now=NOW)
+    assert repository.create_for_owner(first, owner_id="owner-1", event_id=EVENT_ID, now=NOW)
     assert repository.create_for_owner(
-        second, owner_id="owner-1", now=NOW + timedelta(minutes=1)
+        second, owner_id="owner-1", event_id=EVENT_ID, now=NOW + timedelta(minutes=1)
     )
 
     assert repository.get_by_token_hash("digest-1").revoked_at == NOW + timedelta(minutes=1)
@@ -181,7 +182,7 @@ def test_expired_or_revoked_invitation_cannot_be_accepted(
         now=invitation.expires_at,
     )
     assert repository.revoke_for_owner(
-        invitation_id=invitation.id, owner_id="owner-1", now=NOW + timedelta(minutes=1)
+        invitation_id=invitation.id, event_id=EVENT_ID, owner_id="owner-1", now=NOW + timedelta(minutes=1)
     )
     assert not repository.accept_for_verified_user(
         token_hash="digest-1",
