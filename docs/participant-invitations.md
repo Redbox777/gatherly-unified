@@ -64,12 +64,15 @@ Before exposing an endpoint, cover at least:
 9. Only a token hash is persisted and raw tokens are not written to logs.
 10. Delivery failure behavior is tested before production email delivery is enabled.
 
-## Implementation order
 
-1. Add invitation domain model and migration.
-2. Add repository operations with atomic state transitions.
-3. Add application use cases for create, accept, and revoke.
-4. Add unit/integration tests for lifecycle and authorization.
-5. Define delivery-failure behavior; the initial adapter sends synchronously after persistence and revokes the new token on failure, without persisting raw tokens.
-6. Add authenticated API routes and expose only the minimum response fields.
-7. Run ruff check ., mypy app, and pytest; do not proceed unless all pass.
+## HTTP delivery and acceptance page
+
+- The owner-only create endpoint sends the raw token only through the email adapter; the JSON response contains the invitation ID and expiry, never the bearer token.
+- The email link points to the same-origin `/accept-invitation` page. The token is placed in the URL fragment (`#token=...`), which browsers do not include in the HTTP request to the server.
+- The page removes the fragment from the visible address bar/history as soon as its script runs, then submits the token only in the POST body to the acceptance endpoint. Responses use `Cache-Control: no-store` and `Referrer-Policy: no-referrer`.
+- If the visitor has no authenticated session, the page signs in the account first. Acceptance still relies on the server-side session and verified matching email; the page never supplies a user ID.
+- If delivery fails after persistence, the adapter attempts to revoke the new invitation before returning an error. If revocation cannot be confirmed, the API reports a server error rather than claiming the token is invalidated.
+
+## Current implementation status
+
+The domain model, migration, repository, application service, HTTP create/revoke/accept endpoints, email delivery handling, and minimal acceptance page are implemented. The required checks are `ruff check .`, `mypy app`, and `pytest`; the CI run linked in the project history must be green before extending this flow.
