@@ -1,11 +1,13 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 import sqlite3
+from threading import Barrier
 from uuid import UUID
 
 import pytest
 
 from app.domain.participant_invitations import ParticipantInvitation
-from app.infrastructure.database.connection import migrate
+from app.infrastructure.database.connection import connect, migrate
 from app.infrastructure.database.participant_invitations_repository import (
     ParticipantInvitationsRepository,
 )
@@ -218,3 +220,59 @@ def test_failed_participant_link_rolls_back_invitation_acceptance(
         "SELECT linked_user_id FROM event_participants WHERE id = ?",
         (str(PARTICIPANT_ID),),
     ).fetchone()["linked_user_id"] is None
+
+
+
+def test_concurrent_acceptance_consumes_invitation_exactly_once(tmp_path) -> None:
+    database_path = tmp_path / "concurrent-invitations.sqlite3"
+    first_connection = connect(database_path)
+    migrate(first_connection)
+    first_connection.execute(
+        """INSERT INTO events(id, owner_id, title, starts_at, created_at)
+           VALUES (?, ?, ?, ?, ?)""",
+        (str(EVENT_ID), "owner-1", "Game night", None, NOW.isoformat()),
+    )
+    first_connection.execute(
+        """INSERT INTO event_participants(
+               id, event_id, display_name, added_at, linked_user_id
+           ) VALUES (?, ?, ?, ?, NULL)""",
+        (str(PARTICIPANT_ID), str(EVENT_ID), "Alice", NOW.isoformat()),
+    )
+    first_connection.commit()
+    invitation = _invitation()
+    first_repository = ParticipantInvitationsRepository(first_connection)
+    assert first_repository.create_for_owner(
+        invitation, owner_id="owner-1", event_id=EVENT_ID, now=NOW
+    )
+    user_id = _verified_user(first_connection, email="alice@example.test")
+    second_connection = connect(database_path)
+    barrier = Barrier(2)
+
+    def accept(connection: sqlite3.Connection) -> bool:
+        try:
+            barrier.wait(timeout=5)
+            return ParticipantInvitationsRepository(connection).accept_for_verified_user(
+                token_hash="digest-1",
+                user_id=user_id,
+                now=NOW + timedelta(minutes=1),
+            )
+        finally:
+            connection.close()
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            outcomes = list(
+                executor.map(accept, (first_connection, second_connection))
+            )
+        assert sorted(outcomes) == [False, True]
+        assert first_repository.get_by_token_hash("digest-1").accepted_at == (
+            NOW + timedelta(minutes=1)
+        )
+        linked_user = first_connection.execute(
+            "SELECT linked_user_id FROM event_participants WHERE id = ?",
+            (str(PARTICIPANT_ID),),
+        ).fetchone()["linked_user_id"]
+        assert linked_user == user_id
+    finally:
+        if first_connection:
+            first_connection.close()
