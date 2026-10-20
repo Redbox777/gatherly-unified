@@ -11,6 +11,7 @@ class EventParticipant:
     event_id: UUID
     display_name: str
     added_at: datetime
+    linked_user_id: UUID | None = None
 
     @classmethod
     def create(cls, *, event_id: UUID, display_name: str) -> "EventParticipant":
