@@ -344,9 +344,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                     "Registration verification email delivery failed (%s)",
                     type(error).__name__,
                 )
-                raise HTTPException(
-                    status_code=503, detail="Email delivery is temporarily unavailable"
-                ) from None
+                # Keep the resend response indistinguishable for known and unknown
+                # addresses, even when delivery fails for a real account.
         return {
             "message": (
                 "If an unverified account exists for that email address, "
