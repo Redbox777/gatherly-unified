@@ -202,3 +202,50 @@ def test_invitation_cannot_target_participant_from_another_event(
             "SELECT COUNT(*) FROM participant_invitations"
         ).fetchone()[0] == 0
 
+
+
+
+def test_resend_invalidates_old_token_and_owner_can_revoke_new_invitation(
+    tmp_path, monkeypatch
+) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "participant-invitation-lifecycle.sqlite3")
+
+    with TestClient(app) as client:
+        _register_and_sign_in(client, sender, "owner@example.test")
+        event = client.post("/events", json={"title": "Game night"}).json()
+        participant = client.post(
+            f"/events/{event['id']}/participants", json={"display_name": "Alice"}
+        ).json()
+        endpoint = (
+            f"/events/{event['id']}/participants/{participant['id']}/invitation"
+        )
+
+        first = client.post(endpoint, json={"email": "invitee@example.test"})
+        assert first.status_code == 201
+        first_token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+
+        second = client.post(endpoint, json={"email": "invitee@example.test"})
+        assert second.status_code == 201
+        second_token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+        assert first_token != second_token
+        assert client.post(
+            "/participant-invitations/accept", json={"token": first_token}
+        ).status_code == 400
+
+        revoked = client.delete(
+            f"/events/{event['id']}/participant-invitations/{second.json()['id']}"
+        )
+        assert revoked.status_code == 204
+        assert client.post(
+            "/participant-invitations/accept", json={"token": second_token}
+        ).status_code == 400
+
+        rows = app.state.auth_dependencies.connection.execute(
+            "SELECT accepted_at, revoked_at FROM participant_invitations ORDER BY created_at"
+        ).fetchall()
+        assert len(rows) == 2
+        assert all(row["accepted_at"] is None for row in rows)
+        assert all(row["revoked_at"] is not None for row in rows)
