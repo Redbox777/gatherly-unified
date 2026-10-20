@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -39,9 +40,8 @@ def test_invitation_is_usable_only_before_expiry_and_before_consumption() -> Non
     assert invitation.is_usable(now=created_at)
     assert invitation.is_usable(now=invitation.expires_at - timedelta(microseconds=1))
     assert not invitation.is_usable(now=invitation.expires_at)
-    assert not ParticipantInvitation(
-        **{**invitation.__dict__, "accepted_at": created_at}
-    ).is_usable(now=created_at)
+    assert not replace(invitation, accepted_at=created_at).is_usable(now=created_at)
+    assert not replace(invitation, revoked_at=created_at).is_usable(now=created_at)
 
 
 @pytest.mark.parametrize(
