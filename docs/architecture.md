@@ -35,6 +35,9 @@ Web adapter ───────┘              │
 
 - Read secrets only from environment or a dedicated secret store.
 - Never log bot tokens, session secrets, authentication codes, or sensitive payloads.
+- SMTP authentication must use STARTTLS; do not disable TLS when credentials are configured.
+- Set `COOKIE_SECURE=true` in production behind HTTPS. The development example also defaults to secure cookies; use `false` only for local plain-HTTP testing.
+- The current in-process HTTP rate limiter is per worker and is not a distributed abuse-control boundary. Use a shared limiter at the edge or in a shared store before multi-worker/public deployment.
 - Use parameterized database queries.
 - Apply authorization on every object-level read/write, not just in the UI.
 - Validate input at interface boundaries and enforce business invariants in the application/domain layer.
@@ -59,4 +62,5 @@ Use a hybrid model for event participants:
 ## 7. Decisions still open
 
 - Deployment target and production database: start with SQLite for the initial single-instance foundation; reassess if concurrent multi-user deployment requires PostgreSQL.
+- SQLite is currently a single-instance deployment choice. Keep the database on a local persistent disk, provide tested backups, and avoid sharing the SQLite file across multiple application hosts. Reassess PostgreSQL before horizontal scaling or sustained write concurrency; `busy_timeout` only reduces transient lock errors and is not a scaling strategy.
 - Expense split modes, rounding rules, and invitation lifecycle must be specified before those modules are implemented.
