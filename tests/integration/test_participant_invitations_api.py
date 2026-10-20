@@ -105,3 +105,19 @@ def test_delivery_failure_revokes_new_invitation(tmp_path, monkeypatch) -> None:
         ).fetchone()
         assert row["accepted_at"] is None
         assert row["revoked_at"] is not None
+
+
+
+def test_invitation_acceptance_page_is_served_without_reflecting_token(tmp_path) -> None:
+    app = create_app(tmp_path / "participant-invitation-page.sqlite3")
+    with TestClient(app) as client:
+        response = client.get("/accept-invitation?token=example-secret-token")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["referrer-policy"] == "no-referrer"
+    assert "example-secret-token" not in response.text
+    assert "history.replaceState" in response.text
+    assert 'fetch("/participant-invitations/accept"' in response.text
+    assert "fetch(\"/auth/login\"" in response.text
