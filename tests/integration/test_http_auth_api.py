@@ -104,6 +104,50 @@ def test_registration_can_recover_after_email_delivery_failure(
         assert unknown.json() == resend.json()
 
 
+def test_verification_resend_keeps_generic_response_when_delivery_fails(
+    tmp_path, monkeypatch, caplog
+) -> None:
+    class ToggleEmailSender:
+        def __init__(self) -> None:
+            self.fail = False
+            self.messages: list[tuple[str, str, str]] = []
+
+        def send_text(self, recipient: str, subject: str, body: str) -> None:
+            if self.fail:
+                raise OSError(f"SMTP unavailable for {recipient}")
+            self.messages.append((recipient, subject, body))
+
+    sender = ToggleEmailSender()
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "verification-resend-failure.sqlite3")
+
+    with TestClient(app) as client:
+        registration = client.post(
+            "/auth/register",
+            json={
+                "email": "resend-private@example.test",
+                "password": "correct horse battery staple",
+            },
+        )
+        assert registration.status_code == 202
+
+        sender.fail = True
+        failed_delivery = client.post(
+            "/auth/verification/request",
+            json={"email": "resend-private@example.test"},
+        )
+        unknown_account = client.post(
+            "/auth/verification/request",
+            json={"email": "unknown@example.test"},
+        )
+
+    assert failed_delivery.status_code == unknown_account.status_code == 202
+    assert failed_delivery.json() == unknown_account.json()
+    assert "Registration verification email delivery failed (OSError)" in caplog.text
+    assert "resend-private@example.test" not in caplog.text
+    assert "SMTP unavailable" not in caplog.text
+
+
 def test_resending_verification_invalidates_previous_token(
     tmp_path, monkeypatch
 ) -> None:
