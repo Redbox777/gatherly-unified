@@ -220,9 +220,51 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON http_rate_limit_events(created_at);
         """,
     ),
+    (
+        11,
+        """
+        CREATE TABLE notifications (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            event_id TEXT NULL REFERENCES events(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL CHECK (kind IN ('event_updated', 'participant_added', 'event_reminder')),
+            title TEXT NOT NULL CHECK (length(trim(title)) BETWEEN 1 AND 200),
+            body TEXT NOT NULL CHECK (length(trim(body)) BETWEEN 1 AND 1000),
+            dedupe_key TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL,
+            read_at TEXT NULL,
+            email_sent_at TEXT NULL,
+            email_attempts INTEGER NOT NULL DEFAULT 0 CHECK (email_attempts >= 0),
+            email_last_error TEXT NULL
+        );
+        CREATE INDEX idx_notifications_user_created
+            ON notifications(user_id, created_at DESC);
+        CREATE INDEX idx_notifications_email_pending
+            ON notifications(email_sent_at, email_attempts, created_at);
+
+        CREATE TABLE notification_preferences (
+            user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            email_enabled INTEGER NOT NULL DEFAULT 1 CHECK (email_enabled IN (0, 1)),
+            event_updates_enabled INTEGER NOT NULL DEFAULT 1 CHECK (event_updates_enabled IN (0, 1)),
+            participant_added_enabled INTEGER NOT NULL DEFAULT 1 CHECK (participant_added_enabled IN (0, 1)),
+            reminders_enabled INTEGER NOT NULL DEFAULT 1 CHECK (reminders_enabled IN (0, 1)),
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE event_reminder_preferences (
+            event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            owner_id TEXT NOT NULL CHECK (length(trim(owner_id)) > 0),
+            offset_minutes INTEGER NOT NULL CHECK (offset_minutes IN (1440, 60, 15)),
+            created_at TEXT NOT NULL,
+            PRIMARY KEY(event_id, offset_minutes)
+        );
+        CREATE INDEX idx_event_reminders_owner
+            ON event_reminder_preferences(owner_id, event_id);
+        """,
+    ),
 )
 
-
+ 
 def connect(database_path: str | Path) -> sqlite3.Connection:
     """Open an independent SQLite connection for one unit of application work.
 
