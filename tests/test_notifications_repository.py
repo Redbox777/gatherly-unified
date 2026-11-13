@@ -31,6 +31,7 @@ def test_due_reminders_are_materialized_once_for_owner_and_linked_members(tmp_pa
             "VALUES (?, ?, ?, ?, ?)",
             ("participant-1", "event-1", "Участник", now.isoformat(), "member"),
         )
+        connection.commit()
         repository = NotificationsRepository(connection)
         repository.set_event_reminders(
             event_id="event-1", owner_id="owner", offsets=[60], now=now
