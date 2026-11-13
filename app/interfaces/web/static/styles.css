@@ -110,3 +110,8 @@ a:focus-visible,button:focus-visible{outline:3px solid #27bdb2;outline-offset:3p
 .add-circle .ui-icon{width:19px;height:19px}
 @media(max-width:760px){.menu-toggle{display:flex}}
 @media(prefers-reduced-motion:reduce){.meeting-card:hover,.primary-button:hover{transform:none}}
+
+.auth-entry{display:inline-flex;align-items:center;justify-content:center;padding:9px 15px;border:1px solid #cfe6e1;border-radius:10px;color:#087e80;background:#fff;font-size:11px;font-weight:700;transition:background .18s,border-color .18s}
+.auth-entry:hover{background:#edf8f4;border-color:#9bd4c9}
+.auth-entry:focus-visible{outline:3px solid #27bdb2;outline-offset:3px}
+@media(max-width:420px){.auth-entry{padding:8px 10px;font-size:10px}.topbar-right{gap:8px}}
