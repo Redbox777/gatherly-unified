@@ -65,6 +65,17 @@ SESSION_COOKIE = "gatherly_session"
 SESSION_COOKIE_PATH = "/"
 
 
+def _apply_security_headers(response: Response, *, production: bool) -> Response:
+    """Apply baseline browser security headers without overriding route policies."""
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=()")
+    if production:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return response
+
+
 def _token_fragment_link(base_url: str, token: str) -> str:
     """Build a bearer-token link without placing the token in the HTTP request URL."""
     return f"{base_url.split('#', maxsplit=1)[0]}#{urlencode({'token': token})}"
@@ -319,6 +330,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     app.state.trusted_proxy_networks = load_trusted_proxy_networks(
         os.environ.get("TRUSTED_PROXY_CIDRS")
     )
+    production = os.environ.get("APP_ENV", "development").strip().casefold() == "production"
     rate_limit_paths = {
         "/auth/login",
         "/auth/telegram/login",
@@ -344,11 +356,14 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                 request.url.path,
             )
             if retry_after is not None:
-                return Response(
-                    content='{"detail":"Too many requests; try again later"}',
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    headers={"Retry-After": str(retry_after)},
-                    media_type="application/json",
+                return _apply_security_headers(
+                    Response(
+                        content='{"detail":"Too many requests; try again later"}',
+                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                        headers={"Retry-After": str(retry_after)},
+                        media_type="application/json",
+                    ),
+                    production=production,
                 )
 
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
@@ -368,12 +383,16 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                 # do not rely on the server-managed browser session cookie.
                 same_origin = SESSION_COOKIE not in request.cookies
             if not same_origin:
-                return Response(
-                    content='{"detail":"Cross-origin request rejected"}',
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    media_type="application/json",
+                return _apply_security_headers(
+                    Response(
+                        content='{"detail":"Cross-origin request rejected"}',
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        media_type="application/json",
+                    ),
+                    production=production,
                 )
-        return await call_next(request)
+        response = await call_next(request)
+        return _apply_security_headers(response, production=production)
     path = database_path or os.environ.get("GATHERLY_DATABASE_PATH", "var/gatherly.sqlite3")
     migration_connection = connect(path)
     try:
