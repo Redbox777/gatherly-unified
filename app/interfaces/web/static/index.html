@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#082c36">
+  <meta name="description" content="Gatherly — встречи, люди, вместе.">
+  <title>Gatherly — встречи, люди, вместе</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <svg class="svg-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="magpie-mark" viewBox="0 0 160 160">
+      <defs>
+        <linearGradient id="magpie-feather" x1="18" y1="18" x2="138" y2="142" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#102f43"/><stop offset=".48" stop-color="#087f91"/><stop offset=".76" stop-color="#25c8bd"/><stop offset="1" stop-color="#07536a"/>
+        </linearGradient>
+        <linearGradient id="magpie-wing" x1="42" y1="105" x2="126" y2="38" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#063c55"/><stop offset=".55" stop-color="#0b9da8"/><stop offset="1" stop-color="#69e1d0"/>
+        </linearGradient>
+      </defs>
+      <path d="M23 92c-8-30 11-61 42-70 21-6 43 0 57 15-15-7-31-8-46-2-25 10-38 36-31 61 5 19 21 32 42 36-29 8-56-8-64-40Z" fill="url(#magpie-feather)"/>
+      <path d="M54 88c11-23 29-39 53-47l31-10-20 19c-10 9-18 18-23 29 17 1 30 8 41 20-21-5-38-4-52 5-14 9-25 9-35-1 1-5 3-10 5-15Z" fill="#0b2634"/>
+      <path d="M70 91c17-18 35-29 57-34-11 11-19 21-23 34 12 3 23 9 33 18-19-4-34-3-47 5-12 7-23 6-31-2 2-8 5-15 11-21Z" fill="url(#magpie-wing)"/>
+      <path d="M54 112c19 9 37 8 55-4-8 17-23 27-42 26-9-5-14-12-13-22Z" fill="#f4fbf8"/>
+      <circle cx="108" cy="48" r="5.4" fill="#f4fbf8"/><circle cx="109" cy="48" r="2.8" fill="#092c3a"/>
+      <path d="m138 38 17-8-13 16" fill="#16b9b2"/>
+      <path d="M39 108c12 20 30 30 54 31" fill="none" stroke="#56d9cb" stroke-width="3" stroke-linecap="round" opacity=".8"/>
+    </symbol>
+  </svg>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="Основная навигация">
+      <a class="brand" href="/" aria-label="Gatherly — главная">
+        <span class="brand-mark"><svg class="magpie-mark" viewBox="0 0 160 160" aria-hidden="true"><use href="#magpie-mark"></use></svg></span>
+        <span class="brand-name">Gatherly<span class="brand-dot">.</span></span>
+      </a>
+      <div class="workspace-label">ПРОСТРАНСТВО</div>
+      <nav class="nav-list">
+        <a class="nav-link active" href="#overview" aria-current="page"><span class="nav-icon">⌂</span>Обзор</a>
+        <a class="nav-link" href="#meetings"><span class="nav-icon">▦</span>Встречи</a>
+        <a class="nav-link" href="#people"><span class="nav-icon">♧</span>Люди</a>
+        <a class="nav-link" href="#notes"><span class="nav-icon">▤</span>Заметки</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="sidebar-bird"><svg class="magpie-mark" viewBox="0 0 160 160" aria-hidden="true"><use href="#magpie-mark"></use></svg></div>
+        <p class="sidebar-note">Хорошие встречи начинаются с простого.</p>
+        <span class="sidebar-version">GATHERLY · PREVIEW</span>
+      </div>
+    </aside>
+
+    <main class="main-area" id="overview">
+      <header class="topbar">
+        <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Открыть меню" aria-expanded="false">☰</button>
+        <div class="breadcrumb">Моё пространство <span>/</span> Обзор</div>
+        <div class="topbar-right"><span class="preview-pill"><i></i> Тестовый интерфейс</span><div class="avatar">G</div></div>
+      </header>
+
+      <div class="page-content">
+        <section class="welcome-row">
+          <div>
+            <p class="eyebrow">ВАШЕ ПРОСТРАНСТВО ДЛЯ ОБЩЕНИЯ</p>
+            <h1>Встречи, люди.<br><span>Всё вместе.</span></h1>
+            <p class="welcome-copy">Планируйте события, собирайте близких и сохраняйте то, что важно.</p>
+            <a class="primary-button" href="#meetings">Посмотреть пространство <span aria-hidden="true">↗</span></a>
+          </div>
+          <div class="welcome-art" aria-label="Фирменный знак Gatherly">
+            <div class="art-glow"></div>
+            <svg class="magpie-mark" viewBox="0 0 160 160" role="img" aria-label="Стилизованная сорока Gatherly"><use href="#magpie-mark"></use></svg>
+            <span class="art-orbit orbit-one"></span><span class="art-orbit orbit-two"></span>
+            <span class="art-caption">Вместе получается больше</span>
+          </div>
+        </section>
+
+        <section class="section-block" id="meetings">
+          <div class="section-heading">
+            <div><p class="eyebrow">ВАШ РИТМ</p><h2>Ближайшие встречи</h2></div>
+            <span class="muted-link">Пример наполнения</span>
+          </div>
+          <div class="meeting-grid">
+            <article class="meeting-card featured">
+              <div class="card-top"><span class="date-chip">СБ · 22 НОЯБРЯ</span><span class="card-menu">•••</span></div>
+              <div class="meeting-symbol symbol-teal">☕</div>
+              <h3>Чай и разговоры</h3>
+              <p class="meeting-meta">16:00 <span>·</span> Небольшая компания</p>
+              <div class="card-footer"><div class="avatar-stack"><span>А</span><span>М</span><span>И</span><b>+2</b></div><span class="people-count">5 участников</span></div>
+            </article>
+            <article class="meeting-card">
+              <div class="card-top"><span class="date-chip date-soft">ВС · 23 НОЯБРЯ</span><span class="card-menu">•••</span></div>
+              <div class="meeting-symbol symbol-blue">✦</div>
+              <h3>Прогулка за городом</h3>
+              <p class="meeting-meta">12:30 <span>·</span> На свежем воздухе</p>
+              <div class="card-footer"><div class="avatar-stack"><span>Д</span><span>К</span><b>+1</b></div><span class="people-count">3 участника</span></div>
+            </article>
+            <article class="meeting-card add-card">
+              <div class="add-circle">＋</div><h3>Новая встреча</h3>
+              <p>Скоро здесь можно будет создавать события.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="bottom-grid">
+          <article class="tip-card" id="people">
+            <div class="tip-bird"><svg class="magpie-mark" viewBox="0 0 160 160" aria-hidden="true"><use href="#magpie-mark"></use></svg></div>
+            <div><p class="eyebrow">МАЛЕНЬКАЯ ПОДСКАЗКА</p><h2>Пика-Пика на связи</h2><p>Поможет собрать идеи, договорённости и планы в одном месте.</p></div>
+            <span class="tip-spark">✧</span>
+          </article>
+          <article class="summary-card" id="notes">
+            <div class="summary-head"><span>Ваше пространство</span><span class="summary-dot"></span></div>
+            <div class="summary-number">Всё начинается <strong>с людей.</strong></div>
+            <p>Создавайте поводы встречаться чаще.</p>
+            <div class="summary-line"><span></span></div>
+          </article>
+        </section>
+        <footer class="page-footer"><span>Gatherly</span><span>Создано для встреч и людей</span></footer>
+      </div>
+    </main>
+  </div>
+  <div class="mobile-scrim" id="mobile-scrim" hidden></div>
+</body>
+</html>
