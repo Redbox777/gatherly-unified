@@ -25,6 +25,12 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             "smtp_rate_limit_events",
         } <= tables
 
+        token_columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(auth_email_tokens)").fetchall()
+        }
+        assert "activated_at" in token_columns
+
         versions = {
             row["version"]
             for row in connection.execute("SELECT version FROM schema_migrations").fetchall()
