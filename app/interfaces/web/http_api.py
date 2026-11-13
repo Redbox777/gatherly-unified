@@ -41,6 +41,7 @@ from app.infrastructure.database.http_rate_limits_repository import (
 )
 from app.infrastructure.database.participants_repository import ParticipantsRepository
 from app.infrastructure.database.notifications_repository import NotificationsRepository
+from app.infrastructure.database.notes_repository import NotesRepository
 from app.infrastructure.database.participant_invitations_repository import (
     ParticipantInvitationsRepository,
 )
@@ -165,6 +166,16 @@ class EventReminderRequest(BaseModel):
     offsets_minutes: list[int] = Field(default_factory=list, max_length=3)
 
 
+class CreateNoteRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=5000)
+    visibility: str = Field(default="private", pattern="^(private|shared)$")
+
+
+class UpdateNoteRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=5000)
+    visibility: str = Field(pattern="^(private|shared)$")
+
+
 class AcceptParticipantInvitationRequest(BaseModel):
     token: str = Field(min_length=1, max_length=512)
 
@@ -232,6 +243,7 @@ class Dependencies:
         )
         self.email_sender = _email_sender()
         self.notifications = NotificationsRepository(connection)
+        self.notes = NotesRepository(connection)
         self.reset_requests = PasswordResetRequestService(
             identities=self.identities,
             resets=self.resets,
@@ -1444,6 +1456,87 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         if not changed:
             raise HTTPException(status_code=400, detail="Invalid or expired reset token")
         return {"message": "Password updated"}
+
+
+    @app.get("/events/{event_id}/notes")
+    def list_event_notes(
+        event_id: UUID, request: Request, deps: ServiceDependency
+    ) -> list[dict[str, object]]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        notes = deps.notes.list_for_event(event_id=str(event_id), user_id=user_id)
+        if notes is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        return notes
+
+    @app.post("/events/{event_id}/notes", status_code=status.HTTP_201_CREATED)
+    def create_event_note(
+        event_id: UUID, payload: CreateNoteRequest,
+        request: Request, deps: ServiceDependency
+    ) -> dict[str, object]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        try:
+            note = deps.notes.create(
+                event_id=str(event_id), author_id=user_id,
+                content=payload.content, visibility=payload.visibility,
+                now=datetime.now(UTC),
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail="Invalid note data") from error
+        if note is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        return note
+
+    @app.put("/events/{event_id}/notes/{note_id}")
+    def update_event_note(
+        event_id: UUID, note_id: UUID, payload: UpdateNoteRequest,
+        request: Request, deps: ServiceDependency
+    ) -> dict[str, object]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        try:
+            note = deps.notes.update(
+                event_id=str(event_id), note_id=str(note_id), user_id=user_id,
+                content=payload.content, visibility=payload.visibility,
+                now=datetime.now(UTC),
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail="Invalid note data") from error
+        if note is None:
+            raise HTTPException(status_code=404, detail="Note not found")
+        return note
+
+    @app.delete(
+        "/events/{event_id}/notes/{note_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    def delete_event_note(
+        event_id: UUID, note_id: UUID, request: Request, deps: ServiceDependency
+    ) -> Response:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        if not deps.notes.delete(
+            event_id=str(event_id), note_id=str(note_id), user_id=user_id
+        ):
+            raise HTTPException(status_code=404, detail="Note not found")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     static_directory = Path(__file__).resolve().parent / "static"
     app.mount(
