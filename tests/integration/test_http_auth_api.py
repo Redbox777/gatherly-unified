@@ -1123,7 +1123,7 @@ def test_unsafe_http_requests_validate_all_origin_header_variants(tmp_path) -> N
 
     for index, (headers, expected_status) in enumerate(cases):
         app = create_app(tmp_path / f"origin-variant-{index}.sqlite3")
-        with TestClient(app, headers={"Origin": "http://testserver"}) as client:
+        with TestClient(app) as client:
             response = client.post(
                 "/auth/verify-email",
                 json={"token": "invalid-token"},
