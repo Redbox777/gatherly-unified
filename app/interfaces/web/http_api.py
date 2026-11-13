@@ -396,11 +396,11 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                     production=production,
                 )
         response = await call_next(request)
-        if request.url.path in {"/", "/index.html"}:
+        if request.url.path in {"/", "/index.html", "/auth.html"}:
             response.headers.setdefault(
                 "Content-Security-Policy",
-                "default-src 'self'; style-src 'self' https://fonts.googleapis.com; "
-                "font-src https://fonts.gstatic.com; img-src 'self' data:; "
+                "default-src 'self'; style-src 'self'; font-src 'self'; "
+                "img-src 'self' data:; "
                 "script-src 'self'; connect-src 'self'; base-uri 'self'; "
                 "form-action 'self'; frame-ancestors 'none'",
             )
@@ -430,12 +430,12 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         """Serve the same-origin email verification page."""
         return HTMLResponse(
             content="""<!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>Verify Gatherly email</title>
+  <title>Подтверждение почты — Gatherly</title>
   <style>
     :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
     body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
@@ -447,10 +447,11 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
 </head>
 <body>
   <main>
-    <h1>Verify your Gatherly email</h1>
-    <p>Confirm that you control this email address.</p>
-    <button id="verify" type="button">Verify email</button>
+    <h1>Подтвердите электронную почту</h1>
+    <p>Это поможет защитить ваш аккаунт Gatherly.</p>
+    <button id="verify" type="button">Подтвердить почту</button>
     <p id="status" role="status" aria-live="polite"></p>
+    <p><a href="/auth.html">Перейти ко входу</a></p>
   </main>
   <script>
     (() => {
@@ -460,7 +461,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
       const status = document.getElementById("status");
       button.addEventListener("click", async () => {
         if (!token) {
-          status.textContent = "This link is missing its token. Request a new verification email.";
+          status.textContent = "В ссылке нет токена. " +
+            "Запросите новое письмо для подтверждения почты.";
           return;
         }
         button.disabled = true;
@@ -473,11 +475,11 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
           });
           token = "";
           status.textContent = response.ok
-            ? "Your email address has been verified. You can now sign in."
-            : "This link is invalid, expired, or already used. Request a new verification email.";
+            ? "Почта подтверждена. Теперь можно войти в Gatherly."
+            : "Ссылка недействительна, устарела или уже использована. Запросите новое письмо.";
           if (response.ok) button.hidden = true;
         } catch (_) {
-          status.textContent = "Network error. Check your connection and try again.";
+          status.textContent = "Ошибка соединения. Проверьте интернет и попробуйте ещё раз.";
         } finally {
           button.disabled = false;
         }
@@ -502,12 +504,12 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         """Serve the same-origin password-reset page."""
         return HTMLResponse(
             content="""<!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>Reset Gatherly password</title>
+  <title>Сброс пароля — Gatherly</title>
   <style>
     :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
     body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
@@ -522,15 +524,16 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
 </head>
 <body>
   <main>
-    <h1>Choose a new password</h1>
+    <h1>Создайте новый пароль</h1>
     <form id="reset-form">
-      <label for="password">New password
+      <label for="password">Новый пароль
         <input id="password" name="password" type="password" autocomplete="new-password"
           minlength="12" maxlength="1024" required>
       </label>
-      <button id="submit" type="submit">Update password</button>
+      <button id="submit" type="submit">Сохранить пароль</button>
     </form>
     <p id="status" role="status" aria-live="polite"></p>
+    <p><a href="/auth.html">Перейти ко входу</a></p>
   </main>
   <script>
     (() => {
@@ -543,8 +546,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         if (!token) {
-          status.textContent = "This link is missing its token. " +
-            "Request a new password-reset email.";
+          status.textContent = "В ссылке нет токена. " +
+            "Запросите новое письмо для сброса пароля.";
           return;
         }
         button.disabled = true;
@@ -559,13 +562,13 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
           if (response.ok) {
             password.value = "";
             form.hidden = true;
-            status.textContent = "Your password has been updated. You can now sign in.";
+            status.textContent = "Пароль обновлён. Теперь можно войти в Gatherly.";
           } else {
-            status.textContent = "This link is invalid, expired, or already used. " +
-              "Request a new password-reset email.";
+            status.textContent = "Ссылка недействительна, устарела или уже использована. " +
+              "Запросите новое письмо для сброса пароля.";
           }
         } catch (_) {
-          status.textContent = "Network error. Check your connection and try again.";
+          status.textContent = "Ошибка соединения. Проверьте интернет и попробуйте ещё раз.";
         } finally {
           button.disabled = false;
         }
