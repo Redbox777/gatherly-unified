@@ -94,3 +94,32 @@ def test_verification_rejects_naive_datetime(services) -> None:
             user_id="user-1",
             now=datetime(2026, 10, 12, 12, 0),
         )
+
+
+def test_pending_verification_token_requires_activation_and_can_be_discarded(
+    services,
+) -> None:
+    connection, identity_service, verification_service = services
+    identity = identity_service.register_email(
+        email="pending@example.test",
+        password="a secure example password",
+        now=NOW,
+    )
+
+    raw_token, token_id = verification_service.issue_pending(
+        user_id=identity.user_id, now=NOW
+    )
+    assert not verification_service.verify(raw_token=raw_token, now=NOW)
+    assert verification_service.discard_pending(token_id=token_id, now=NOW)
+    assert not verification_service.activate_pending(token_id=token_id, now=NOW)
+    assert not verification_service.verify(raw_token=raw_token, now=NOW)
+
+    next_raw, next_id = verification_service.issue_pending(
+        user_id=identity.user_id, now=NOW + timedelta(minutes=1)
+    )
+    assert verification_service.activate_pending(
+        token_id=next_id, now=NOW + timedelta(minutes=1)
+    )
+    assert verification_service.verify(
+        raw_token=next_raw, now=NOW + timedelta(minutes=2)
+    )
