@@ -1231,3 +1231,39 @@ def test_password_reset_delivery_failure_preserves_previous_token(
             },
         )
         assert reset.status_code == 200
+
+
+def test_responses_include_baseline_security_headers(tmp_path) -> None:
+    app = create_app(tmp_path / "security-headers.sqlite3")
+
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
+        health = client.get("/health")
+        landing_page = client.get("/verify-email")
+        rejected = client.post("/auth/logout")
+
+    for response in (health, landing_page, rejected):
+        assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert response.headers["X-Frame-Options"] == "DENY"
+        assert response.headers["Referrer-Policy"] == "no-referrer"
+        assert response.headers["Permissions-Policy"] == "camera=(), microphone=()"
+        assert "Strict-Transport-Security" not in response.headers
+    assert landing_page.headers["Content-Security-Policy"].startswith("default-src 'none'")
+
+
+def test_production_responses_include_hsts(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("COOKIE_SECURE", "true")
+    monkeypatch.setenv("SMTP_STARTTLS", "true")
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("SMTP_SENDER", "no-reply@example.com")
+    monkeypatch.setenv("EMAIL_VERIFICATION_URL", "https://app.example.com/verify-email")
+    monkeypatch.setenv("PASSWORD_RESET_URL", "https://app.example.com/reset-password")
+    monkeypatch.setenv(
+        "PARTICIPANT_INVITATION_URL", "https://app.example.com/accept-invitation"
+    )
+    app = create_app(tmp_path / "production-security-headers.sqlite3")
+
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
+        response = client.get("/health")
+
+    assert response.headers["Strict-Transport-Security"] == "max-age=31536000"
