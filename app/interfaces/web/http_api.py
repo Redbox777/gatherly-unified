@@ -1081,7 +1081,10 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                     event_id=str(event_id),
                     kind="participant_added",
                     title="Новый участник встречи",
-                    body=f"К встрече «{event.title}» добавлен участник: {participant.display_name}.",
+                    body=(
+                        f"К встрече «{event.title}» добавлен участник: "
+                        f"{participant.display_name}."
+                    ),
                     dedupe_key=(
                         f"participant-added:{participant.id}:{recipient_id}"
                     ),
