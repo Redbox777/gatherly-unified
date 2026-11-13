@@ -240,10 +240,10 @@ def _email_sender() -> SmtpEmailSender:
 
 
 def _send_verification_email(
-    deps: Dependencies, *, user_id: str, recipient: str, now: datetime
+    deps: Dependencies, *, identity_id: str, recipient: str, now: datetime
 ) -> bool:
     """Deliver a staged verification token before rotating the active token."""
-    token, token_id = deps.verification.issue_pending(user_id=user_id, now=now)
+    token, token_id = deps.verification.issue_pending(identity_id=identity_id, now=now)
     verify_url = os.environ.get(
         "EMAIL_VERIFICATION_URL", "http://localhost:8000/verify-email"
     )
@@ -579,7 +579,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             return GENERIC_REGISTRATION_RESPONSE
         _send_verification_email(
             deps,
-            user_id=identity.user_id,
+            identity_id=identity.identity_id,
             recipient=identity.provider_subject,
             now=now,
         )
@@ -608,7 +608,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         if identity is not None and identity.verified_at is None:
             _send_verification_email(
                 deps,
-                user_id=identity.user_id,
+                identity_id=identity.identity_id,
                 recipient=identity.provider_subject,
                 now=now,
             )
