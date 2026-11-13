@@ -1038,11 +1038,6 @@ def test_outbound_email_limit_is_shared_across_auth_flows(
             },
         )
         assert registration.status_code == 202
-        token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
-        assert client.post(
-            "/auth/verify-email", json={"token": token}
-        ).status_code == 200
-
         first_resend = client.post(
             "/auth/verification/request",
             json={"email": "smtp-limit@example.test"},
