@@ -157,13 +157,15 @@ class AuthEmailTokensRepository:
         now_text = self._format(now)
         with transaction(self._connection):
             row = self._connection.execute(
-                """SELECT id, identity_id FROM auth_email_tokens
-                   WHERE token_hash = ? AND purpose = 'verify_email'
-                     AND activated_at IS NOT NULL
-                     AND consumed_at IS NULL AND expires_at > ?""",
+                """SELECT token.id, token.identity_id, identity.verified_at
+                   FROM auth_email_tokens AS token
+                   JOIN auth_identities AS identity ON identity.id = token.identity_id
+                   WHERE token.token_hash = ? AND token.purpose = 'verify_email'
+                     AND token.activated_at IS NOT NULL
+                     AND token.consumed_at IS NULL AND token.expires_at > ?""",
                 (digest, now_text),
             ).fetchone()
-            if row is None:
+            if row is None or row["verified_at"] is not None:
                 return False
             cursor = self._connection.execute(
                 """UPDATE auth_email_tokens SET consumed_at = ?
@@ -200,7 +202,7 @@ class AuthEmailTokensRepository:
                      AND token.consumed_at IS NULL AND token.expires_at > ?""",
                 (digest, now_text),
             ).fetchone()
-            if row is None:
+            if row is None or row["verified_at"] is None:
                 return False
             cursor = self._connection.execute(
                 """UPDATE auth_email_tokens SET consumed_at = ?
