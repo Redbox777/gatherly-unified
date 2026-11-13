@@ -184,13 +184,13 @@ class AuthEmailTokensRepository:
         self._require_aware(now)
         if purpose not in {"verify_email", "reset_password"}:
             raise ValueError("Unsupported email-token purpose")
-        cursor = self._connection.execute(
-            """UPDATE auth_email_tokens SET consumed_at = ?
-               WHERE id = ? AND purpose = ? AND activated_at IS NULL
-                 AND consumed_at IS NULL""",
-            (self._format(now), token_id, purpose),
-        )
-        self._connection.commit()
+        with transaction(self._connection):
+            cursor = self._connection.execute(
+                """UPDATE auth_email_tokens SET consumed_at = ?
+                   WHERE id = ? AND purpose = ? AND activated_at IS NULL
+                     AND consumed_at IS NULL""",
+                (self._format(now), token_id, purpose),
+            )
         return cursor.rowcount == 1
 
     def consume_verification_token(self, *, raw_token: str, now: datetime) -> bool:
