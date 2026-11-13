@@ -131,3 +131,32 @@ a:focus-visible,button:focus-visible{outline:3px solid #27bdb2;outline-offset:3p
 .event-card .event-meta{font-size:10px;color:#84999b;margin-top:auto;padding-top:12px}
 .event-card .event-created{font-size:9px;color:#9aabab;margin-top:7px}
 @media(max-width:760px){.account-label{display:none}.topbar-right{gap:8px}.logout-button{padding:7px 9px;font-size:10px}.dashboard-state{min-height:130px;padding:22px}}
+
+/* PR25: event management */
+.meeting-actions{display:flex;align-items:center;gap:16px}
+.create-event-button{border:0;cursor:pointer;gap:9px;padding:10px 14px;font-size:11px}
+.event-card-actions{display:flex;gap:16px;border-top:1px solid #eef3f1;padding-top:12px;margin-top:auto}
+.text-button{border:0;background:transparent;padding:2px 0;color:#078f91;font-size:10px;font-weight:700;cursor:pointer}
+.text-button:hover{text-decoration:underline}
+.event-dialog{width:min(100% - 32px,480px);max-width:480px;padding:0;border:1px solid #dcebe7;border-radius:20px;box-shadow:0 24px 80px #092e3740;color:var(--ink)}
+.event-dialog::backdrop{background:#071e2580;backdrop-filter:blur(3px)}
+.event-form,.event-detail{padding:27px}
+.dialog-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:23px}
+.dialog-heading .eyebrow{font-size:9px;margin-bottom:7px}
+.dialog-heading h2{font-size:21px}
+.dialog-close{width:34px;height:34px;border:0;border-radius:50%;background:#eff6f3;color:#557477;font-size:23px;line-height:1;cursor:pointer}
+.event-form label{display:block;margin:16px 0 7px;font-size:11px;font-weight:700;color:#426267}
+.event-form input{display:block;width:100%;min-height:44px;padding:11px 12px;border:1px solid #dce9e5;border-radius:10px;background:#fbfdfc;color:#173941;font:inherit;font-size:13px}
+.event-form input:focus{outline:3px solid #b9e9df;border-color:#079da4}
+.form-hint,.detail-created{font-size:10px;color:#82999a;margin:8px 0 0}
+.form-status{min-height:18px;color:#a44b42;font-size:11px;line-height:1.5}
+.dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+.dialog-actions button{min-height:40px;padding:10px 15px;border-radius:10px;font-size:11px;font-weight:700;cursor:pointer}
+.secondary-button{border:1px solid #dce9e5;background:#fff;color:#557477}
+.danger-button{margin-right:auto;border:1px solid #f0d5d1;background:#fff8f7;color:#a84e43}
+.event-detail .detail-date{padding:16px;border-radius:12px;background:#f1f8f5;color:#31676a;font-size:13px;line-height:1.6}
+.event-detail .detail-created{margin-top:12px}
+.detail-actions{justify-content:space-between}
+button:disabled{opacity:.55;cursor:wait}
+@media(max-width:760px){.section-heading{gap:10px;align-items:center}.meeting-actions{gap:8px;flex-direction:column;align-items:flex-end}.create-event-button{padding:9px 11px;font-size:10px}.event-form,.event-detail{padding:21px}.event-dialog{border-radius:16px}}
+@media(max-width:380px){.section-heading{align-items:flex-start}.meeting-actions{gap:6px}.create-event-button{font-size:9px;padding:8px 9px}}
