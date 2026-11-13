@@ -450,7 +450,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     <h1>Подтвердите электронную почту</h1>
     <p>Это поможет защитить ваш аккаунт Gatherly.</p>
     <button id="verify" type="button">Подтвердить почту</button>
-    <p id="status" role="status" aria-live="polite"></p>\n    <p><a href="/auth.html">Перейти ко входу</a></p>
+    <p id="status" role="status" aria-live="polite"></p>
+    <p><a href="/auth.html">Перейти ко входу</a></p>
   </main>
   <script>
     (() => {
@@ -531,7 +532,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
       </label>
       <button id="submit" type="submit">Сохранить пароль</button>
     </form>
-    <p id="status" role="status" aria-live="polite"></p>\n    <p><a href="/auth.html">Перейти ко входу</a></p>
+    <p id="status" role="status" aria-live="polite"></p>
+    <p><a href="/auth.html">Перейти ко входу</a></p>
   </main>
   <script>
     (() => {
