@@ -153,6 +153,59 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON auth_email_tokens(user_id, purpose, activated_at, consumed_at);
         """,
     ),
+    (
+        9,
+        """
+        CREATE TABLE auth_email_tokens_new (
+            id TEXT PRIMARY KEY,
+            identity_id TEXT NOT NULL
+                REFERENCES auth_identities(id) ON DELETE CASCADE,
+            token_hash TEXT NOT NULL UNIQUE,
+            purpose TEXT NOT NULL CHECK (purpose IN ('verify_email', 'reset_password')),
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            consumed_at TEXT NULL,
+            activated_at TEXT NULL,
+            CHECK (expires_at > created_at)
+        );
+
+        INSERT INTO auth_email_tokens_new(
+            id, identity_id, token_hash, purpose, created_at, expires_at,
+            consumed_at, activated_at
+        )
+        SELECT
+            token.id,
+            CASE
+                WHEN (
+                    SELECT COUNT(*) FROM auth_identities AS identity
+                    WHERE identity.user_id = token.user_id
+                      AND identity.provider = 'email'
+                ) = 1
+                THEN (
+                    SELECT identity.id FROM auth_identities AS identity
+                    WHERE identity.user_id = token.user_id
+                      AND identity.provider = 'email'
+                    LIMIT 1
+                )
+                ELSE NULL
+            END,
+            token.token_hash,
+            token.purpose,
+            token.created_at,
+            token.expires_at,
+            token.consumed_at,
+            token.activated_at
+        FROM auth_email_tokens AS token;
+
+        DROP TABLE auth_email_tokens;
+        ALTER TABLE auth_email_tokens_new RENAME TO auth_email_tokens;
+
+        CREATE INDEX idx_auth_email_tokens_identity_purpose
+            ON auth_email_tokens(identity_id, purpose);
+        CREATE INDEX idx_auth_email_tokens_active_identity_purpose
+            ON auth_email_tokens(identity_id, purpose, activated_at, consumed_at);
+        """,
+    ),
 )
 
 
