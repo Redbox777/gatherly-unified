@@ -20,6 +20,16 @@ A modular backend foundation for Gatherly with shared application logic and web/
 - SQLite persistence, versioned migrations, and integration tests.
 - CI checks for linting, typing, and tests.
 
+## Email authentication links
+
+The backend serves same-origin pages at `GET /verify-email` and `GET /reset-password`.
+Set `EMAIL_VERIFICATION_URL` and `PASSWORD_RESET_URL` to these pages unless a separate
+web client implements the same fragment-token contract. Email links put the one-time
+bearer token after `#token=`; the browser fragment is not sent in the HTTP request.
+Each page removes the fragment from browser history and submits the token in a JSON
+POST body to the corresponding authentication endpoint. The pages use no-store caching
+and a no-referrer policy.
+
 ## Participant invitation configuration
 
 Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_SENDER` for real email delivery. Set `PARTICIPANT_INVITATION_URL` to the web client's invitation-acceptance page. The example value is a local development placeholder, not a page served by this backend.
