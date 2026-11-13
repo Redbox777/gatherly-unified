@@ -25,6 +25,13 @@
   const notificationCount = document.getElementById("notification-count");
   const reminderSave = document.getElementById("reminder-save");
   const reminderStatus = document.getElementById("reminder-status");
+  const notesList = document.getElementById("notes-list");
+  const notesCount = document.getElementById("notes-count");
+  const noteForm = document.getElementById("note-form");
+  const noteContent = document.getElementById("note-content");
+  const noteVisibility = document.getElementById("note-visibility");
+  const noteStatus = document.getElementById("note-status");
+  const noteSave = document.getElementById("note-save");
   let participantsBusy = false;
   let events = [];
   let activeEvent = null;
@@ -150,6 +157,7 @@
     participantsList.append(loading);
     loadParticipants(event.id);
     loadEventReminders(event.id);
+    loadNotes(event.id);
     try {
       const fresh = await api("/events/" + encodeURIComponent(event.id));
       activeEvent = fresh;
@@ -275,6 +283,115 @@
       participantsList.append(row);
     });
   };
+
+
+  const loadNotes = async eventId => {
+    notesList.replaceChildren();
+    const loading = document.createElement("p");
+    loading.className = "notes-empty";
+    loading.textContent = "Загружаем заметки…";
+    notesList.append(loading);
+    try {
+      const notes = await api("/events/" + encodeURIComponent(eventId) + "/notes");
+      if (!dialog.open || activeEvent?.id !== eventId) return;
+      renderNotes(notes, eventId);
+    } catch (error) {
+      if (!dialog.open || activeEvent?.id !== eventId) return;
+      notesList.replaceChildren();
+      const message = document.createElement("p");
+      message.className = "notes-empty";
+      message.textContent = error.message;
+      notesList.append(message);
+    }
+  };
+  const renderNotes = (notes, eventId) => {
+    notesCount.textContent = String(notes.length);
+    notesList.replaceChildren();
+    if (!notes.length) {
+      const empty = document.createElement("p");
+      empty.className = "notes-empty";
+      empty.textContent = "Заметок пока нет. Добавьте первую запись.";
+      notesList.append(empty);
+      return;
+    }
+    notes.forEach(note => {
+      const card = document.createElement("article");
+      card.className = "note-card";
+      const meta = document.createElement("div");
+      meta.className = "note-meta";
+      const visibility = document.createElement("span");
+      visibility.textContent = note.visibility === "shared" ? "Общая заметка" : "Личная заметка";
+      const date = document.createElement("time");
+      date.dateTime = note.updated_at;
+      date.textContent = formatDate(note.updated_at) || "";
+      meta.append(visibility, date);
+      const content = document.createElement("p");
+      content.className = "note-text";
+      content.textContent = note.content;
+      card.append(meta, content);
+      const actions = document.createElement("div");
+      actions.className = "note-actions";
+      if (note.author_id) {
+        const edit = document.createElement("button");
+        edit.type = "button";
+        edit.className = "text-button";
+        edit.textContent = "Изменить";
+        edit.addEventListener("click", () => {
+          noteContent.value = note.content;
+          noteVisibility.value = note.visibility;
+          noteForm.dataset.editingNote = note.id;
+          noteSave.textContent = "Сохранить изменения";
+          noteStatus.textContent = "Редактирование заметки";
+          noteContent.focus();
+        });
+        actions.append(edit);
+      }
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "text-button note-delete";
+      remove.textContent = "Удалить";
+      remove.addEventListener("click", async () => {
+        if (!window.confirm("Удалить эту заметку?")) return;
+        remove.disabled = true;
+        try {
+          await api("/events/" + encodeURIComponent(eventId) + "/notes/" + encodeURIComponent(note.id), {method:"DELETE"});
+          await loadNotes(eventId);
+        } catch (error) {
+          noteStatus.textContent = error.message;
+          remove.disabled = false;
+        }
+      });
+      actions.append(remove);
+      card.append(actions);
+      notesList.append(card);
+    });
+  };
+  if (noteForm) noteForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!activeEvent || !noteContent.value.trim()) return;
+    const noteId = noteForm.dataset.editingNote;
+    noteSave.disabled = true;
+    noteStatus.textContent = noteId ? "Сохраняем изменения…" : "Сохраняем…";
+    try {
+      await api(
+        "/events/" + encodeURIComponent(activeEvent.id) + "/notes" +
+          (noteId ? "/" + encodeURIComponent(noteId) : ""),
+        {
+          method: noteId ? "PUT" : "POST",
+          body: JSON.stringify({content:noteContent.value, visibility:noteVisibility.value})
+        }
+      );
+      noteForm.reset();
+      delete noteForm.dataset.editingNote;
+      noteSave.textContent = "Сохранить заметку";
+      noteStatus.textContent = "Заметка сохранена.";
+      await loadNotes(activeEvent.id);
+    } catch (error) {
+      noteStatus.textContent = error.message;
+    } finally {
+      noteSave.disabled = false;
+    }
+  });
 
   const renderNotifications = result => {
     const items = Array.isArray(result.items) ? result.items : [];
