@@ -22,3 +22,29 @@ def test_auth_rate_limit_survives_app_restart(tmp_path) -> None:
 
     assert after_restart.status_code == 429
     assert 1 <= int(after_restart.headers["retry-after"]) <= 60
+
+
+def test_untrusted_forwarded_for_cannot_bypass_http_rate_limit(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.delenv("TRUSTED_PROXY_CIDRS", raising=False)
+    app = create_app(tmp_path / "spoofed-forwarded-for.sqlite3")
+    payload = {"email": "unknown@example.test", "password": "wrong password"}
+
+    with TestClient(app) as client:
+        responses = [
+            client.post(
+                "/auth/login",
+                json=payload,
+                headers={"X-Forwarded-For": f"203.0.113.{index}"},
+            )
+            for index in range(1, 6)
+        ]
+        blocked = client.post(
+            "/auth/login",
+            json=payload,
+            headers={"X-Forwarded-For": "198.51.100.99"},
+        )
+
+    assert all(response.status_code == 401 for response in responses)
+    assert blocked.status_code == 429

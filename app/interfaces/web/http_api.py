@@ -47,6 +47,11 @@ from app.infrastructure.database.smtp_rate_limits_repository import (
 )
 from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
 from app.interfaces.telegram.login_verification import verify_telegram_login
+from app.interfaces.web.client_ip import (
+    IPNetwork,
+    load_trusted_proxy_networks,
+    resolve_client_ip,
+)
 from app.interfaces.web.runtime_config import (
     SmtpRateLimitSettings,
     load_smtp_rate_limit_settings,
@@ -211,6 +216,17 @@ class Dependencies:
         )
 
 
+def _requester_ip(request: Request) -> str:
+    """Return the client IP, trusting forwarding headers only from configured proxies."""
+    peer_host = request.client.host if request.client else None
+    trusted_proxies: tuple[IPNetwork, ...] = request.app.state.trusted_proxy_networks
+    return resolve_client_ip(
+        peer_host=peer_host,
+        forwarded_for=request.headers.get("x-forwarded-for"),
+        trusted_proxies=trusted_proxies,
+    )
+
+
 def _consume_http_rate_limit(
     database_path: str | Path, requester: str, route: str
 ) -> int | None:
@@ -232,7 +248,7 @@ def _enforce_email_send_rate_limit(
     deps: Dependencies, request: Request, recipient: str, now: datetime
 ) -> None:
     """Apply a shared, database-backed quota before attempting SMTP delivery."""
-    requester = request.client.host if request.client else "unknown"
+    requester = _requester_ip(request)
     retry_after = deps.smtp_rate_limits.consume(
         recipient=recipient, requester=requester, now=now
     )
@@ -300,6 +316,9 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     validate_runtime_configuration(os.environ)
     smtp_rate_limit_settings = load_smtp_rate_limit_settings(os.environ)
     app = FastAPI(title="Gatherly Authentication API", version="0.1.0")
+    app.state.trusted_proxy_networks = load_trusted_proxy_networks(
+        os.environ.get("TRUSTED_PROXY_CIDRS")
+    )
     rate_limit_paths = {
         "/auth/login",
         "/auth/telegram/login",
@@ -317,7 +336,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         if request.method == "POST" and request.url.path in rate_limit_paths:
-            requester = request.client.host if request.client else "unknown"
+            requester = _requester_ip(request)
             retry_after = await run_in_threadpool(
                 _consume_http_rate_limit,
                 request.app.state.database_path,
@@ -571,7 +590,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         now = datetime.now(UTC)
         retry_after = deps.smtp_rate_limits.consume(
             recipient=normalized_email,
-            requester=request.client.host if request.client else "unknown",
+            requester=_requester_ip(request),
             now=now,
         )
         identity = (
@@ -1182,7 +1201,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         now = datetime.now(UTC)
         retry_after = deps.smtp_rate_limits.consume(
             recipient=normalized_email,
-            requester=request.client.host if request.client else "unknown",
+            requester=_requester_ip(request),
             now=now,
         )
         if retry_after is None:
