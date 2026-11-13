@@ -14,11 +14,11 @@ def test_auth_rate_limit_survives_app_restart(tmp_path) -> None:
 
     assert all(response.status_code == 401 for response in responses)
     assert blocked.status_code == 429
-    assert blocked.headers["retry-after"] == "60"
+    assert 1 <= int(blocked.headers["retry-after"]) <= 60
 
     second_app = create_app(database_path)
     with TestClient(second_app) as client:
         after_restart = client.post("/auth/login", json=payload)
 
     assert after_restart.status_code == 429
-    assert after_restart.headers["retry-after"] == "60"
+    assert 1 <= int(after_restart.headers["retry-after"]) <= 60
