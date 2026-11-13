@@ -98,8 +98,8 @@ def test_request_requires_timezone_aware_datetime(request_context) -> None:
 
 
 def test_failed_reset_email_preserves_previous_active_token(request_context) -> None:
-    _, _, identity, sender, service = request_context
-    resets = service._resets
+    connection, _, identity, sender, service = request_context
+    resets = PasswordResetService(AuthEmailTokensRepository(connection))
     previous_token = resets.issue(user_id=identity.user_id, now=NOW)
     sender.fail = True
 
