@@ -91,14 +91,16 @@ def test_migration_preserves_existing_active_email_tokens(tmp_path) -> None:
         raw_token = "legacy-verification-token"
         connection.execute(
             """INSERT INTO auth_email_tokens(
-                id, user_id, token_hash, purpose, created_at, expires_at, consumed_at
-            ) VALUES (?, ?, ?, 'verify_email', ?, ?, NULL)""",
+                id, user_id, token_hash, purpose, created_at, expires_at,
+                consumed_at, activated_at
+            ) VALUES (?, ?, ?, 'verify_email', ?, ?, NULL, ?)""",
             (
                 "legacy-token",
                 "legacy-user",
                 hash_token(raw_token),
                 created_at,
                 expires_at,
+                created_at,
             ),
         )
         connection.commit()
