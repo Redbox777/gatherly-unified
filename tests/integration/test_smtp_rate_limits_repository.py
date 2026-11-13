@@ -103,3 +103,29 @@ def test_rate_limiter_rejects_naive_datetime(tmp_path) -> None:
         raise AssertionError("naive datetimes must be rejected")
     finally:
         connection.close()
+
+
+def test_repository_uses_injected_quota_configuration(tmp_path) -> None:
+    connection = connect(tmp_path / "smtp-custom-limit.sqlite3")
+    migrate(connection)
+    repository = SmtpRateLimitsRepository(
+        connection,
+        recipient_limit=2,
+        recipient_window_seconds=30,
+        requester_limit=10,
+        requester_window_seconds=120,
+    )
+
+    for _ in range(2):
+        assert repository.consume(
+            recipient="custom@example.test",
+            requester="192.0.2.1",
+            now=NOW,
+        ) is None
+
+    assert repository.consume(
+        recipient="custom@example.test",
+        requester="192.0.2.1",
+        now=NOW,
+    ) == 30
+    connection.close()
