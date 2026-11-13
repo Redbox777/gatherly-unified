@@ -17,6 +17,8 @@ A modular backend foundation for Gatherly with shared application logic and web/
 - Email registration, verification, login, server-managed sessions, password reset/change, and Telegram login.
 - Participant invitation lifecycle: owner-only creation/revocation, one-time token hashes, verified-email acceptance, and atomic participant linking.
 - Invitation email delivery through the SMTP adapter; failed delivery revokes the newly issued invitation before returning an error.
+- Authenticated notification inbox, per-user notification preferences, and event reminders at 24 hours, 1 hour, or 15 minutes.
+- One-shot notification worker for scheduled email delivery, with shared SMTP quotas and bounded retries.
 - SQLite persistence, versioned migrations, and integration tests.
 - CI checks for linting, typing, and tests.
 
@@ -93,3 +95,12 @@ pytest
 ```
 
 See [participant invitation lifecycle](docs/participant-invitations.md) and [architecture decisions](docs/architecture.md) for security and design constraints.
+
+## Notifications and reminders
+
+See [notification delivery and worker scheduling](docs/notifications.md). Run the one-shot worker every minute using your hosting scheduler:
+
+```sh
+python -m app.infrastructure.notifications_worker
+```
+

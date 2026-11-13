@@ -62,8 +62,22 @@
       <header class="topbar">
         <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Открыть меню" aria-expanded="false"><svg class="ui-icon" aria-hidden="true"><use href="#icon-menu"></use></svg></button>
         <div class="breadcrumb">Моё пространство <span>/</span> Обзор</div>
-        <div class="topbar-right"><span class="account-label">Моё пространство</span><button class="logout-button" id="logout-button" type="button">Выйти</button><div class="avatar" aria-hidden="true">G</div></div>
+        <div class="topbar-right"><span class="account-label">Моё пространство</span><button class="notification-toggle" id="notification-toggle" type="button" aria-expanded="false" aria-controls="notification-panel">Уведомления <span id="notification-count" aria-label="Непрочитанные">0</span></button><button class="logout-button" id="logout-button" type="button">Выйти</button><div class="avatar" aria-hidden="true">G</div></div>
       </header>
+
+      <section class="notification-panel" id="notification-panel" hidden aria-labelledby="notification-heading">
+        <div class="notification-panel-heading"><h2 id="notification-heading">Уведомления</h2><button type="button" id="notification-close" class="text-button">Закрыть</button></div>
+        <div id="notification-list" class="notification-list" aria-live="polite"><p class="notification-empty">Загрузка…</p></div>
+        <details class="notification-settings">
+          <summary>Настройки уведомлений</summary>
+          <label><input type="checkbox" id="pref-email"> Электронная почта</label>
+          <label><input type="checkbox" id="pref-updates"> Изменения встреч</label>
+          <label><input type="checkbox" id="pref-participants"> Новые участники</label>
+          <label><input type="checkbox" id="pref-reminders"> Напоминания</label>
+          <button type="button" class="secondary-button" id="preferences-save">Сохранить настройки</button>
+          <p class="participant-status" id="preferences-status" role="status" aria-live="polite"></p>
+        </details>
+      </section>
 
       <div class="page-content">
         <section class="welcome-row">
@@ -105,6 +119,15 @@
           <section class="event-detail" id="event-detail" hidden>
             <div class="dialog-heading"><div><p class="eyebrow">ВАША ВСТРЕЧА</p><h2 id="detail-title">Встреча</h2></div><button class="dialog-close" id="detail-close" type="button" aria-label="Закрыть">×</button></div>
             <p class="detail-date" id="detail-date"></p><p class="detail-created" id="detail-created"></p>
+            <section class="reminder-panel" aria-labelledby="reminder-heading">
+              <div class="participants-heading"><h3 id="reminder-heading">Напоминания о встрече</h3></div>
+              <p class="participants-help">Выберите, за сколько времени отправить напоминание по электронной почте.</p>
+              <label><input type="checkbox" name="reminder-offset" value="1440"> За сутки</label>
+              <label><input type="checkbox" name="reminder-offset" value="60"> За час</label>
+              <label><input type="checkbox" name="reminder-offset" value="15"> За 15 минут</label>
+              <button type="button" class="secondary-button reminder-save" id="reminder-save">Сохранить напоминания</button>
+              <p class="participant-status" id="reminder-status" role="status" aria-live="polite"></p>
+            </section>
             <section class="participants-panel" aria-labelledby="participants-heading">
               <div class="participants-heading"><h3 id="participants-heading">Участники</h3><span id="participants-count">Загрузка…</span></div>
               <p class="participants-help">Добавьте гостя, затем отправьте приглашение на его подтверждённую почту, чтобы связать запись с аккаунтом Gatherly.</p>
