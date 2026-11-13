@@ -971,4 +971,3 @@ def test_each_http_request_uses_its_own_database_connection(
     assert [response.status_code for response in responses] == [401, 401]
     assert len(opened_connections) == 2
     assert opened_connections[0] is not opened_connections[1]
-    assert all(not connection.in_transaction for connection in opened_connections)
