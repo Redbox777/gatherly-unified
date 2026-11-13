@@ -74,12 +74,13 @@ class AuthSessionsRepository:
         self._require_aware(now)
         if not raw_token or not raw_token.strip():
             return False
-        cursor = self._connection.execute(
-            """UPDATE auth_sessions SET revoked_at = ?
-            WHERE token_hash = ? AND revoked_at IS NULL""",
-            (self._format(now), hash_token(raw_token)),
-        )
-        return cursor.rowcount == 1
+        with transaction(self._connection):
+            cursor = self._connection.execute(
+                """UPDATE auth_sessions SET revoked_at = ?
+                WHERE token_hash = ? AND revoked_at IS NULL""",
+                (self._format(now), hash_token(raw_token)),
+            )
+            return cursor.rowcount == 1
 
     @staticmethod
     def _require_aware(value: datetime) -> None:
