@@ -132,6 +132,7 @@ def test_verification_resend_keeps_generic_response_when_delivery_fails(
             },
         )
         assert registration.status_code == 202
+        original_token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
 
         sender.fail = True
         failed_delivery = client.post(
@@ -142,7 +143,11 @@ def test_verification_resend_keeps_generic_response_when_delivery_fails(
             "/auth/verification/request",
             json={"email": "unknown@example.test"},
         )
+        previous_token_still_works = client.post(
+            "/auth/verify-email", json={"token": original_token}
+        )
 
+    assert previous_token_still_works.status_code == 200
     assert failed_delivery.status_code == unknown_account.status_code == 202
     assert failed_delivery.json() == unknown_account.json()
     assert "Registration verification email delivery failed (OSError)" in caplog.text
@@ -1064,3 +1069,59 @@ def test_outbound_email_limit_is_shared_across_auth_flows(
     assert first_resend.json() == blocked_resend.json()
     assert blocked_reset.json() == unknown_reset.json()
     assert len(sender.messages) == 3
+
+
+def test_password_reset_delivery_failure_preserves_previous_token(
+    tmp_path, monkeypatch
+) -> None:
+    class ToggleEmailSender:
+        def __init__(self) -> None:
+            self.fail = False
+            self.messages: list[tuple[str, str, str]] = []
+
+        def send_text(self, recipient: str, subject: str, body: str) -> None:
+            if self.fail:
+                raise OSError("temporary SMTP outage")
+            self.messages.append((recipient, subject, body))
+
+    sender = ToggleEmailSender()
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "reset-token-preserved.sqlite3")
+
+    with TestClient(app) as client:
+        email = "reset-preserve@example.test"
+        registration = client.post(
+            "/auth/register",
+            json={"email": email, "password": "correct horse battery staple"},
+        )
+        assert registration.status_code == 202
+        verification_token = sender.messages[-1][2].split(
+            "token=", maxsplit=1
+        )[1].splitlines()[0]
+        assert client.post(
+            "/auth/verify-email", json={"token": verification_token}
+        ).status_code == 200
+
+        first_reset = client.post(
+            "/auth/password-reset/request", json={"email": email}
+        )
+        assert first_reset.status_code == 202
+        previous_reset_token = sender.messages[-1][2].split(
+            "token=", maxsplit=1
+        )[1].splitlines()[0]
+
+        sender.fail = True
+        failed_reset_delivery = client.post(
+            "/auth/password-reset/request", json={"email": email}
+        )
+        assert failed_reset_delivery.status_code == 202
+        assert failed_reset_delivery.json() == first_reset.json()
+
+        reset = client.post(
+            "/auth/password-reset/confirm",
+            json={
+                "token": previous_reset_token,
+                "new_password": "a new secure password that works",
+            },
+        )
+        assert reset.status_code == 200
