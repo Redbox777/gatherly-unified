@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -113,7 +113,8 @@ def test_failed_reset_email_preserves_previous_active_token(request_context) -> 
 
 def test_successful_reset_email_replaces_previous_active_token(request_context) -> None:
     _, _, identity, sender, service = request_context
-    resets = service._resets
+    connection, _, identity, sender, service = request_context
+    resets = PasswordResetService(AuthEmailTokensRepository(connection))
     previous_token = resets.issue(user_id=identity.user_id, now=NOW)
 
     assert service.request(email=EMAIL, now=NOW + timedelta(minutes=1)) == GENERIC_RESPONSE
