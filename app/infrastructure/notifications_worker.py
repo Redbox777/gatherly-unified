@@ -21,6 +21,8 @@ def run_once(database_path: str | None = None) -> tuple[int, int]:
         rate_limits = SmtpRateLimitsRepository(connection)
         now = datetime.now(UTC)
         created = repository.materialize_due_reminders(now=now)
+        if not os.environ.get("SMTP_HOST") or not os.environ.get("SMTP_SENDER"):
+            return created, 0
         sender = SmtpEmailSender(
             host=os.environ.get("SMTP_HOST", "localhost"),
             port=int(os.environ.get("SMTP_PORT", "587")),
