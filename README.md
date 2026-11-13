@@ -63,6 +63,16 @@ using the same database enforce one shared quota. Old counter records are pruned
 rate limiter when deploying multiple hosts; configure trusted proxy handling before
 relying on source-address quotas behind a reverse proxy.
 
+For deployments behind a reverse proxy, optionally set `TRUSTED_PROXY_CIDRS` to a
+comma-separated list of the proxy IP addresses or CIDR ranges that connect directly to
+the app. Only when the immediate peer matches this allowlist does Gatherly inspect
+`X-Forwarded-For`, walking the chain from right to left and skipping trusted proxies.
+Malformed forwarding chains fall back to the direct peer address. Without this setting,
+forwarding headers are ignored. Restrict network access so clients cannot bypass the
+trusted proxy and connect directly to the app; configure every proxy hop that may
+appear in the forwarded chain. Do not trust all networks (for example, `0.0.0.0/0`
+or `::/0`).
+
 ## Participant invitation configuration
 
 Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_SENDER` for real email delivery. Set `PARTICIPANT_INVITATION_URL` to the web client's invitation-acceptance page. The example value is a local development placeholder, not a page served by this backend.
