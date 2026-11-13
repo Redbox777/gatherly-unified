@@ -13,6 +13,7 @@ from urllib.parse import urlencode, urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -395,6 +396,14 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                     production=production,
                 )
         response = await call_next(request)
+        if request.url.path in {"/", "/index.html"}:
+            response.headers.setdefault(
+                "Content-Security-Policy",
+                "default-src 'self'; style-src 'self' https://fonts.googleapis.com; "
+                "font-src https://fonts.gstatic.com; img-src 'self' data:; "
+                "script-src 'self'; connect-src 'self'; base-uri 'self'; "
+                "form-action 'self'; frame-ancestors 'none'",
+            )
         return _apply_security_headers(response, production=production)
     path = database_path or os.environ.get("GATHERLY_DATABASE_PATH", "var/gatherly.sqlite3")
     migration_connection = connect(path)
@@ -1252,6 +1261,12 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="Invalid or expired reset token")
         return {"message": "Password updated"}
 
+    static_directory = Path(__file__).resolve().parent / "static"
+    app.mount(
+        "/",
+        StaticFiles(directory=static_directory, html=True),
+        name="frontend",
+    )
     return app
 
 
