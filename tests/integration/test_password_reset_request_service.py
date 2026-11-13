@@ -67,7 +67,8 @@ def test_known_and_unknown_email_receive_same_public_response(request_context) -
     recipient, subject, body = sender.messages[0]
     assert recipient == EMAIL
     assert subject == "Reset your Gatherly password"
-    assert "https://gatherly.example/reset-password?token=" in body
+    assert "https://gatherly.example/reset-password#token=" in body
+    assert "?token=" not in body
     assert "If you did not request this" in body
 
 
