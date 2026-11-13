@@ -38,6 +38,7 @@ Web adapter ───────┘              │
 - SMTP authentication must use STARTTLS; do not disable TLS when credentials are configured.
 - Set `COOKIE_SECURE=true` in production behind HTTPS. The development example also defaults to secure cookies; use `false` only for local plain-HTTP testing.
 - Sensitive HTTP POST routes use a SQLite-backed rate limiter shared by processes using the same local database. It is suitable for a single-host deployment only; use an edge/shared network limiter and reassess the database before deploying multiple hosts. Source-address quotas also depend on correct trusted-proxy configuration.
+- Client IP resolution ignores `X-Forwarded-For` unless the direct peer belongs to the explicit `TRUSTED_PROXY_CIDRS` allowlist. Configure only actual proxy networks, ensure the app cannot be reached directly around the proxy, and use proxies that append the connecting peer to the forwarded chain. Malformed chains fall back to the direct peer.
 - Use parameterized database queries.
 - Apply authorization on every object-level read/write, not just in the UI.
 - Validate input at interface boundaries and enforce business invariants in the application/domain layer.
