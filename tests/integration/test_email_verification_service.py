@@ -34,7 +34,7 @@ def test_verification_token_marks_email_verified_and_is_one_time(services) -> No
         now=NOW,
     )
 
-    raw_token = verification_service.issue(user_id=identity.user_id, now=NOW)
+    raw_token = verification_service.issue(identity_id=identity.identity_id, now=NOW)
 
     stored = connection.execute(
         "SELECT token_hash FROM auth_email_tokens"
@@ -56,7 +56,7 @@ def test_verification_token_marks_email_verified_and_is_one_time(services) -> No
     ) == verified
     with pytest.raises(ValueError, match="unverified email identity"):
         verification_service.issue(
-            user_id=identity.user_id, now=NOW + timedelta(minutes=2)
+            identity_id=identity.identity_id, now=NOW + timedelta(minutes=2)
         )
     assert not verification_service.verify(
         raw_token=raw_token, now=NOW + timedelta(minutes=2)
@@ -70,7 +70,7 @@ def test_verification_rejects_unknown_and_expired_tokens(services) -> None:
         password="a secure example password",
         now=NOW,
     )
-    raw_token = verification_service.issue(user_id=identity.user_id, now=NOW)
+    raw_token = verification_service.issue(identity_id=identity.identity_id, now=NOW)
 
     assert not verification_service.verify(raw_token="unknown-token", now=NOW)
     assert not verification_service.verify(
@@ -91,7 +91,7 @@ def test_verification_rejects_naive_datetime(services) -> None:
     _, _, verification_service = services
     with pytest.raises(ValueError, match="timezone"):
         verification_service.issue(
-            user_id="user-1",
+            identity_id="missing-identity",
             now=datetime(2026, 10, 12, 12, 0),
         )
 
@@ -107,7 +107,7 @@ def test_pending_verification_token_requires_activation_and_can_be_discarded(
     )
 
     raw_token, token_id = verification_service.issue_pending(
-        user_id=identity.user_id, now=NOW
+        identity_id=identity.identity_id, now=NOW
     )
     assert not verification_service.verify(raw_token=raw_token, now=NOW)
     assert verification_service.discard_pending(token_id=token_id, now=NOW)
@@ -115,7 +115,7 @@ def test_pending_verification_token_requires_activation_and_can_be_discarded(
     assert not verification_service.verify(raw_token=raw_token, now=NOW)
 
     next_raw, next_id = verification_service.issue_pending(
-        user_id=identity.user_id, now=NOW + timedelta(minutes=1)
+        identity_id=identity.identity_id, now=NOW + timedelta(minutes=1)
     )
     assert verification_service.activate_pending(
         token_id=next_id, now=NOW + timedelta(minutes=1)
