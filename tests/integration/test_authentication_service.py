@@ -6,7 +6,10 @@ from app.application.auth_identities_service import AuthIdentitiesService
 from app.application.auth_sessions_service import AuthSessionsService
 from app.application.authentication_service import AuthenticationService
 from app.domain.passwords import hash_password
-from app.infrastructure.database.auth_identities_repository import AuthIdentitiesRepository
+from app.infrastructure.database.auth_identities_repository import (
+    AuthIdentitiesRepository,
+    AuthIdentity,
+)
 from app.infrastructure.database.auth_sessions_repository import AuthSessionsRepository
 from app.infrastructure.database.connection import connect, migrate
 
@@ -102,7 +105,9 @@ def test_login_does_not_issue_session_if_password_changes_after_verification(
 
     original_authenticate = identities.authenticate_email
 
-    def authenticate_then_change_password(*, email: str, password: str):
+    def authenticate_then_change_password(
+        *, email: str, password: str
+    ) -> AuthIdentity | None:
         authenticated = original_authenticate(email=email, password=password)
         assert authenticated is not None
         assert identity_repository.update_password_and_revoke_sessions(
