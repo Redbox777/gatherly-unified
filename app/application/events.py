@@ -1,6 +1,6 @@
 """Use cases for event creation, retrieval, listing, updates, and deletion."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import UUID
 
 from app.domain.events import Event
