@@ -19,12 +19,18 @@ class NotesRepository:
             return None
         rows = self._connection.execute(
             """SELECT note.id, note.event_id, note.author_id, note.content,
-                      note.visibility, note.created_at, note.updated_at
+                      note.visibility, note.created_at, note.updated_at,
+                      (note.author_id = ?) AS can_edit,
+                      (note.author_id = ? OR (note.visibility = 'shared'
+                        AND EXISTS (
+                          SELECT 1 FROM events
+                          WHERE events.id = note.event_id AND events.owner_id = ?
+                        ))) AS can_delete
                FROM event_notes AS note
                WHERE note.event_id = ?
                  AND (note.visibility = 'shared' OR note.author_id = ?)
                ORDER BY note.created_at, note.id""",
-            (event_id, user_id),
+            (user_id, user_id, user_id, event_id, user_id),
         ).fetchall()
         return [dict(row) for row in rows]
 
@@ -41,12 +47,13 @@ class NotesRepository:
             return None
         note_id = str(uuid4())
         timestamp = self._format(now)
-        self._connection.execute(
-            """INSERT INTO event_notes(
-                id, event_id, author_id, content, visibility, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (note_id, event_id, author_id, normalized, visibility, timestamp, timestamp),
-        )
+        with transaction(self._connection):
+            self._connection.execute(
+                """INSERT INTO event_notes(
+                    id, event_id, author_id, content, visibility, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (note_id, event_id, author_id, normalized, visibility, timestamp, timestamp),
+            )
         return self.get(note_id=note_id, user_id=author_id)
 
     def update(
@@ -113,7 +120,10 @@ class NotesRepository:
     def get(self, *, note_id: str, user_id: str) -> dict[str, object] | None:
         row = self._connection.execute(
             """SELECT note.id, note.event_id, note.author_id, note.content,
-                      note.visibility, note.created_at, note.updated_at
+                      note.visibility, note.created_at, note.updated_at,
+                      (note.author_id = ?) AS can_edit,
+                      (note.author_id = ? OR (note.visibility = 'shared'
+                        AND events.owner_id = ?)) AS can_delete
                FROM event_notes AS note
                JOIN events ON events.id = note.event_id
                WHERE note.id = ?
@@ -123,7 +133,7 @@ class NotesRepository:
                      AND event_participants.linked_user_id = ?
                  ))
                  AND (note.visibility = 'shared' OR note.author_id = ?)""",
-            (note_id, user_id, user_id, user_id),
+            (user_id, user_id, user_id, note_id, user_id, user_id, user_id),
         ).fetchone()
         return dict(row) if row is not None else None
 
