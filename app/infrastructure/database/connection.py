@@ -141,6 +141,18 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON smtp_rate_limit_events(created_at);
         """,
     ),
+    (
+        8,
+        """
+        ALTER TABLE auth_email_tokens
+        ADD COLUMN activated_at TEXT NULL;
+        UPDATE auth_email_tokens
+        SET activated_at = created_at
+        WHERE activated_at IS NULL;
+        CREATE INDEX idx_auth_email_tokens_active_user_purpose
+            ON auth_email_tokens(user_id, purpose, activated_at, consumed_at);
+        """,
+    ),
 )
 
 

@@ -234,6 +234,44 @@ def _email_sender() -> SmtpEmailSender:
     )
 
 
+def _send_verification_email(
+    deps: Dependencies, *, user_id: str, recipient: str, now: datetime
+) -> bool:
+    """Deliver a staged verification token before rotating the active token."""
+    token, token_id = deps.verification.issue_pending(user_id=user_id, now=now)
+    verify_url = os.environ.get(
+        "EMAIL_VERIFICATION_URL", "http://localhost:8000/verify-email"
+    )
+    verification_link = _token_fragment_link(verify_url, token)
+    try:
+        deps.email_sender.send_text(
+            recipient=recipient,
+            subject="Verify your Gatherly email",
+            body=(
+                "Confirm your email address using this one-time token:\n\n"
+                f"{verification_link}\n\n"
+                "If you did not create this account, you can ignore this email."
+            ),
+        )
+    except Exception as error:
+        try:
+            deps.verification.discard_pending(token_id=token_id, now=now)
+        except Exception as cleanup_error:
+            logger.error(
+                "Failed to discard pending verification token (%s)",
+                type(cleanup_error).__name__,
+            )
+        logger.warning(
+            "Registration verification email delivery failed (%s)", type(error).__name__
+        )
+        return False
+
+    if not deps.verification.activate_pending(token_id=token_id, now=now):
+        logger.error("Verification token activation failed after email delivery")
+        return False
+    return True
+
+
 def create_app(database_path: str | Path | None = None) -> FastAPI:
     """Create an API app; tests may inject a temporary SQLite database path."""
     validate_runtime_configuration(os.environ)
@@ -535,26 +573,12 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=409, detail="An account may already exist for this email"
             ) from error
-        token = deps.verification.issue(user_id=identity.user_id, now=now)
-        verify_url = os.environ.get(
-            "EMAIL_VERIFICATION_URL", "http://localhost:8000/verify-email"
-        )
-        verification_link = _token_fragment_link(verify_url, token)
-        try:
-            deps.email_sender.send_text(
-                recipient=identity.provider_subject,
-                subject="Verify your Gatherly email",
-                body=(
-                    "Confirm your email address using this one-time token:\n\n"
-                    f"{verification_link}\n\n"
-                    "If you did not create this account, you can ignore this email."
-                ),
-            )
-        except Exception as error:
-            logger.warning(
-                "Registration verification email delivery failed (%s)",
-                type(error).__name__,
-            )
+        if not _send_verification_email(
+            deps,
+            user_id=identity.user_id,
+            recipient=identity.provider_subject,
+            now=now,
+        ):
             raise HTTPException(
                 status_code=503, detail="Email delivery is temporarily unavailable"
             ) from None
@@ -583,28 +607,12 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             )
         )
         if identity is not None and identity.verified_at is None:
-            token = deps.verification.issue(user_id=identity.user_id, now=now)
-            verify_url = os.environ.get(
-                "EMAIL_VERIFICATION_URL", "http://localhost:8000/verify-email"
+            _send_verification_email(
+                deps,
+                user_id=identity.user_id,
+                recipient=identity.provider_subject,
+                now=now,
             )
-            verification_link = _token_fragment_link(verify_url, token)
-            try:
-                deps.email_sender.send_text(
-                    recipient=identity.provider_subject,
-                    subject="Verify your Gatherly email",
-                    body=(
-                        "Confirm your email address using this one-time token:\n\n"
-                        f"{verification_link}\n\n"
-                        "If you did not create this account, you can ignore this email."
-                    ),
-                )
-            except Exception as error:
-                logger.warning(
-                    "Registration verification email delivery failed (%s)",
-                    type(error).__name__,
-                )
-                # Keep the resend response indistinguishable for known and unknown
-                # addresses, even when delivery fails for a real account.
         return {
             "message": (
                 "If an unverified account exists for that email address, "

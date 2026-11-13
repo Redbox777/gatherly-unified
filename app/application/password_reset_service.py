@@ -35,6 +35,32 @@ class PasswordResetService:
         )
         return issued.raw
 
+    def issue_pending(self, *, user_id: str, now: datetime) -> tuple[str, str]:
+        """Stage a reset token without invalidating the current delivered token."""
+        self._require_aware(now)
+        issued = issue_token()
+        token_id = self._repository.create_pending_password_reset_token(
+            user_id=user_id,
+            token_digest=issued.digest,
+            now=now,
+            expires_at=now + self._lifetime,
+        )
+        return issued.raw, token_id
+
+    def activate_pending(self, *, token_id: str, now: datetime) -> bool:
+        """Activate a staged reset token after successful email delivery."""
+        self._require_aware(now)
+        return self._repository.activate_pending_token(
+            token_id=token_id, purpose="reset_password", now=now
+        )
+
+    def discard_pending(self, *, token_id: str, now: datetime) -> bool:
+        """Discard a staged reset token after an unsuccessful delivery attempt."""
+        self._require_aware(now)
+        return self._repository.discard_pending_token(
+            token_id=token_id, purpose="reset_password", now=now
+        )
+
     def reset_password(
         self, *, raw_token: str, new_password: str, now: datetime
     ) -> bool:

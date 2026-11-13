@@ -1,8 +1,17 @@
 import sqlite3
+from datetime import datetime
 
 import pytest
 
-from app.infrastructure.database.connection import connect, migrate
+from app.domain.auth_tokens import hash_token
+from app.infrastructure.database.auth_email_tokens_repository import AuthEmailTokensRepository
+from app.infrastructure.database.connection import (
+    MIGRATIONS,
+    _execute_migration,
+    connect,
+    migrate,
+    transaction,
+)
 
 
 def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) -> None:
@@ -25,11 +34,85 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             "smtp_rate_limit_events",
         } <= tables
 
+        token_columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(auth_email_tokens)").fetchall()
+        }
+        assert "activated_at" in token_columns
+
         versions = {
             row["version"]
             for row in connection.execute("SELECT version FROM schema_migrations").fetchall()
         }
-        assert versions == {1, 2, 3, 4, 5, 6, 7}
+        assert versions == {1, 2, 3, 4, 5, 6, 7, 8}
+    finally:
+        connection.close()
+
+
+
+
+def test_migration_preserves_existing_active_email_tokens(tmp_path) -> None:
+    connection = connect(tmp_path / "legacy-auth.sqlite3")
+    try:
+        connection.execute(
+            "CREATE TABLE schema_migrations "
+            "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
+        )
+        connection.commit()
+        for version, script in MIGRATIONS[:-1]:
+            with transaction(connection):
+                _execute_migration(connection, script)
+                connection.execute(
+                    "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
+                    (version, "2026-10-12T00:00:00Z"),
+                )
+
+        created_at = "2026-10-12T12:00:00.000000Z"
+        expires_at = "2026-10-13T12:00:00.000000Z"
+        connection.execute(
+            "INSERT INTO users(id, created_at) VALUES (?, ?)",
+            ("legacy-user", created_at),
+        )
+        connection.execute(
+            """INSERT INTO auth_identities(
+                id, user_id, provider, provider_subject, password_hash,
+                verified_at, created_at
+            ) VALUES (?, ?, 'email', ?, ?, NULL, ?)""",
+            (
+                "legacy-identity",
+                "legacy-user",
+                "legacy@example.test",
+                "password-hash",
+                created_at,
+            ),
+        )
+        raw_token = "legacy-verification-token"
+        connection.execute(
+            """INSERT INTO auth_email_tokens(
+                id, user_id, token_hash, purpose, created_at, expires_at, consumed_at
+            ) VALUES (?, ?, ?, 'verify_email', ?, ?, NULL)""",
+            (
+                "legacy-token",
+                "legacy-user",
+                hash_token(raw_token),
+                created_at,
+                expires_at,
+            ),
+        )
+        connection.commit()
+
+        migrate(connection)
+
+        stored = connection.execute(
+            "SELECT activated_at, consumed_at FROM auth_email_tokens WHERE id = ?",
+            ("legacy-token",),
+        ).fetchone()
+        assert stored["activated_at"] == created_at
+        assert stored["consumed_at"] is None
+        assert AuthEmailTokensRepository(connection).consume_verification_token(
+            raw_token=raw_token,
+            now=datetime.fromisoformat("2026-10-12T12:01:00+00:00"),
+        )
     finally:
         connection.close()
 

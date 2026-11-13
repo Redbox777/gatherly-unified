@@ -34,6 +34,32 @@ class EmailVerificationService:
         )
         return issued.raw
 
+    def issue_pending(self, *, user_id: str, now: datetime) -> tuple[str, str]:
+        """Stage a token while keeping the previously delivered token usable."""
+        self._require_aware(now)
+        issued = issue_token()
+        token_id = self._repository.create_pending_verification_token(
+            user_id=user_id,
+            token_digest=issued.digest,
+            now=now,
+            expires_at=now + self._lifetime,
+        )
+        return issued.raw, token_id
+
+    def activate_pending(self, *, token_id: str, now: datetime) -> bool:
+        """Activate a staged token only after its email was accepted for delivery."""
+        self._require_aware(now)
+        return self._repository.activate_pending_token(
+            token_id=token_id, purpose="verify_email", now=now
+        )
+
+    def discard_pending(self, *, token_id: str, now: datetime) -> bool:
+        """Discard a staged token after an unsuccessful delivery attempt."""
+        self._require_aware(now)
+        return self._repository.discard_pending_token(
+            token_id=token_id, purpose="verify_email", now=now
+        )
+
     def verify(self, *, raw_token: str, now: datetime) -> bool:
         """Verify and consume a token; invalid, expired, or reused tokens return False."""
         self._require_aware(now)

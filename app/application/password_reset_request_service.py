@@ -58,7 +58,7 @@ class PasswordResetRequestService:
         ):
             return GENERIC_RESPONSE
 
-        token = self._resets.issue(user_id=identity.user_id, now=now)
+        token, token_id = self._resets.issue_pending(user_id=identity.user_id, now=now)
         link = f"{self._reset_url.split('#', maxsplit=1)[0]}#{urlencode({'token': token})}"
         try:
             self._email_sender.send_text(
@@ -71,9 +71,20 @@ class PasswordResetRequestService:
                 ),
             )
         except Exception as error:
-            # Keep operational diagnostics without exposing the address or SMTP detail.
+            # A failed send must not invalidate a previously delivered reset link.
+            try:
+                self._resets.discard_pending(token_id=token_id, now=now)
+            except Exception as cleanup_error:
+                logger.error(
+                    "Failed to discard pending password reset token (%s)",
+                    type(cleanup_error).__name__,
+                )
             logger.warning(
                 "Password reset email delivery failed (%s)",
                 type(error).__name__,
             )
+            return GENERIC_RESPONSE
+
+        if not self._resets.activate_pending(token_id=token_id, now=now):
+            logger.error("Password reset token activation failed after email delivery")
         return GENERIC_RESPONSE

@@ -30,6 +30,14 @@ Each page removes the fragment from browser history and submits the token in a J
 POST body to the corresponding authentication endpoint. The pages use no-store caching
 and a no-referrer policy.
 
+## Email token delivery and rotation
+
+Verification and password-reset tokens are staged as inactive before an email is sent.
+Only after the SMTP adapter reports successful delivery is the new token activated and
+the previous active token retired. If delivery fails, the staged token is discarded
+and the previously delivered link remains usable. Existing active tokens are preserved
+when the database is upgraded to the staged-token schema.
+
 ## Outbound email rate limits
 
 Outbound email attempts are limited in shared SQLite storage, so quotas apply across
