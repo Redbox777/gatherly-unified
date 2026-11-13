@@ -137,6 +137,17 @@ class NotificationsRepository:
         ).fetchall()
         return [int(row["offset_minutes"]) for row in rows]
 
+    def clear_pending_event_reminders(self, *, event_id: str) -> int:
+        """Discard unsent reminders when an owner changes the event schedule."""
+        with transaction(self._connection):
+            cursor = self._connection.execute(
+                """DELETE FROM notifications
+                   WHERE event_id = ? AND kind = 'event_reminder'
+                     AND email_sent_at IS NULL""",
+                (event_id,),
+            )
+        return cursor.rowcount
+
     def materialize_due_reminders(self, *, now: datetime) -> int:
         """Create one inbox item per recipient/reminder; unique keys prevent duplicates."""
         if now.tzinfo is None or now.utcoffset() is None:
