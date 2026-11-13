@@ -10,6 +10,7 @@
     scrim.hidden = true;
     toggle.setAttribute("aria-expanded", "false");
     toggle.setAttribute("aria-label", "Открыть меню");
+    toggle.querySelector("use")?.setAttribute("href", "#icon-menu");
   };
 
   const openMenu = () => {
@@ -17,6 +18,7 @@
     scrim.hidden = false;
     toggle.setAttribute("aria-expanded", "true");
     toggle.setAttribute("aria-label", "Закрыть меню");
+    toggle.querySelector("use")?.setAttribute("href", "#icon-close");
   };
 
   toggle.addEventListener("click", () => {

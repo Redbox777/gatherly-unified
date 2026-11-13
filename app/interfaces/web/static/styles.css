@@ -1,9 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;700;800&display=swap');
-
-:root{color-scheme:light;--ink:#102c35;--muted:#70858b;--deep:#082d37;--teal:#079da4;--aqua:#36c8bd;--mint:#dff5ef;--line:#e5eeed;--paper:#f7faf9;--white:#fff;--shadow:0 18px 50px rgba(14,54,62,.08);font-family:Inter,Arial,sans-serif}
+:root{color-scheme:light;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--radius-sm:8px;--radius-md:12px;--radius-lg:18px;--ink:#102c35;--muted:#70858b;--deep:#082d37;--teal:#079da4;--aqua:#36c8bd;--mint:#dff5ef;--line:#e5eeed;--paper:#f7faf9;--white:#fff;--shadow:0 18px 50px rgba(14,54,62,.08);font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif}
 .svg-definitions{position:absolute;width:0;height:0;overflow:hidden}*{box-sizing:border-box}
 html{scroll-behavior:smooth}
-body{margin:0;background:var(--paper);color:var(--ink);font-family:Inter,Arial,sans-serif}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif}
 a{color:inherit;text-decoration:none}
 button{font:inherit}
 .app-shell{min-height:100vh}
@@ -11,7 +9,7 @@ button{font:inherit}
 .brand{display:flex;align-items:center;gap:11px;padding:0 8px 48px}
 .brand-mark{width:38px;height:38px;border-radius:13px;background:linear-gradient(145deg,#1bc2bd,#087d91);display:grid;place-items:center;box-shadow:0 7px 20px #00a7a355}
 .brand-mark .magpie-mark{width:31px;height:31px}
-.brand-name{font:700 22px Montserrat, sans-serif;letter-spacing:-1px}.brand-dot{color:#36d0c1}
+.brand-name{font:700 22px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;letter-spacing:-1px}.brand-dot{color:#36d0c1}
 .workspace-label,.eyebrow{font-size:10px;letter-spacing:1.55px;font-weight:700;color:#83a7aa}
 .workspace-label{padding:0 12px 14px}
 .nav-list{display:grid;gap:7px}
@@ -22,7 +20,7 @@ button{font:inherit}
 .sidebar-bottom{margin-top:auto;padding:24px 10px 0}
 .sidebar-bird{width:78px;height:78px;border-radius:24px;background:linear-gradient(145deg,#0b5864,#0a3c4a);display:grid;place-items:center;margin-bottom:15px}
 .sidebar-bird .magpie-mark{width:68px;height:68px}
-.sidebar-note{max-width:170px;color:#b6cdcd;font:500 13px/1.6 Montserrat,sans-serif}
+.sidebar-note{max-width:170px;color:#b6cdcd;font:500 13px/1.6 Inter,sans-serif}
 .sidebar-version{display:block;margin-top:28px;font-size:9px;letter-spacing:1.5px;color:#64878b}
 .main-area{margin-left:250px;min-height:100vh}
 .topbar{height:76px;padding:0 5.1%;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);background:#ffffffd9;backdrop-filter:blur(14px)}
@@ -30,7 +28,7 @@ button{font:inherit}
 .topbar-right{display:flex;align-items:center;gap:18px}
 .preview-pill{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #d8eeea;border-radius:30px;color:#47716f;font-size:10px;font-weight:600;background:#f4fbf8}
 .preview-pill i,.summary-dot{width:7px;height:7px;border-radius:50%;background:#24b8a9;box-shadow:0 0 0 4px #d9f3eb}
-.avatar{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#d8f2ec;color:#087e80;font:700 13px Montserrat}
+.avatar{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#d8f2ec;color:#087e80;font:700 13px Inter}
 .menu-toggle{display:none;border:0;background:transparent;color:var(--ink);font-size:22px}
 .page-content{max-width:1280px;margin:0 auto;padding:52px 5.1% 24px}
 .welcome-row{min-height:300px;border-radius:25px;padding:40px 46px;display:flex;align-items:center;justify-content:space-between;overflow:hidden;position:relative;background:linear-gradient(112deg,#e7f6f2 0%,#f4faf8 53%,#e2f1f2 100%);box-shadow:var(--shadow)}
@@ -38,22 +36,22 @@ button{font:inherit}
 .welcome-row>div:first-child{position:relative;z-index:2;max-width:490px}
 .eyebrow{color:#168f91;margin:0 0 13px}
 h1,h2,h3,p{margin-top:0}
-h1{font:700 clamp(34px,4vw,51px)/1.13 Montserrat,sans-serif;letter-spacing:-2.3px;margin:0 0 14px;color:#102f39}
+h1{font:700 clamp(34px,4vw,51px)/1.13 Inter,sans-serif;letter-spacing:-2.3px;margin:0 0 14px;color:#102f39}
 h1 span{color:#078f96}
 .welcome-copy{max-width:440px;color:#668087;font-size:14px;line-height:1.7;margin:0 0 24px}
 .primary-button{display:inline-flex;align-items:center;gap:22px;background:var(--deep);color:white;border-radius:11px;padding:13px 17px;font-size:12px;font-weight:600;box-shadow:0 8px 18px #092e3725;transition:transform .2s,background .2s}
 .primary-button:hover{transform:translateY(-2px);background:#0b5963}
 .primary-button span{font-size:17px;color:#5ee0d1}
 .welcome-art{width:285px;height:245px;position:relative;display:grid;place-items:center;z-index:1;flex-shrink:0}
-.welcome-art>img{position:relative;width:190px;height:190px;z-index:2;filter:drop-shadow(0 17px 18px #075f6540)}
+.welcome-art>.magpie-mark{position:relative;width:190px;height:190px;z-index:2;filter:drop-shadow(0 17px 18px #075f6540)}
 .art-glow{position:absolute;width:190px;height:190px;border-radius:50%;background:radial-gradient(circle,#6bd7ca7a,#8edbd000 70%)}
 .art-orbit{position:absolute;border:1px solid #2caaa78a;border-radius:50%;transform:rotate(-25deg)}
 .orbit-one{width:250px;height:105px}.orbit-two{width:215px;height:165px;transform:rotate(52deg);border-color:#83c9c1}
-.art-caption{position:absolute;bottom:0;font:600 10px Montserrat;color:#5c8888;letter-spacing:.3px}
+.art-caption{position:absolute;bottom:0;font:600 10px Inter;color:#5c8888;letter-spacing:.3px}
 .section-block{margin-top:45px}
 .section-heading{display:flex;align-items:end;justify-content:space-between;margin-bottom:18px}
 .section-heading .eyebrow{margin-bottom:7px}
-h2{font:700 21px Montserrat,sans-serif;letter-spacing:-.6px;margin:0;color:#16353e}
+h2{font:700 21px Inter,sans-serif;letter-spacing:-.6px;margin:0;color:#16353e}
 .muted-link{font-size:10px;color:#91a5a7;padding-bottom:3px}
 .meeting-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
 .meeting-card{min-height:215px;padding:19px 20px 17px;background:#fff;border:1px solid #e9f0ee;border-radius:17px;box-shadow:0 7px 22px #123b4108;transition:transform .2s,box-shadow .2s}
@@ -64,7 +62,7 @@ h2{font:700 21px Montserrat,sans-serif;letter-spacing:-.6px;margin:0;color:#1635
 .card-menu{font-size:13px;letter-spacing:2px;color:#a4b5b4}
 .meeting-symbol{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;margin:15px 0 11px;font-size:19px}
 .symbol-teal{background:#e3f6ef;color:#078d8d}.symbol-blue{background:#eaf3f9;color:#4085a4}
-.meeting-card h3{font:600 14px Montserrat,sans-serif;margin:0 0 7px;color:#1a3b43}
+.meeting-card h3{font:600 14px Inter,sans-serif;margin:0 0 7px;color:#1a3b43}
 .meeting-meta{font-size:10px;color:#84999b;margin-bottom:15px}.meeting-meta span{padding:0 5px;color:#c0cecb}
 .card-footer{border-top:1px solid #eef3f1;padding-top:12px;display:flex;align-items:center;justify-content:space-between}
 .avatar-stack{display:flex;align-items:center;padding-left:2px}
@@ -85,15 +83,30 @@ h2{font:700 21px Montserrat,sans-serif;letter-spacing:-.6px;margin:0;color:#1635
 .tip-spark{position:absolute;right:22px;top:12px;color:#5ed6cb;font-size:30px}
 .summary-card{background:#fff;border:1px solid var(--line)}
 .summary-head{display:flex;align-items:center;justify-content:space-between;color:#789093;font-size:10px}
-.summary-number{font:600 18px Montserrat,sans-serif;margin:19px 0 7px;color:#29464d}
+.summary-number{font:600 18px Inter,sans-serif;margin:19px 0 7px;color:#29464d}
 .summary-number strong{color:#07979b}
 .summary-card p{font-size:10px;color:#8ba0a0;margin:0}
 .summary-line{height:3px;background:#e9f4f0;border-radius:5px;margin-top:16px}.summary-line span{display:block;width:65%;height:100%;background:linear-gradient(90deg,#20b6aa,#74d9c9);border-radius:5px}
 .page-footer{display:flex;justify-content:space-between;padding:25px 2px 4px;color:#9aabab;font-size:9px}
-.page-footer span:first-child{font:700 11px Montserrat;color:#66898a}
+.page-footer span:first-child{font:700 11px Inter;color:#66898a}
 .mobile-scrim{display:none}
 
 @media(max-width:1050px){.sidebar{width:220px}.main-area{margin-left:220px}.page-content{padding-left:4%;padding-right:4%}.welcome-row{padding:34px}.meeting-grid{gap:11px}.meeting-card{padding:16px}}
-@media(max-width:760px){.sidebar{width:270px;transform:translateX(-100%);transition:transform .25s ease;box-shadow:15px 0 40px #082d3730}.sidebar.open{transform:translateX(0)}.main-area{margin-left:0}.topbar{height:62px;padding:0 18px}.menu-toggle{display:block}.breadcrumb{margin-right:auto;margin-left:12px;font-size:10px}.topbar-right{gap:10px}.preview-pill{font-size:0;padding:8px}.preview-pill i{width:8px;height:8px}.avatar{width:31px;height:31px}.page-content{padding:25px 17px 18px}.welcome-row{padding:28px 23px 22px;min-height:0;display:block;border-radius:19px}.welcome-row:after{right:-190px;top:-120px}.welcome-row>div:first-child{max-width:100%}h1{font-size:35px;letter-spacing:-1.7px}.welcome-copy{font-size:12px;max-width:330px}.primary-button{font-size:11px;padding:12px 14px}.welcome-art{height:160px;width:100%;margin-top:10px}.welcome-art>img{width:128px;height:128px}.art-glow{width:130px;height:130px}.orbit-one{width:190px;height:80px}.orbit-two{width:160px;height:125px}.art-caption{bottom:0;font-size:9px}.section-block{margin-top:31px}.section-heading{align-items:end}.section-heading h2{font-size:18px}.muted-link{font-size:9px}.meeting-grid{grid-template-columns:1fr;gap:10px}.meeting-card{min-height:0;padding:16px}.meeting-symbol{margin:12px 0 9px}.card-footer{padding-top:10px}.add-card{min-height:140px}.bottom-grid{grid-template-columns:1fr;gap:10px;margin-top:13px}.tip-card,.summary-card{min-height:132px;padding:19px}.tip-bird{width:61px;height:61px;border-radius:18px}.tip-bird .magpie-mark{width:55px;height:55px}.tip-card h2{font-size:15px}.tip-card p:last-child{font-size:9px}.page-footer{padding-top:20px;font-size:8px}.mobile-scrim:not([hidden]){display:block;position:fixed;inset:0;background:#071e2580;z-index:15}}
+@media(max-width:760px){.sidebar{width:270px;transform:translateX(-100%);transition:transform .25s ease;box-shadow:15px 0 40px #082d3730}.sidebar.open{transform:translateX(0)}.main-area{margin-left:0}.topbar{height:62px;padding:0 18px}.menu-toggle{display:block}.breadcrumb{margin-right:auto;margin-left:12px;font-size:10px}.topbar-right{gap:10px}.preview-pill{font-size:0;padding:8px}.preview-pill i{width:8px;height:8px}.avatar{width:31px;height:31px}.page-content{padding:25px 17px 18px}.welcome-row{padding:28px 23px 22px;min-height:0;display:block;border-radius:19px}.welcome-row:after{right:-190px;top:-120px}.welcome-row>div:first-child{max-width:100%}h1{font-size:35px;letter-spacing:-1.7px}.welcome-copy{font-size:12px;max-width:330px}.primary-button{font-size:11px;padding:12px 14px}.welcome-art{height:160px;width:100%;margin-top:10px}.welcome-art>.magpie-mark{width:128px;height:128px}.art-glow{width:130px;height:130px}.orbit-one{width:190px;height:80px}.orbit-two{width:160px;height:125px}.art-caption{bottom:0;font-size:9px}.section-block{margin-top:31px}.section-heading{align-items:end}.section-heading h2{font-size:18px}.muted-link{font-size:9px}.meeting-grid{grid-template-columns:1fr;gap:10px}.meeting-card{min-height:0;padding:16px}.meeting-symbol{margin:12px 0 9px}.card-footer{padding-top:10px}.add-card{min-height:140px}.bottom-grid{grid-template-columns:1fr;gap:10px;margin-top:13px}.tip-card,.summary-card{min-height:132px;padding:19px}.tip-bird{width:61px;height:61px;border-radius:18px}.tip-bird .magpie-mark{width:55px;height:55px}.tip-card h2{font-size:15px}.tip-card p:last-child{font-size:9px}.page-footer{padding-top:20px;font-size:8px}.mobile-scrim:not([hidden]){display:block;position:fixed;inset:0;background:#071e2580;z-index:15}}
 @media(max-width:380px){.breadcrumb{font-size:9px}.page-content{padding-left:12px;padding-right:12px}.welcome-row{padding:24px 18px 20px}.tip-card{gap:12px;padding:16px}.tip-bird{width:52px;height:52px}.tip-bird .magpie-mark{width:48px;height:48px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
+
+
+/* Local icon set and consistent interaction states */
+.ui-icon{width:20px;height:20px;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.nav-icon{width:19px;height:19px;font-size:inherit}
+.button-icon{width:16px;height:16px}
+.meeting-icon{width:20px;height:20px}
+.menu-toggle{width:40px;height:40px;display:none;align-items:center;justify-content:center;border-radius:10px;cursor:pointer}
+.menu-toggle:hover{background:#eaf5f2}
+a:focus-visible,button:focus-visible{outline:3px solid #27bdb2;outline-offset:3px;border-radius:8px}
+.nav-link:focus-visible{outline-offset:1px}
+.primary-button:active{transform:translateY(0);box-shadow:0 3px 8px #092e3725}
+.add-circle .ui-icon{width:19px;height:19px}
+@media(max-width:760px){.menu-toggle{display:flex}}
+@media(prefers-reduced-motion:reduce){.meeting-card:hover,.primary-button:hover{transform:none}}
