@@ -460,7 +460,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
       const status = document.getElementById("status");
       button.addEventListener("click", async () => {
         if (!token) {
-          status.textContent = "В ссылке нет токена. Запросите новое письмо для подтверждения почты.";
+          status.textContent = "В ссылке нет токена. " +
+            "Запросите новое письмо для подтверждения почты.";
           return;
         }
         button.disabled = true;
