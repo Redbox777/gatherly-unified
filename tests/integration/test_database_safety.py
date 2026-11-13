@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from app.infrastructure.database.connection import connect, migrate, transaction
+from app.infrastructure.database.connection import MIGRATIONS, connect, migrate, transaction
 
 
 def test_connect_enables_foreign_keys_and_busy_timeout(tmp_path) -> None:
@@ -310,3 +310,32 @@ def test_deleting_participant_cascades_to_invitations(tmp_path) -> None:
         assert count == 0
     finally:
         connection.close()
+
+
+
+def test_concurrent_migration_runners_apply_each_version_once(tmp_path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    database_path = tmp_path / "concurrent-migrations.sqlite3"
+    start = Barrier(2)
+
+    def run_migrations() -> list[int]:
+        connection = connect(database_path)
+        try:
+            start.wait(timeout=5)
+            migrate(connection)
+            return [
+                row["version"]
+                for row in connection.execute(
+                    "SELECT version FROM schema_migrations ORDER BY version"
+                ).fetchall()
+            ]
+        finally:
+            connection.close()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: run_migrations(), range(2)))
+
+    expected = [version for version, _ in MIGRATIONS]
+    assert results == [expected, expected]

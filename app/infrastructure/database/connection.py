@@ -131,50 +131,71 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
 
 
 def connect(database_path: str | Path) -> sqlite3.Connection:
+    """Open an independent SQLite connection for one unit of application work.
+
+    HTTP requests each receive their own connection. check_same_thread=False
+    is retained because FastAPI may create a synchronous dependency in one
+    worker thread and execute its endpoint in another; the connection is never
+    shared between different requests.
+    """
     path = str(database_path)
     if path != ":memory:":
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(path, check_same_thread=False)
+    connection = sqlite3.connect(path, timeout=5.0, check_same_thread=False)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     connection.execute("PRAGMA busy_timeout = 5000")
     return connection
 
 
+def _execute_migration(connection: sqlite3.Connection, script: str) -> None:
+    """Execute a migration script without implicitly committing its transaction."""
+    pending: list[str] = []
+    for line in script.splitlines():
+        pending.append(line)
+        statement = "\n".join(pending)
+        if sqlite3.complete_statement(statement):
+            if statement.strip():
+                connection.execute(statement)
+            pending.clear()
+    if any(line.strip() for line in pending):
+        raise sqlite3.OperationalError("Incomplete SQL migration statement")
+
+
 def migrate(connection: sqlite3.Connection) -> None:
-    connection.execute(
-        "CREATE TABLE IF NOT EXISTS schema_migrations "
-        "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
-    )
-    connection.commit()
+    """Apply each migration while holding SQLite's cross-connection write lock."""
+    with transaction(connection):
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS schema_migrations "
+            "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
+        )
+
     for version, sql in MIGRATIONS:
-        applied = connection.execute(
-            "SELECT 1 FROM schema_migrations WHERE version = ?", (version,)
-        ).fetchone()
-        if applied:
-            continue
-        try:
-            connection.executescript(
-                "BEGIN IMMEDIATE;\n"
-                + sql
-                + f"\nINSERT INTO schema_migrations(version, applied_at) "
-                f"VALUES ({version}, strftime('%Y-%m-%dT%H:%M:%fZ','now'));\nCOMMIT;"
+        # BEGIN IMMEDIATE serializes migration runners. Re-check the version
+        # only after obtaining the lock so a second process sees the first
+        # process's committed migration instead of applying it twice.
+        with transaction(connection):
+            applied = connection.execute(
+                "SELECT 1 FROM schema_migrations WHERE version = ?", (version,)
+            ).fetchone()
+            if applied:
+                continue
+            _execute_migration(connection, sql)
+            connection.execute(
+                "INSERT INTO schema_migrations(version, applied_at) "
+                "VALUES (?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+                (version,),
             )
-        except sqlite3.Error:
-            connection.rollback()
-            raise
 
 
 @contextmanager
 def transaction(connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     """Run a group of database operations atomically.
 
-    The caller owns the transaction boundary. Repositories must not commit
-    when this helper is used, because doing so would break atomicity.
+    Each request owns its connection, so transaction state cannot be changed
+    by another request. Nested transactions remain deliberately unsupported.
     """
     if connection.in_transaction:
-        # Nested use is deliberately rejected rather than silently committing
-        # or accidentally taking ownership of a caller's transaction.
         raise RuntimeError("Cannot start a transaction while another is active")
     try:
         connection.execute("BEGIN IMMEDIATE")
