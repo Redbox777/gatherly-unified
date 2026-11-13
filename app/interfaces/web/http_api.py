@@ -93,6 +93,11 @@ def _is_same_origin(candidate: str, request_url: str, *, origin_header: bool) ->
     )
 
 
+GENERIC_REGISTRATION_RESPONSE = {
+    "message": "If registration can be completed, verification instructions will be sent."
+}
+
+
 GENERIC_RESET_RESPONSE = {
     "message": (
         "If an eligible account exists for that email address, "
@@ -569,24 +574,18 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             )
         except ValueError as error:
             raise HTTPException(status_code=422, detail="Invalid registration data") from error
-        except sqlite3.IntegrityError as error:
-            raise HTTPException(
-                status_code=409, detail="An account may already exist for this email"
-            ) from error
-        if not _send_verification_email(
+        except sqlite3.IntegrityError:
+            # Do not reveal whether this email already belongs to an account.
+            return GENERIC_REGISTRATION_RESPONSE
+        _send_verification_email(
             deps,
             user_id=identity.user_id,
             recipient=identity.provider_subject,
             now=now,
-        ):
-            raise HTTPException(
-                status_code=503, detail="Email delivery is temporarily unavailable"
-            ) from None
-        return {
-            "message": (
-                "If registration can be completed, verification instructions will be sent."
-            )
-        }
+        )
+        # Delivery failures use the same public response; the user can request
+        # another verification message without learning whether an account exists.
+        return GENERIC_REGISTRATION_RESPONSE
 
     @app.post("/auth/verification/request", status_code=status.HTTP_202_ACCEPTED)
     def request_verification(
