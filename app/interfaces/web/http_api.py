@@ -262,7 +262,7 @@ def _send_verification_email(
                 type(cleanup_error).__name__,
             )
         logger.warning(
-            "Verification email delivery failed (%s)", type(error).__name__
+            "Registration verification email delivery failed (%s)", type(error).__name__
         )
         return False
 
