@@ -65,7 +65,9 @@ relying on source-address quotas behind a reverse proxy.
 
 For deployments behind a reverse proxy, optionally set `TRUSTED_PROXY_CIDRS` to a
 comma-separated list of the proxy IP addresses or CIDR ranges that connect directly to
-the app. Only when the immediate peer matches this allowlist does Gatherly inspect
+the app. Run Uvicorn with `--no-proxy-headers` so the ASGI `request.client` remains the
+raw TCP peer; Gatherly performs the trusted-proxy resolution itself. Only when that
+immediate peer matches this allowlist does Gatherly inspect
 `X-Forwarded-For`, walking the chain from right to left and skipping trusted proxies.
 Malformed forwarding chains fall back to the direct peer address. Without this setting,
 forwarding headers are ignored. Restrict network access so clients cannot bypass the
