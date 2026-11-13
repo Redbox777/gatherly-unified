@@ -274,7 +274,7 @@ def test_identity_token_migration_refuses_ambiguous_legacy_ownership(tmp_path) -
             "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
         )
         connection.commit()
-        for version, script in MIGRATIONS[:-2]:
+        for version, script in MIGRATIONS[:8]:
             with transaction(connection):
                 _execute_migration(connection, script)
                 connection.execute(
