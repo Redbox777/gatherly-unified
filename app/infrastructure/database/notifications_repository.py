@@ -192,7 +192,7 @@ class NotificationsRepository:
                             str(uuid4()), user_id, event_id,
                             "Скоро встреча",
                             f"«{row['title']}» начнётся через {row['offset_minutes']} мин.",
-                            f"reminder:{event_id}:{row['offset_minutes']}:{user_id}",
+                            f"reminder:{event_id}:{starts_at.isoformat()}:{row['offset_minutes']}:{user_id}",
                             self._format(now_utc),
                         ),
                     )
