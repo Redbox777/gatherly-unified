@@ -25,7 +25,7 @@ dev = [
 [tool.setuptools.packages.find]
 include = ["app*"]
 
-[tool.pytest.ini_options]
+[tool.setuptools.package-data]\n"app.interfaces.web" = ["static/*"]\n\n[tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 
