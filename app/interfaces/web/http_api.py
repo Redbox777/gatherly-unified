@@ -760,6 +760,125 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=401, detail="Authentication required")
         return {"user_id": user_id}
 
+    @app.get("/notifications")
+    def list_notifications(request: Request, deps: ServiceDependency) -> dict[str, object]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        return {
+            "items": deps.notifications.list_for_user(user_id=user_id),
+            "unread_count": deps.notifications.unread_count(user_id=user_id),
+        }
+
+    @app.post("/notifications/{notification_id}/read")
+    def mark_notification_read(
+        notification_id: UUID, request: Request, deps: ServiceDependency
+    ) -> dict[str, bool]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        changed = deps.notifications.mark_read(
+            user_id=user_id,
+            notification_id=str(notification_id),
+            now=datetime.now(UTC),
+        )
+        if not changed:
+            raise HTTPException(status_code=404, detail="Notification not found")
+        return {"read": True}
+
+    @app.get("/notification-preferences")
+    def get_notification_preferences(
+        request: Request, deps: ServiceDependency
+    ) -> dict[str, bool]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        return deps.notifications.get_preferences(user_id=user_id)
+
+    @app.put("/notification-preferences")
+    def update_notification_preferences(
+        payload: NotificationPreferencesRequest,
+        request: Request,
+        deps: ServiceDependency,
+    ) -> dict[str, bool]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        return deps.notifications.set_preferences(
+            user_id=user_id,
+            values=payload.model_dump(),
+            now=datetime.now(UTC),
+        )
+
+    @app.get("/events/{event_id}/reminders")
+    def get_event_reminders(
+        event_id: UUID, request: Request, deps: ServiceDependency
+    ) -> dict[str, list[int]]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        owner_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        try:
+            deps.events.get_event(event_id=event_id, owner_id=owner_id)
+        except EventNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Event not found") from error
+        return {
+            "offsets_minutes": deps.notifications.get_event_reminders(
+                event_id=str(event_id), owner_id=owner_id
+            )
+        }
+
+    @app.put("/events/{event_id}/reminders")
+    def update_event_reminders(
+        event_id: UUID,
+        payload: EventReminderRequest,
+        request: Request,
+        deps: ServiceDependency,
+    ) -> dict[str, list[int]]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        owner_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        try:
+            event = deps.events.get_event(event_id=event_id, owner_id=owner_id)
+        except EventNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Event not found") from error
+        if payload.offsets_minutes and event.starts_at is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Set the event date and time before enabling reminders",
+            )
+        try:
+            deps.notifications.set_event_reminders(
+                event_id=str(event_id),
+                owner_id=owner_id,
+                offsets=payload.offsets_minutes,
+                now=datetime.now(UTC),
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail="Unsupported reminder offset") from error
+        return {
+            "offsets_minutes": deps.notifications.get_event_reminders(
+                event_id=str(event_id), owner_id=owner_id
+            )
+        }
+
     @app.post("/auth/password/change")
     def change_password(
         payload: ChangePasswordRequest,
