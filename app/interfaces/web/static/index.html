@@ -68,6 +68,15 @@
       <section class="notification-panel" id="notification-panel" hidden aria-labelledby="notification-heading">
         <div class="notification-panel-heading"><h2 id="notification-heading">Уведомления</h2><button type="button" id="notification-close" class="text-button">Закрыть</button></div>
         <div id="notification-list" class="notification-list" aria-live="polite"><p class="notification-empty">Загрузка…</p></div>
+        <details class="notification-settings">
+          <summary>Настройки уведомлений</summary>
+          <label><input type="checkbox" id="pref-email"> Электронная почта</label>
+          <label><input type="checkbox" id="pref-updates"> Изменения встреч</label>
+          <label><input type="checkbox" id="pref-participants"> Новые участники</label>
+          <label><input type="checkbox" id="pref-reminders"> Напоминания</label>
+          <button type="button" class="secondary-button" id="preferences-save">Сохранить настройки</button>
+          <p class="participant-status" id="preferences-status" role="status" aria-live="polite"></p>
+        </details>
       </section>
 
       <div class="page-content">
