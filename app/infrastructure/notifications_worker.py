@@ -5,6 +5,7 @@ import os
 
 from app.infrastructure.database.connection import connect, migrate
 from app.infrastructure.database.notifications_repository import NotificationsRepository
+from app.infrastructure.database.smtp_rate_limits_repository import SmtpRateLimitsRepository
 from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
 
 
@@ -17,6 +18,7 @@ def run_once(database_path: str | None = None) -> tuple[int, int]:
     try:
         migrate(connection)
         repository = NotificationsRepository(connection)
+        rate_limits = SmtpRateLimitsRepository(connection)
         now = datetime.now(UTC)
         created = repository.materialize_due_reminders(now=now)
         sender = SmtpEmailSender(
@@ -30,6 +32,14 @@ def run_once(database_path: str | None = None) -> tuple[int, int]:
         )
         sent = 0
         for message in repository.pending_email():
+            attempt_time = datetime.now(UTC)
+            retry_after = rate_limits.consume(
+                recipient=message["email"],
+                requester="notification-worker",
+                now=attempt_time,
+            )
+            if retry_after is not None:
+                continue
             try:
                 sender.send_text(
                     recipient=message["email"],
