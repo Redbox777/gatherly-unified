@@ -583,6 +583,44 @@ def test_state_changing_auth_request_allows_same_origin(tmp_path) -> None:
     assert response.status_code == 200
 
 
+def test_cookie_authenticated_state_change_requires_origin_or_referer(
+    tmp_path,
+) -> None:
+    app = create_app(tmp_path / "csrf-cookie-origin-required.sqlite3")
+    with TestClient(app) as client:
+        response = client.post(
+            "/auth/logout",
+            cookies={"gatherly_session": "session-token"},
+        )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Cross-origin request rejected"}
+
+
+def test_cookie_authenticated_state_change_accepts_same_origin_referer(
+    tmp_path,
+) -> None:
+    app = create_app(tmp_path / "csrf-cookie-referer.sqlite3")
+    with TestClient(app) as client:
+        response = client.post(
+            "/auth/logout",
+            cookies={"gatherly_session": "session-token"},
+            headers={"Referer": "http://testserver/account"},
+        )
+
+    assert response.status_code == 200
+
+
+def test_headerless_state_change_without_session_cookie_remains_allowed(
+    tmp_path,
+) -> None:
+    app = create_app(tmp_path / "csrf-no-cookie.sqlite3")
+    with TestClient(app) as client:
+        response = client.post("/auth/logout")
+
+    assert response.status_code == 200
+
+
 def test_login_rate_limit_returns_retry_after_header(tmp_path) -> None:
     app = create_app(tmp_path / "login-rate-limit.sqlite3")
     with TestClient(app) as client:
