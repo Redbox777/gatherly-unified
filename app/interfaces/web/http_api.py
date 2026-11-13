@@ -363,9 +363,10 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                 # Some clients omit Origin but send Referer. Validate its origin.
                 same_origin = _is_same_origin(referer, request_url, origin_header=False)
             else:
-                # Non-browser API clients may omit both headers. Browser cookie
-                # requests remain constrained by SameSite=Lax session cookies.
-                same_origin = True
+                # Cookie-authenticated state changes must prove their browser
+                # origin. Header-less requests remain available to clients that
+                # do not rely on the server-managed browser session cookie.
+                same_origin = SESSION_COOKIE not in request.cookies
             if not same_origin:
                 return Response(
                     content='{"detail":"Cross-origin request rejected"}',
