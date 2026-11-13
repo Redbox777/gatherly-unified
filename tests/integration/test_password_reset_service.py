@@ -41,7 +41,7 @@ def reset_context(tmp_path):
 
 def test_reset_changes_password_and_token_is_single_use(reset_context) -> None:
     _, identities, identity, reset = reset_context
-    raw_token = reset.issue(user_id=identity.user_id, now=NOW)
+    raw_token = reset.issue(identity_id=identity.identity_id, now=NOW)
 
     assert reset.reset_password(
         raw_token=raw_token,
@@ -63,7 +63,7 @@ def test_reset_changes_password_and_token_is_single_use(reset_context) -> None:
 
 def test_reset_rejects_unknown_expired_and_blank_tokens(reset_context) -> None:
     _, _, identity, reset = reset_context
-    raw_token = reset.issue(user_id=identity.user_id, now=NOW)
+    raw_token = reset.issue(identity_id=identity.identity_id, now=NOW)
 
     assert not reset.reset_password(
         raw_token="unknown-token",
@@ -92,7 +92,7 @@ def test_reset_issue_requires_verified_email(reset_context) -> None:
     reset = PasswordResetService(AuthEmailTokensRepository(connection))
 
     with pytest.raises(ValueError, match="verified email identity"):
-        reset.issue(user_id=identity.user_id, now=NOW)
+        reset.issue(identity_id=identity.identity_id, now=NOW)
 
 
 def test_reset_service_requires_positive_lifetime(reset_context) -> None:
@@ -108,6 +108,6 @@ def test_reset_rejects_naive_datetime(reset_context) -> None:
     _, _, identity, reset = reset_context
     with pytest.raises(ValueError, match="timezone"):
         reset.issue(
-            user_id=identity.user_id,
+            identity_id=identity.identity_id,
             now=datetime(2026, 10, 13, 12, 0),
         )
