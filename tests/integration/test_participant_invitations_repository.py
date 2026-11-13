@@ -305,3 +305,107 @@ def test_cannot_create_invitation_after_participant_is_linked(
     assert connection.execute(
         "SELECT COUNT(*) FROM participant_invitations"
     ).fetchone()[0] == 0
+
+
+
+def test_concurrent_acceptance_cannot_link_one_participant_to_two_accounts(
+    tmp_path,
+) -> None:
+    database_path = tmp_path / "competing-invitation-acceptance.sqlite3"
+    setup_connection = connect(database_path)
+    migrate(setup_connection)
+    setup_connection.execute(
+        """INSERT INTO events(id, owner_id, title, starts_at, created_at)
+           VALUES (?, ?, ?, ?, ?)""",
+        (str(EVENT_ID), "owner-1", "Game night", None, NOW.isoformat()),
+    )
+    setup_connection.execute(
+        """INSERT INTO event_participants(
+               id, event_id, display_name, added_at, linked_user_id
+           ) VALUES (?, ?, ?, ?, NULL)""",
+        (str(PARTICIPANT_ID), str(EVENT_ID), "Alice", NOW.isoformat()),
+    )
+    setup_connection.commit()
+
+    invitation = _invitation()
+    assert ParticipantInvitationsRepository(setup_connection).create_for_owner(
+        invitation, owner_id="owner-1", event_id=EVENT_ID, now=NOW
+    )
+
+    # Both accounts have verified addresses that normalize to the invitation
+    # email. They race with the same bearer token on independent connections.
+    competing_user_ids = ("user-1", "user-2")
+    for user_id, identity_id, email in (
+        ("user-1", "identity-1", "Alice@example.test"),
+        ("user-2", "identity-2", "alice@example.test"),
+    ):
+        setup_connection.execute(
+            "INSERT INTO users(id, created_at) VALUES (?, ?)",
+            (user_id, NOW.isoformat()),
+        )
+        setup_connection.execute(
+            """INSERT INTO auth_identities(
+                   id, user_id, provider, provider_subject, password_hash,
+                   verified_at, created_at
+               ) VALUES (?, ?, 'email', ?, ?, ?, ?)""",
+            (
+                identity_id,
+                user_id,
+                email,
+                "scrypt$test",
+                NOW.isoformat(),
+                NOW.isoformat(),
+            ),
+        )
+    setup_connection.commit()
+
+    connections = (setup_connection, connect(database_path))
+    barrier = Barrier(2)
+
+    def accept(connection: sqlite3.Connection, user_id: str) -> tuple[str, bool]:
+        try:
+            barrier.wait(timeout=5)
+            accepted = ParticipantInvitationsRepository(
+                connection
+            ).accept_for_verified_user(
+                token_hash="digest-1",
+                user_id=user_id,
+                now=NOW + timedelta(minutes=1),
+            )
+            return user_id, accepted
+        finally:
+            connection.close()
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            outcomes = list(
+                executor.map(
+                    lambda args: accept(*args),
+                    zip(connections, competing_user_ids),
+                )
+            )
+
+        assert sorted(accepted for _, accepted in outcomes) == [False, True]
+
+        verification_connection = connect(database_path)
+        try:
+            repository = ParticipantInvitationsRepository(verification_connection)
+            assert repository.get_by_token_hash("digest-1").accepted_at == (
+                NOW + timedelta(minutes=1)
+            )
+            linked_user_id = verification_connection.execute(
+                "SELECT linked_user_id FROM event_participants WHERE id = ?",
+                (str(PARTICIPANT_ID),),
+            ).fetchone()["linked_user_id"]
+            assert linked_user_id in competing_user_ids
+            assert linked_user_id == next(
+                user_id for user_id, accepted in outcomes if accepted
+            )
+        finally:
+            verification_connection.close()
+    finally:
+        for connection in connections:
+            try:
+                connection.close()
+            except sqlite3.Error:
+                pass
