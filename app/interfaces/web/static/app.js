@@ -331,7 +331,7 @@
       card.append(meta, content);
       const actions = document.createElement("div");
       actions.className = "note-actions";
-      if (note.author_id) {
+      if (note.can_edit) {
         const edit = document.createElement("button");
         edit.type = "button";
         edit.className = "text-button";
@@ -346,6 +346,7 @@
         });
         actions.append(edit);
       }
+      if (note.can_delete) {
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "text-button note-delete";
@@ -362,7 +363,8 @@
         }
       });
       actions.append(remove);
-      card.append(actions);
+      }
+      if (actions.childElementCount) card.append(actions);
       notesList.append(card);
     });
   };
