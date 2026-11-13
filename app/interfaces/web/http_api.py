@@ -502,7 +502,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         """Serve the same-origin password-reset page."""
         return HTMLResponse(
             content="""<!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -530,7 +530,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
       </label>
       <button id="submit" type="submit">Сохранить пароль</button>
     </form>
-    <p id="status" role="status" aria-live="polite"></p>
+    <p id="status" role="status" aria-live="polite"></p>\n    <p><a href="/auth.html">Перейти ко входу</a></p>
   </main>
   <script>
     (() => {
@@ -565,7 +565,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
               "Запросите новое письмо для сброса пароля.";
           }
         } catch (_) {
-          status.textContent = "Network error. Check your connection and try again.";
+          status.textContent = "Ошибка соединения. Проверьте интернет и попробуйте ещё раз.";
         } finally {
           button.disabled = false;
         }
