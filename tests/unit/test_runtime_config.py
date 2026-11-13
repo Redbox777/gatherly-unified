@@ -1,6 +1,9 @@
 import pytest
 
-from app.interfaces.web.runtime_config import validate_runtime_configuration
+from app.interfaces.web.runtime_config import (
+    load_smtp_rate_limit_settings,
+    validate_runtime_configuration,
+)
 
 
 def production_settings() -> dict[str, str]:
@@ -25,6 +28,45 @@ def test_development_environment_keeps_local_defaults_available() -> None:
 def test_unknown_environment_is_rejected() -> None:
     with pytest.raises(ValueError, match="APP_ENV"):
         validate_runtime_configuration({"APP_ENV": "staging-ish"})
+
+
+def test_smtp_rate_limit_defaults_preserve_current_policy() -> None:
+    settings = load_smtp_rate_limit_settings({})
+    assert settings.recipient_limit == 3
+    assert settings.recipient_window_seconds == 900
+    assert settings.requester_limit == 5
+    assert settings.requester_window_seconds == 60
+
+
+def test_smtp_rate_limits_can_be_overridden() -> None:
+    settings = load_smtp_rate_limit_settings(
+        {
+            "SMTP_RATE_LIMIT_RECIPIENT_MAX": "8",
+            "SMTP_RATE_LIMIT_RECIPIENT_WINDOW_SECONDS": "1200",
+            "SMTP_RATE_LIMIT_REQUESTER_MAX": "12",
+            "SMTP_RATE_LIMIT_REQUESTER_WINDOW_SECONDS": "90",
+        }
+    )
+    assert settings.recipient_limit == 8
+    assert settings.recipient_window_seconds == 1200
+    assert settings.requester_limit == 12
+    assert settings.requester_window_seconds == 90
+
+
+@pytest.mark.parametrize(
+    ("setting", "value"),
+    [
+        ("SMTP_RATE_LIMIT_RECIPIENT_MAX", "0"),
+        ("SMTP_RATE_LIMIT_RECIPIENT_WINDOW_SECONDS", "86401"),
+        ("SMTP_RATE_LIMIT_REQUESTER_MAX", "not-a-number"),
+        ("SMTP_RATE_LIMIT_REQUESTER_WINDOW_SECONDS", "-1"),
+    ],
+)
+def test_invalid_smtp_rate_limit_configuration_is_rejected(
+    setting: str, value: str
+) -> None:
+    with pytest.raises(ValueError, match=setting):
+        validate_runtime_configuration({setting: value})
 
 
 def test_production_rejects_insecure_session_cookie() -> None:
