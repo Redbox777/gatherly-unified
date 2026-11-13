@@ -128,6 +128,24 @@
               <button type="button" class="secondary-button reminder-save" id="reminder-save">Сохранить напоминания</button>
               <p class="participant-status" id="reminder-status" role="status" aria-live="polite"></p>
             </section>
+            <section class="notes-panel" aria-labelledby="notes-heading">
+              <div class="participants-heading"><h3 id="notes-heading">Заметки</h3><span id="notes-count">0</span></div>
+              <p class="participants-help">Личные записи видны только вам. Общими можно поделиться с участниками, связанными с аккаунтами Gatherly.</p>
+              <div id="notes-list" class="notes-list"><p class="notes-empty">Загрузка заметок…</p></div>
+              <form id="note-form" class="note-form">
+                <label class="sr-only" for="note-content">Текст заметки</label>
+                <textarea id="note-content" maxlength="5000" rows="3" required placeholder="Добавить заметку к встрече…"></textarea>
+                <div class="note-form-footer">
+                  <label for="note-visibility">Видимость</label>
+                  <select id="note-visibility">
+                    <option value="private">Личная</option>
+                    <option value="shared">Общая для участников</option>
+                  </select>
+                  <button type="submit" class="secondary-button" id="note-save">Сохранить заметку</button>
+                </div>
+                <p class="participant-status" id="note-status" role="status" aria-live="polite"></p>
+              </form>
+            </section>
             <section class="participants-panel" aria-labelledby="participants-heading">
               <div class="participants-heading"><h3 id="participants-heading">Участники</h3><span id="participants-count">Загрузка…</span></div>
               <p class="participants-help">Добавьте гостя, затем отправьте приглашение на его подтверждённую почту, чтобы связать запись с аккаунтом Gatherly.</p>
