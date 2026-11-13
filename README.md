@@ -33,12 +33,17 @@ and a no-referrer policy.
 ## Outbound email rate limits
 
 Outbound email attempts are limited in shared SQLite storage, so quotas apply across
-application processes that use the same database. A normalized recipient can receive
-at most 3 messages in 15 minutes across verification, password reset, registration,
-and participant invitations. A source IP can trigger at most 5 outbound email attempts
-per minute across those endpoints. The limiter stores SHA-256 hashes of recipient and
-requester keys rather than raw email addresses or IP addresses. Rate-limited password
-reset and verification-resend requests keep their generic public response.
+application processes that use the same database. Defaults allow at most 3 messages
+per normalized recipient in 15 minutes and 5 outbound email attempts per source IP
+in one minute across registration, verification, password reset, and participant
+invitations. These values can be adjusted with
+`SMTP_RATE_LIMIT_RECIPIENT_MAX`,
+`SMTP_RATE_LIMIT_RECIPIENT_WINDOW_SECONDS`,
+`SMTP_RATE_LIMIT_REQUESTER_MAX`, and
+`SMTP_RATE_LIMIT_REQUESTER_WINDOW_SECONDS`. Limits must be positive integers; windows
+cannot exceed 24 hours. The limiter stores SHA-256 hashes of recipient and requester
+keys rather than raw email addresses or IP addresses. Rate-limited password-reset and
+verification-resend requests keep their generic public response.
 
 ## Participant invitation configuration
 
