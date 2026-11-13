@@ -248,8 +248,8 @@ def _send_verification_email(
             recipient=recipient,
             subject="Verify your Gatherly email",
             body=(
-                "Confirm your email address using this one-time token:\\n\\n"
-                f"{verification_link}\\n\\n"
+                "Confirm your email address using this one-time token:\n\n"
+                f"{verification_link}\n\n"
                 "If you did not create this account, you can ignore this email."
             ),
         )
