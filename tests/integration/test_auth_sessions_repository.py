@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.infrastructure.database.auth_sessions_repository import AuthSessionsRepository
-from app.infrastructure.database.connection import connect, migrate
+from app.infrastructure.database.connection import connect, migrate, transaction
 
 
 NOW = datetime(2026, 10, 12, 12, 0, tzinfo=UTC)
@@ -48,6 +48,11 @@ def test_revoked_session_cannot_authenticate(repository) -> None:
     assert repository.revoke(raw_token=session.raw_token, now=NOW + timedelta(minutes=1))
     assert not repository.revoke(raw_token=session.raw_token, now=NOW + timedelta(minutes=2))
     assert repository.get_active_user_id(raw_token=session.raw_token, now=NOW) is None
+    assert not repository.connection.in_transaction
+    with transaction(repository.connection):
+        repository.connection.execute(
+            "UPDATE users SET created_at = created_at WHERE id = ?", ("user-1",)
+        )
 
 
 def test_session_creation_rejects_naive_or_past_expiry(repository) -> None:
