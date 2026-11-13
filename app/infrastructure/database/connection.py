@@ -266,7 +266,25 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON event_reminder_preferences(owner_id, event_id);
         """,
     ),
-)
+),
+    (
+        12,
+        """
+        CREATE TABLE event_notes (
+            id TEXT PRIMARY KEY,
+            event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            author_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            content TEXT NOT NULL CHECK (length(trim(content)) BETWEEN 1 AND 5000),
+            visibility TEXT NOT NULL CHECK (visibility IN ('private', 'shared')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_event_notes_event_created
+            ON event_notes(event_id, created_at, id);
+        CREATE INDEX idx_event_notes_author
+            ON event_notes(author_id, event_id);
+        """,
+    )
 
  
 def connect(database_path: str | Path) -> sqlite3.Connection:
