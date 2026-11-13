@@ -58,7 +58,7 @@ class PasswordResetRequestService:
         ):
             return GENERIC_RESPONSE
 
-        token, token_id = self._resets.issue_pending(user_id=identity.user_id, now=now)
+        token, token_id = self._resets.issue_pending(identity_id=identity.identity_id, now=now)
         link = f"{self._reset_url.split('#', maxsplit=1)[0]}#{urlencode({'token': token})}"
         try:
             self._email_sender.send_text(
