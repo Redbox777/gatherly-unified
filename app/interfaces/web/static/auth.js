@@ -103,7 +103,7 @@
         return;
       }
       forms.login.reset();
-      showSignedIn();
+      window.location.replace("/");
     } catch (_) {
       setStatus("Нет соединения с сервером. Проверьте интернет и повторите попытку.", "error");
     } finally {
@@ -202,7 +202,7 @@
 
   fetch("/auth/me", { credentials: "same-origin" })
     .then((response) => {
-      if (response.ok) showSignedIn();
+      if (response.ok) window.location.replace("/");
     })
     .catch(() => {});
 })();

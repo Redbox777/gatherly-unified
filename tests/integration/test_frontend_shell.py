@@ -10,7 +10,8 @@ def test_frontend_homepage_is_served_with_security_headers(tmp_path) -> None:
 
     assert response.status_code == 200
     assert 'lang="ru"' in response.text
-    assert "Встречи, люди." in response.text
+    assert "Рады видеть вас" in response.text
+    assert 'id="meeting-grid"' in response.text
     assert response.headers["cache-control"] == "no-store"
     assert "default-src 'self'" in response.headers["content-security-policy"]
 

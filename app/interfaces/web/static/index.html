@@ -49,9 +49,7 @@
       <div class="workspace-label">ПРОСТРАНСТВО</div>
       <nav class="nav-list">
         <a class="nav-link active" href="#overview" aria-current="page"><svg class="ui-icon nav-icon" aria-hidden="true"><use href="#icon-home"></use></svg>Обзор</a>
-        <a class="nav-link" href="#meetings"><svg class="ui-icon nav-icon" aria-hidden="true"><use href="#icon-calendar"></use></svg>Встречи</a>
-        <a class="nav-link" href="#people"><svg class="ui-icon nav-icon" aria-hidden="true"><use href="#icon-users"></use></svg>Люди</a>
-        <a class="nav-link" href="#notes"><svg class="ui-icon nav-icon" aria-hidden="true"><use href="#icon-notes"></use></svg>Заметки</a>
+        <a class="nav-link" href="#meetings"><svg class="ui-icon nav-icon" aria-hidden="true"><use href="#icon-calendar"></use></svg>Мои встречи</a>
       </nav>
       <div class="sidebar-bottom">
         <div class="sidebar-bird"><svg class="magpie-mark" viewBox="0 0 160 160" aria-hidden="true"><use href="#magpie-mark"></use></svg></div>
@@ -64,16 +62,16 @@
       <header class="topbar">
         <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Открыть меню" aria-expanded="false"><svg class="ui-icon" aria-hidden="true"><use href="#icon-menu"></use></svg></button>
         <div class="breadcrumb">Моё пространство <span>/</span> Обзор</div>
-        <div class="topbar-right"><a class="auth-entry" href="/auth.html">Войти</a><span class="preview-pill"><i></i> Тестовый интерфейс</span><div class="avatar">G</div></div>
+        <div class="topbar-right"><span class="account-label">Моё пространство</span><button class="logout-button" id="logout-button" type="button">Выйти</button><div class="avatar" aria-hidden="true">G</div></div>
       </header>
 
       <div class="page-content">
         <section class="welcome-row">
           <div>
             <p class="eyebrow">ВАШЕ ПРОСТРАНСТВО ДЛЯ ОБЩЕНИЯ</p>
-            <h1>Встречи, люди.<br><span>Всё вместе.</span></h1>
-            <p class="welcome-copy">Планируйте события, собирайте близких и сохраняйте то, что важно.</p>
-            <a class="primary-button" href="#meetings">Посмотреть пространство <svg class="ui-icon button-icon" aria-hidden="true"><use href="#icon-arrow-up-right"></use></svg></a>
+            <h1>Рады видеть вас<br><span>в Gatherly.</span></h1>
+            <p class="welcome-copy">Здесь будут ваши встречи, участники и общие планы. Начните с обзора уже созданных событий.</p>
+            <a class="primary-button" href="#meetings">Перейти к встречам <svg class="ui-icon button-icon" aria-hidden="true"><use href="#icon-arrow-up-right"></use></svg></a>
           </div>
           <div class="welcome-art" aria-label="Фирменный знак Gatherly">
             <div class="art-glow"></div>
@@ -85,41 +83,24 @@
 
         <section class="section-block" id="meetings">
           <div class="section-heading">
-            <div><p class="eyebrow">ВАШ РИТМ</p><h2>Ближайшие встречи</h2></div>
-            <span class="muted-link">Пример наполнения</span>
+            <div><p class="eyebrow">ВАШ РИТМ</p><h2>Мои встречи</h2></div>
+            <span class="muted-link" id="event-count">Загружаем…</span>
           </div>
-          <div class="meeting-grid">
-            <article class="meeting-card featured">
-              <div class="card-top"><span class="date-chip">СБ · 22 НОЯБРЯ</span><span class="card-menu">•••</span></div>
-              <div class="meeting-symbol symbol-teal"><svg class="ui-icon meeting-icon" aria-hidden="true"><use href="#icon-coffee"></use></svg></div>
-              <h3>Чай и разговоры</h3>
-              <p class="meeting-meta">16:00 <span>·</span> Небольшая компания</p>
-              <div class="card-footer"><div class="avatar-stack"><span>А</span><span>М</span><span>И</span><b>+2</b></div><span class="people-count">5 участников</span></div>
-            </article>
-            <article class="meeting-card">
-              <div class="card-top"><span class="date-chip date-soft">ВС · 23 НОЯБРЯ</span><span class="card-menu">•••</span></div>
-              <div class="meeting-symbol symbol-blue"><svg class="ui-icon meeting-icon" aria-hidden="true"><use href="#icon-compass"></use></svg></div>
-              <h3>Прогулка за городом</h3>
-              <p class="meeting-meta">12:30 <span>·</span> На свежем воздухе</p>
-              <div class="card-footer"><div class="avatar-stack"><span>Д</span><span>К</span><b>+1</b></div><span class="people-count">3 участника</span></div>
-            </article>
-            <article class="meeting-card add-card">
-              <div class="add-circle"><svg class="ui-icon" aria-hidden="true"><use href="#icon-plus"></use></svg></div><h3>Новая встреча</h3>
-              <p>Скоро здесь можно будет создавать события.</p>
-            </article>
+          <div class="meeting-grid" id="meeting-grid" aria-live="polite">
+            <div class="dashboard-state" role="status">Загружаем ваши встречи…</div>
           </div>
         </section>
 
         <section class="bottom-grid">
           <article class="tip-card" id="people">
             <div class="tip-bird"><svg class="magpie-mark" viewBox="0 0 160 160" aria-hidden="true"><use href="#magpie-mark"></use></svg></div>
-            <div><p class="eyebrow">МАЛЕНЬКАЯ ПОДСКАЗКА</p><h2>Пика-Пика на связи</h2><p>Поможет собрать идеи, договорённости и планы в одном месте.</p></div>
+            <div><p class="eyebrow">ВАШ ПОМОЩНИК</p><h2>Пика-Пика</h2><p>Поможет собрать идеи, договорённости и планы. Ассистент появится в одном из следующих этапов.</p></div>
             <span class="tip-spark">✧</span>
           </article>
           <article class="summary-card" id="notes">
             <div class="summary-head"><span>Ваше пространство</span><span class="summary-dot"></span></div>
-            <div class="summary-number">Всё начинается <strong>с людей.</strong></div>
-            <p>Создавайте поводы встречаться чаще.</p>
+            <div class="summary-number"><strong id="summary-event-count">—</strong> встреч</div>
+            <p>Количество событий в вашем аккаунте.</p>
             <div class="summary-line"><span></span></div>
           </article>
         </section>
