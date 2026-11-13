@@ -245,3 +245,73 @@ def test_auth_session_stores_unique_token_hash_and_expiry(tmp_path) -> None:
             )
     finally:
         connection.close()
+
+
+
+def test_identity_token_migration_refuses_ambiguous_legacy_ownership(tmp_path) -> None:
+    connection = connect(tmp_path / "ambiguous-legacy-auth.sqlite3")
+    try:
+        connection.execute(
+            "CREATE TABLE schema_migrations "
+            "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
+        )
+        connection.commit()
+        for version, script in MIGRATIONS[:-1]:
+            with transaction(connection):
+                _execute_migration(connection, script)
+                connection.execute(
+                    "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
+                    (version, "2026-10-12T00:00:00Z"),
+                )
+
+        created_at = "2026-10-12T12:00:00.000000Z"
+        connection.execute(
+            "INSERT INTO users(id, created_at) VALUES (?, ?)",
+            ("ambiguous-user", created_at),
+        )
+        for identity_id, email in (
+            ("email-identity-a", "a@example.test"),
+            ("email-identity-b", "b@example.test"),
+        ):
+            connection.execute(
+                """INSERT INTO auth_identities(
+                    id, user_id, provider, provider_subject, password_hash,
+                    verified_at, created_at
+                ) VALUES (?, ?, 'email', ?, ?, NULL, ?)""",
+                (identity_id, "ambiguous-user", email, "password-hash", created_at),
+            )
+        connection.execute(
+            """INSERT INTO auth_email_tokens(
+                id, user_id, token_hash, purpose, created_at, expires_at,
+                consumed_at, activated_at
+            ) VALUES (?, ?, ?, 'verify_email', ?, ?, NULL, ?)""",
+            (
+                "ambiguous-token",
+                "ambiguous-user",
+                hash_token("legacy-ambiguous-token"),
+                created_at,
+                "2026-10-13T12:00:00.000000Z",
+                created_at,
+            ),
+        )
+        connection.commit()
+
+        with pytest.raises(sqlite3.IntegrityError):
+            migrate(connection)
+
+        versions = {
+            row["version"]
+            for row in connection.execute("SELECT version FROM schema_migrations")
+        }
+        assert versions == {1, 2, 3, 4, 5, 6, 7, 8}
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(auth_email_tokens)")
+        }
+        assert "user_id" in columns
+        assert "identity_id" not in columns
+        assert connection.execute(
+            "SELECT 1 FROM auth_email_tokens WHERE id = 'ambiguous-token'"
+        ).fetchone() is not None
+    finally:
+        connection.close()
