@@ -50,6 +50,37 @@ logger = logging.getLogger(__name__)
 
 SESSION_COOKIE = "gatherly_session"
 SESSION_COOKIE_PATH = "/"
+
+
+def _is_same_origin(candidate: str, request_url: str, *, origin_header: bool) -> bool:
+    """Compare an Origin or Referer value with the request's effective origin."""
+    if not candidate or candidate != candidate.strip():
+        return False
+    try:
+        supplied = urlsplit(candidate)
+        expected = urlsplit(request_url)
+        if (
+            supplied.scheme.casefold() not in {"http", "https"}
+            or not supplied.hostname
+            or supplied.username is not None
+            or supplied.password is not None
+            or expected.scheme.casefold() not in {"http", "https"}
+            or not expected.hostname
+        ):
+            return False
+        if origin_header and (supplied.path or supplied.query or supplied.fragment):
+            return False
+        supplied_port = supplied.port or (443 if supplied.scheme.casefold() == "https" else 80)
+        expected_port = expected.port or (443 if expected.scheme.casefold() == "https" else 80)
+    except ValueError:
+        return False
+    return (
+        supplied.scheme.casefold() == expected.scheme.casefold()
+        and supplied.hostname.casefold() == expected.hostname.casefold()
+        and supplied_port == expected_port
+    )
+
+
 GENERIC_RESET_RESPONSE = {
     "message": (
         "If an eligible account exists for that email address, "
@@ -244,18 +275,25 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
 
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             origin = request.headers.get("origin")
-            if origin:
-                origin_parts = urlsplit(origin)
-                request_parts = urlsplit(str(request.base_url))
-                if (
-                    origin_parts.scheme not in {"http", "https"}
-                    or origin_parts.netloc != request_parts.netloc
-                ):
-                    return Response(
-                        content='{"detail":"Cross-origin request rejected"}',
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        media_type="application/json",
-                    )
+            referer = request.headers.get("referer")
+            request_url = str(request.base_url)
+            if origin is not None:
+                # An explicit Origin takes precedence; malformed, opaque ("null"),
+                # and cross-origin values are rejected rather than ignored.
+                same_origin = _is_same_origin(origin, request_url, origin_header=True)
+            elif referer is not None:
+                # Some clients omit Origin but send Referer. Validate its origin.
+                same_origin = _is_same_origin(referer, request_url, origin_header=False)
+            else:
+                # Non-browser API clients may omit both headers. Browser cookie
+                # requests remain constrained by SameSite=Lax session cookies.
+                same_origin = True
+            if not same_origin:
+                return Response(
+                    content='{"detail":"Cross-origin request rejected"}',
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    media_type="application/json",
+                )
         return await call_next(request)
     path = database_path or os.environ.get("GATHERLY_DATABASE_PATH", "var/gatherly.sqlite3")
     migration_connection = connect(path)

@@ -971,3 +971,27 @@ def test_each_http_request_uses_its_own_database_connection(
     assert [response.status_code for response in responses] == [401, 401]
     assert len(opened_connections) == 2
     assert opened_connections[0] is not opened_connections[1]
+
+
+def test_unsafe_http_requests_validate_all_origin_header_variants(tmp_path) -> None:
+    cases = (
+        ({"Origin": "http://testserver"}, 400),
+        ({"Origin": "https://testserver"}, 403),
+        ({"Origin": "null"}, 403),
+        ({"Origin": "http://attacker.test"}, 403),
+        ({"Origin": "http://testserver/path"}, 403),
+        ({"Origin": "http://testserver", "Referer": "http://attacker.test/page"}, 400),
+        ({"Referer": "http://testserver/account"}, 400),
+        ({"Referer": "https://attacker.test/page"}, 403),
+        ({}, 400),
+    )
+
+    for index, (headers, expected_status) in enumerate(cases):
+        app = create_app(tmp_path / f"origin-variant-{index}.sqlite3")
+        with TestClient(app) as client:
+            response = client.post(
+                "/auth/verify-email",
+                json={"token": "invalid-token"},
+                headers=headers,
+            )
+        assert response.status_code == expected_status, headers
