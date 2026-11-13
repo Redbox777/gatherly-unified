@@ -266,7 +266,6 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON event_reminder_preferences(owner_id, event_id);
         """,
     ),
-),
     (
         12,
         """
@@ -284,7 +283,8 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
         CREATE INDEX idx_event_notes_author
             ON event_notes(author_id, event_id);
         """,
-    )
+    ),
+)
 
  
 def connect(database_path: str | Path) -> sqlite3.Connection:
