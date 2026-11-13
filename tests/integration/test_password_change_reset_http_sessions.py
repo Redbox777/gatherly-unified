@@ -47,7 +47,7 @@ def test_password_change_revokes_every_existing_http_session(tmp_path, monkeypat
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "password-change-sessions.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         _register_and_verify(client, sender)
         first_session = _login(client, OLD_PASSWORD)
         second_session = _login(client, OLD_PASSWORD)
@@ -84,7 +84,7 @@ def test_password_reset_revokes_existing_http_session_and_allows_new_password(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "password-reset-sessions.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         _register_and_verify(client, sender)
         old_session = _login(client, OLD_PASSWORD)
 

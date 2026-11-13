@@ -16,7 +16,7 @@ class FakeEmailSender:
 
 def test_health_endpoint_uses_temporary_database(tmp_path) -> None:
     app = create_app(tmp_path / "http-auth.sqlite3")
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
@@ -24,7 +24,7 @@ def test_health_endpoint_uses_temporary_database(tmp_path) -> None:
 
 def test_password_reset_request_has_generic_response(tmp_path) -> None:
     app = create_app(tmp_path / "reset-http.sqlite3")
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         first = client.post(
             "/auth/password-reset/request", json={"email": "unknown@example.test"}
         )
@@ -45,7 +45,7 @@ def test_registration_email_failure_logs_without_sensitive_details(
     monkeypatch.setattr(http_api, "_email_sender", FailingEmailSender)
     app = create_app(tmp_path / "registration-email-failure.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         response = client.post(
             "/auth/register",
             json={
@@ -68,7 +68,7 @@ def test_registration_response_does_not_reveal_existing_accounts(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "registration-enumeration.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         new_account = client.post(
             "/auth/register",
             json={"email": "enumeration@example.test", "password": "correct horse battery staple"},
@@ -112,7 +112,7 @@ def test_registration_can_recover_after_email_delivery_failure(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "verification-resend.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         registration = client.post(
             "/auth/register",
             json={
@@ -158,7 +158,7 @@ def test_verification_resend_keeps_generic_response_when_delivery_fails(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "verification-resend-failure.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         registration = client.post(
             "/auth/register",
             json={
@@ -197,7 +197,7 @@ def test_resending_verification_invalidates_previous_token(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "verification-token-rotation.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         registration = client.post(
             "/auth/register",
             json={
@@ -234,7 +234,7 @@ def test_registration_verification_login_and_logout_flow(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "auth-flow.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         registration = client.post(
             "/auth/register",
             json={
@@ -297,7 +297,7 @@ def test_auth_token_landing_pages_are_same_origin_and_do_not_expose_fragments(
     tmp_path,
 ) -> None:
     app = create_app(tmp_path / "auth-token-pages.sqlite3")
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         verification = client.get("/verify-email")
         reset = client.get("/reset-password")
 
@@ -331,7 +331,7 @@ def test_password_reset_delivery_failure_logs_safely_and_keeps_generic_response(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "password-reset-delivery-failure.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         registration = client.post(
             "/auth/register",
             json={
@@ -370,7 +370,7 @@ def test_password_reset_http_flow_invalidates_old_password(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "password-reset-http.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         registration = client.post(
             "/auth/register",
             json={
@@ -474,7 +474,13 @@ def test_authenticated_password_change_revokes_all_sessions(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "password-change-http.sqlite3")
 
-    with TestClient(app) as client, TestClient(app) as other_client:
+    with (
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as client,
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as other_client,
+
+    ):
         registration = client.post(
             "/auth/register",
             json={
@@ -537,7 +543,7 @@ def test_authenticated_password_change_revokes_all_sessions(
 
 def test_password_change_requires_authentication(tmp_path) -> None:
     app = create_app(tmp_path / "password-change-unauthenticated.sqlite3")
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         response = client.post(
             "/auth/password/change",
             json={
@@ -550,7 +556,7 @@ def test_password_change_requires_authentication(tmp_path) -> None:
 
 def test_auth_me_rejects_missing_and_forged_session_tokens(tmp_path) -> None:
     app = create_app(tmp_path / "invalid-session.sqlite3")
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         missing = client.get("/auth/me")
         forged = client.get(
             "/auth/me", cookies={"gatherly_session": "not-a-real-session"}
@@ -562,7 +568,7 @@ def test_auth_me_rejects_missing_and_forged_session_tokens(tmp_path) -> None:
 
 def test_state_changing_auth_request_rejects_cross_origin(tmp_path) -> None:
     app = create_app(tmp_path / "csrf-origin.sqlite3")
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         response = client.post(
             "/auth/logout",
             headers={"Origin": "https://attacker.example"},
@@ -574,7 +580,7 @@ def test_state_changing_auth_request_rejects_cross_origin(tmp_path) -> None:
 
 def test_state_changing_auth_request_allows_same_origin(tmp_path) -> None:
     app = create_app(tmp_path / "same-origin.sqlite3")
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         response = client.post(
             "/auth/logout",
             headers={"Origin": "http://testserver"},
@@ -583,9 +589,47 @@ def test_state_changing_auth_request_allows_same_origin(tmp_path) -> None:
     assert response.status_code == 200
 
 
+def test_cookie_authenticated_state_change_requires_origin_or_referer(
+    tmp_path,
+) -> None:
+    app = create_app(tmp_path / "csrf-cookie-origin-required.sqlite3")
+    with TestClient(app) as client:
+        response = client.post(
+            "/auth/logout",
+            cookies={"gatherly_session": "session-token"},
+        )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Cross-origin request rejected"}
+
+
+def test_cookie_authenticated_state_change_accepts_same_origin_referer(
+    tmp_path,
+) -> None:
+    app = create_app(tmp_path / "csrf-cookie-referer.sqlite3")
+    with TestClient(app) as client:
+        response = client.post(
+            "/auth/logout",
+            cookies={"gatherly_session": "session-token"},
+            headers={"Referer": "http://testserver/account"},
+        )
+
+    assert response.status_code == 200
+
+
+def test_headerless_state_change_without_session_cookie_remains_allowed(
+    tmp_path,
+) -> None:
+    app = create_app(tmp_path / "csrf-no-cookie.sqlite3")
+    with TestClient(app) as client:
+        response = client.post("/auth/logout")
+
+    assert response.status_code == 200
+
+
 def test_login_rate_limit_returns_retry_after_header(tmp_path) -> None:
     app = create_app(tmp_path / "login-rate-limit.sqlite3")
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         responses = [
             client.post(
                 "/auth/login",
@@ -610,7 +654,7 @@ def test_login_rate_limit_returns_retry_after_header(tmp_path) -> None:
 
 def test_email_verification_endpoint_is_rate_limited(tmp_path) -> None:
     app = create_app(tmp_path / "verification-rate-limit.sqlite3")
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         responses = [
             client.post("/auth/verify-email", json={"token": "invalid-token"})
             for _ in range(6)
@@ -631,7 +675,7 @@ def test_authenticated_user_can_create_and_retrieve_owned_event(tmp_path, monkey
     monkeypatch.setenv("COOKIE_SECURE", "false")
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "events-http.sqlite3")
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         registration = client.post(
             "/auth/register",
             json={
@@ -669,7 +713,13 @@ def test_event_routes_require_authentication_and_hide_other_owners(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "event-ownership-http.sqlite3")
 
-    with TestClient(app) as owner, TestClient(app) as other_user:
+    with (
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as owner,
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as other_user,
+
+    ):
         assert owner.post("/events", json={"title": "No session"}).status_code == 401
         assert (
             owner.get("/events/00000000-0000-0000-0000-000000000001").status_code
@@ -744,7 +794,7 @@ def test_authenticated_owner_can_add_and_list_event_participants(
     monkeypatch.setenv("COOKIE_SECURE", "false")
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "participants-http.sqlite3")
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         registration = client.post(
             "/auth/register",
             json={
@@ -790,7 +840,7 @@ def test_authenticated_owner_can_add_and_list_event_participants(
 
 def test_event_participant_routes_require_authentication(tmp_path) -> None:
     app = create_app(tmp_path / "participants-unauthenticated.sqlite3")
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         event_id = "00000000-0000-0000-0000-000000000001"
         added = client.post(
             f"/events/{event_id}/participants", json={"display_name": "Alex"}
@@ -805,7 +855,7 @@ def test_event_owner_can_update_and_delete_event(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("COOKIE_SECURE", "false")
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "event-update-delete.sqlite3")
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         assert client.post("/auth/register", json={
             "email": "event-edit@example.test",
             "password": "original password long enough",
@@ -831,7 +881,10 @@ def test_event_update_and_delete_are_owner_only(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("COOKIE_SECURE", "false")
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "event-edit-owner-only.sqlite3")
-    with TestClient(app) as owner, TestClient(app) as other:
+    with (
+        TestClient(app, headers={"Origin": "http://testserver"}) as owner,
+        TestClient(app, headers={"Origin": "http://testserver"}) as other,
+    ):
         for client, email, password in (
             (owner, "event-owner@example.test", "owner password long enough"),
             (other, "event-other@example.test", "other password long enough"),
@@ -860,7 +913,13 @@ def test_authenticated_user_can_list_only_their_own_events(tmp_path, monkeypatch
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "event-list-http.sqlite3")
 
-    with TestClient(app) as owner, TestClient(app) as other:
+    with (
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as owner,
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as other,
+
+    ):
         assert owner.get("/events").status_code == 401
 
         for client, email, password in (
@@ -904,7 +963,7 @@ def test_authenticated_user_with_no_events_gets_empty_list(tmp_path, monkeypatch
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "event-list-empty-http.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         assert client.post(
             "/auth/register",
             json={
@@ -933,7 +992,7 @@ def test_event_owner_can_remove_participant(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "participant-remove.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         email = "participant-remove@example.test"
         password = "original password long enough"
         assert client.post(
@@ -965,7 +1024,13 @@ def test_only_event_owner_can_remove_participant(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "participant-remove-owner-only.sqlite3")
 
-    with TestClient(app) as owner, TestClient(app) as other:
+    with (
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as owner,
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as other,
+
+    ):
         for client, email, password in (
             (owner, "participant-owner@example.test", "owner password long enough"),
             (other, "participant-other@example.test", "other password long enough"),
@@ -1000,7 +1065,7 @@ def test_participant_removal_requires_authentication(tmp_path, monkeypatch) -> N
     monkeypatch.setattr(http_api, "_email_sender", lambda: FakeEmailSender())
     app = create_app(tmp_path / "participant-remove-auth.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         response = client.delete(
             "/events/00000000-0000-0000-0000-000000000001/participants/"
             "00000000-0000-0000-0000-000000000002"
@@ -1023,7 +1088,13 @@ def test_each_http_request_uses_its_own_database_connection(
 
     monkeypatch.setattr(http_api, "connect", track_connection)
 
-    with TestClient(app) as first_client, TestClient(app) as second_client:
+    with (
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as first_client,
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as second_client,
+
+    ):
         with ThreadPoolExecutor(max_workers=2) as executor:
             responses = list(
                 executor.map(
@@ -1069,7 +1140,7 @@ def test_outbound_email_limit_is_shared_across_auth_flows(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "smtp-recipient-http-limit.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         registration = client.post(
             "/auth/register",
             json={
@@ -1123,7 +1194,7 @@ def test_password_reset_delivery_failure_preserves_previous_token(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "reset-token-preserved.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         email = "reset-preserve@example.test"
         registration = client.post(
             "/auth/register",

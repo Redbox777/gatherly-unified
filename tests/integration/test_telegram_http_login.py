@@ -36,7 +36,7 @@ def test_valid_telegram_login_creates_session(
     monkeypatch.setenv("COOKIE_SECURE", "false")
     app = create_app(tmp_path / "telegram-login.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         response = client.post("/auth/telegram/login", json=signed_payload())
 
         assert response.status_code == 200
@@ -56,7 +56,7 @@ def test_invalid_telegram_signature_does_not_create_session(
     payload = signed_payload()
     payload["first_name"] = "Forged"
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         response = client.post("/auth/telegram/login", json=payload)
 
         assert response.status_code == 401
@@ -71,7 +71,7 @@ def test_existing_telegram_identity_reuses_same_account(
     monkeypatch.setenv("COOKIE_SECURE", "false")
     app = create_app(tmp_path / "repeat-telegram-login.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         first_response = client.post("/auth/telegram/login", json=signed_payload())
         assert first_response.status_code == 200
         first_user = client.get("/auth/me").json()["user_id"]
@@ -95,7 +95,7 @@ def test_replayed_telegram_payload_is_rejected(
     app = create_app(tmp_path / "replayed-telegram-login.sqlite3")
     payload = signed_payload()
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         first_response = client.post("/auth/telegram/login", json=payload)
         assert first_response.status_code == 200
         client.post("/auth/logout")
@@ -115,7 +115,7 @@ def test_expired_telegram_payload_does_not_create_session(
     app = create_app(tmp_path / "expired-telegram-login.sqlite3")
     expired_date = int(NOW.timestamp()) - 3600
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         response = client.post(
             "/auth/telegram/login",
             json=signed_payload(auth_date=expired_date),
@@ -134,7 +134,7 @@ def test_future_telegram_payload_does_not_create_session(
     app = create_app(tmp_path / "future-telegram-login.sqlite3")
     future_date = int(NOW.timestamp()) + 3600
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         response = client.post(
             "/auth/telegram/login",
             json=signed_payload(auth_date=future_date),
@@ -152,7 +152,7 @@ def test_missing_telegram_bot_token_rejects_login(
     monkeypatch.setenv("COOKIE_SECURE", "false")
     app = create_app(tmp_path / "missing-telegram-token.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         response = client.post("/auth/telegram/login", json=signed_payload())
 
         assert response.status_code == 401

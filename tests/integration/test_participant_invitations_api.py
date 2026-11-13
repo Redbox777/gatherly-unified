@@ -47,7 +47,7 @@ def test_invitation_api_requires_owner_and_accepts_only_authenticated_session(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "participant-invitations-api.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         assert client.post(
             "/events/00000000-0000-0000-0000-000000000001/participants/"
             "00000000-0000-0000-0000-000000000002/invitation",
@@ -98,7 +98,7 @@ def test_delivery_failure_revokes_new_invitation(tmp_path, monkeypatch, caplog) 
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "participant-invitation-delivery-failure.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         _register_and_sign_in(client, sender, "owner@example.test")
         event = client.post("/events", json={"title": "Game night"}).json()
         participant = client.post(
@@ -123,7 +123,7 @@ def test_delivery_failure_revokes_new_invitation(tmp_path, monkeypatch, caplog) 
 
 def test_invitation_acceptance_page_is_served_without_reflecting_token(tmp_path) -> None:
     app = create_app(tmp_path / "participant-invitation-page.sqlite3")
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         response = client.get("/accept-invitation")
 
     assert response.status_code == 200
@@ -145,7 +145,7 @@ def test_invitation_rejects_wrong_signed_in_account_and_ignores_client_user_id(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "participant-invitation-account-scope.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         _register_and_sign_in(client, sender, "owner@example.test")
         event = client.post("/events", json={"title": "Game night"}).json()
         participant = client.post(
@@ -198,7 +198,7 @@ def test_invitation_cannot_target_participant_from_another_event(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "participant-invitation-cross-event.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         _register_and_sign_in(client, sender, "owner@example.test")
         first_event = client.post("/events", json={"title": "First"}).json()
         participant = client.post(
@@ -228,7 +228,7 @@ def test_resend_invalidates_old_token_and_owner_can_revoke_new_invitation(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "participant-invitation-lifecycle.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         _register_and_sign_in(client, sender, "owner@example.test")
         event = client.post("/events", json={"title": "Game night"}).json()
         participant = client.post(
