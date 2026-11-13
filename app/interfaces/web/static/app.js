@@ -98,7 +98,9 @@
         else if (response.status === 404) message = "Эта встреча уже недоступна. Обновите список.";
         else if (typeof body.detail === "string" && response.status >= 500) message = "Сервер временно недоступен.";
       } catch (_) {}
-      throw new Error(message);
+      const error = new Error(message);
+      error.status = response.status;
+      throw error;
     }
     if (response.status === 204) return null;
     return response.json();
@@ -180,6 +182,8 @@
     list.forEach(participant => {
       const row = document.createElement("div");
       row.className = "participant-row";
+      const main = document.createElement("div");
+      main.className = "participant-main";
       const name = document.createElement("span");
       name.className = "participant-name";
       name.textContent = participant.display_name;
@@ -203,7 +207,64 @@
           participantsBusy = false;
         }
       });
-      row.append(name, remove);
+      main.append(name, remove);
+
+      const inviteForm = document.createElement("form");
+      inviteForm.className = "participant-invite-form";
+      const email = document.createElement("input");
+      email.type = "email";
+      email.name = "email";
+      email.required = true;
+      email.maxLength = 254;
+      email.autocomplete = "email";
+      email.placeholder = "Email участника";
+      email.setAttribute("aria-label", "Email для приглашения: " + participant.display_name);
+      const inviteButton = document.createElement("button");
+      inviteButton.type = "submit";
+      inviteButton.className = "participant-invite-button";
+      inviteButton.textContent = "Пригласить";
+      const inviteStatus = document.createElement("span");
+      inviteStatus.className = "participant-invite-status";
+      inviteStatus.setAttribute("role", "status");
+      inviteStatus.setAttribute("aria-live", "polite");
+      inviteForm.addEventListener("submit", async event => {
+        event.preventDefault();
+        if (participantsBusy) return;
+        const targetEmail = email.value.trim();
+        if (!targetEmail) {
+          email.focus();
+          return;
+        }
+        participantsBusy = true;
+        inviteButton.disabled = true;
+        inviteButton.textContent = "Отправляем…";
+        inviteStatus.textContent = "";
+        try {
+          const invitation = await api(
+            "/events/" + encodeURIComponent(eventId) + "/participants/" +
+              encodeURIComponent(participant.id) + "/invitation",
+            {method:"POST", body:JSON.stringify({email:targetEmail})}
+          );
+          inviteStatus.textContent = "Приглашение отправлено · до " + formatDate(invitation.expires_at);
+          inviteForm.reset();
+        } catch (error) {
+          if (error.status === 409) {
+            inviteStatus.textContent = "Этот участник уже связан с аккаунтом.";
+          } else if (error.status === 503) {
+            inviteStatus.textContent = "Почта временно недоступна. Попробуйте позже.";
+          } else if (error.status === 429) {
+            inviteStatus.textContent = "Слишком много писем. Подождите и попробуйте позже.";
+          } else {
+            inviteStatus.textContent = error.message;
+          }
+        } finally {
+          participantsBusy = false;
+          inviteButton.disabled = false;
+          inviteButton.textContent = "Пригласить";
+        }
+      });
+      inviteForm.append(email, inviteButton, inviteStatus);
+      row.append(main, inviteForm);
       participantsList.append(row);
     });
   };
