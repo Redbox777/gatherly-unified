@@ -24,7 +24,6 @@ def test_auth_rate_limit_survives_app_restart(tmp_path) -> None:
     assert 1 <= int(after_restart.headers["retry-after"]) <= 60
 
 
-
 def test_untrusted_forwarded_for_cannot_bypass_http_rate_limit(
     tmp_path, monkeypatch
 ) -> None:
