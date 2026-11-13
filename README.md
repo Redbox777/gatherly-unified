@@ -53,6 +53,16 @@ cannot exceed 24 hours. The limiter stores SHA-256 hashes of recipient and reque
 keys rather than raw email addresses or IP addresses. Rate-limited password-reset and
 verification-resend requests keep their generic public response.
 
+## Sensitive HTTP request throttling
+
+Sensitive POST routes (authentication, password changes, verification, and invitation
+acceptance) are limited to 5 requests per source address per route per 60 seconds.
+Counters are stored as SHA-256 hashes in SQLite, so independent application processes
+using the same database enforce one shared quota. Old counter records are pruned after
+24 hours. This is a single-host/shared-database control, not a substitute for an edge
+rate limiter when deploying multiple hosts; configure trusted proxy handling before
+relying on source-address quotas behind a reverse proxy.
+
 ## Participant invitation configuration
 
 Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_SENDER` for real email delivery. Set `PARTICIPANT_INVITATION_URL` to the web client's invitation-acceptance page. The example value is a local development placeholder, not a page served by this backend.
