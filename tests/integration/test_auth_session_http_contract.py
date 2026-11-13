@@ -137,14 +137,18 @@ def test_http_authentication_rejects_a_session_expired_in_the_database(
         _register_and_verify(client, sender)
         raw_token = _login(client)
 
-        expired_at = (datetime.now(UTC) - timedelta(seconds=1)).isoformat().replace(
-            "+00:00", "Z"
-        )
+        now = datetime.now(UTC)
+        created_at = (now - timedelta(days=15)).isoformat().replace("+00:00", "Z")
+        expired_at = (now - timedelta(seconds=1)).isoformat().replace("+00:00", "Z")
         connection = sqlite3.connect(database_path)
         try:
             cursor = connection.execute(
-                "UPDATE auth_sessions SET expires_at = ? WHERE token_hash = ?",
-                (expired_at, hash_token(raw_token)),
+                """
+                UPDATE auth_sessions
+                SET created_at = ?, expires_at = ?
+                WHERE token_hash = ?
+                """,
+                (created_at, expired_at, hash_token(raw_token)),
             )
             connection.commit()
         finally:
