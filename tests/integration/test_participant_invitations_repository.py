@@ -381,7 +381,7 @@ def test_concurrent_acceptance_cannot_link_one_participant_to_two_accounts(
             outcomes = list(
                 executor.map(
                     lambda args: accept(*args),
-                    zip(connections, competing_user_ids),
+                    zip(connections, competing_user_ids, strict=True),
                 )
             )
 
