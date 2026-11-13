@@ -1,7 +1,7 @@
 """HTTP adapter for email authentication and server-managed sessions."""
 
 from collections import OrderedDict, deque
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
 from datetime import UTC, datetime
 from uuid import UUID
 import hashlib
@@ -11,7 +11,7 @@ from pathlib import Path
 import sqlite3
 from threading import Lock
 from time import monotonic
-from typing import Annotated, cast
+from typing import Annotated
 from urllib.parse import urlencode, urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
@@ -35,7 +35,7 @@ from app.infrastructure.database.auth_email_tokens_repository import (
 )
 from app.infrastructure.database.auth_identities_repository import AuthIdentitiesRepository
 from app.infrastructure.database.auth_sessions_repository import AuthSessionsRepository
-from app.infrastructure.database.connection import connect, migrate
+from app.infrastructure.database.connection import connect, migrate, transaction
 from app.infrastructure.database.events_repository import EventsRepository
 from app.infrastructure.database.participants_repository import ParticipantsRepository
 from app.infrastructure.database.participant_invitations_repository import (
@@ -116,7 +116,7 @@ class PasswordResetConfirmRequest(BaseModel):
 
 
 class Dependencies:
-    """Construct application services around one database connection and mail adapter."""
+    """Construct request-scoped services around a database connection and mail adapter."""
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self.connection = connection
@@ -256,17 +256,22 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                     )
         return await call_next(request)
     path = database_path or os.environ.get("GATHERLY_DATABASE_PATH", "var/gatherly.sqlite3")
-    connection = connect(path)
-    migrate(connection)
-    dependencies = Dependencies(connection)
-    app.state.auth_dependencies = dependencies
+    migration_connection = connect(path)
+    try:
+        migrate(migration_connection)
+    finally:
+        migration_connection.close()
+    app.state.database_path = path
 
-    @app.on_event("shutdown")
-    def close_database() -> None:
-        connection.close()
-
-    def services(request: Request) -> Dependencies:
-        return cast(Dependencies, request.app.state.auth_dependencies)
+    def services(request: Request) -> Iterator[Dependencies]:
+        # A connection is never shared across HTTP requests. SQLite still
+        # serializes writers, while independent request connections prevent
+        # one request's commit/rollback from affecting another request.
+        connection = connect(request.app.state.database_path)
+        try:
+            yield Dependencies(connection)
+        finally:
+            connection.close()
 
     ServiceDependency = Annotated[Dependencies, Depends(services)]
 
@@ -397,18 +402,17 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         try:
             # Keep the one-time-use record only for the Login Widget validity
             # window, while the unique key makes concurrent replays atomic.
-            deps.connection.execute(
-                "DELETE FROM auth_telegram_login_payloads WHERE consumed_at < ?",
-                (datetime.fromtimestamp(now.timestamp() - 600, tz=UTC).isoformat(),),
-            )
-            deps.connection.execute(
-                "INSERT INTO auth_telegram_login_payloads(payload_hash, consumed_at) "
-                "VALUES (?, ?)",
-                (signature_hash, now.isoformat()),
-            )
-            deps.connection.commit()
+            with transaction(deps.connection):
+                deps.connection.execute(
+                    "DELETE FROM auth_telegram_login_payloads WHERE consumed_at < ?",
+                    (datetime.fromtimestamp(now.timestamp() - 600, tz=UTC).isoformat(),),
+                )
+                deps.connection.execute(
+                    "INSERT INTO auth_telegram_login_payloads(payload_hash, consumed_at) "
+                    "VALUES (?, ?)",
+                    (signature_hash, now.isoformat()),
+                )
         except sqlite3.IntegrityError:
-            deps.connection.rollback()
             raise HTTPException(
                 status_code=401, detail="Invalid Telegram login"
             ) from None
