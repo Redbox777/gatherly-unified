@@ -995,6 +995,27 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Event not found") from error
         except ValueError as error:
             raise HTTPException(status_code=422, detail="Invalid event data") from error
+        notification_time = datetime.now(UTC)
+        linked_participants = deps.participants.list_participants(
+            event_id=event_id, owner_id=user_id
+        )
+        for participant in linked_participants:
+            recipient_id = (
+                str(participant.linked_user_id) if participant.linked_user_id else None
+            )
+            if recipient_id is None or recipient_id == user_id:
+                continue
+            preferences = deps.notifications.get_preferences(user_id=recipient_id)
+            if preferences["event_updates_enabled"]:
+                deps.notifications.create(
+                    user_id=recipient_id,
+                    event_id=str(event_id),
+                    kind="event_updated",
+                    title="Встреча обновлена",
+                    body=f"Встреча «{event.title}» была изменена.",
+                    dedupe_key=f"event-updated:{event_id}:{recipient_id}:{notification_time.isoformat()}",
+                    now=notification_time,
+                )
         return {
             "id": str(event.id), "title": event.title,
             "starts_at": event.starts_at.isoformat() if event.starts_at else None,
@@ -1042,6 +1063,30 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=409, detail="Participant already exists") from error
         except ValueError as error:
             raise HTTPException(status_code=422, detail="Invalid participant data") from error
+        event = deps.events.get_event(event_id=event_id, owner_id=user_id)
+        notification_time = datetime.now(UTC)
+        for existing_participant in deps.participants.list_participants(
+            event_id=event_id, owner_id=user_id
+        ):
+            recipient_id = (
+                str(existing_participant.linked_user_id)
+                if existing_participant.linked_user_id else None
+            )
+            if recipient_id is None or recipient_id == user_id:
+                continue
+            preferences = deps.notifications.get_preferences(user_id=recipient_id)
+            if preferences["participant_added_enabled"]:
+                deps.notifications.create(
+                    user_id=recipient_id,
+                    event_id=str(event_id),
+                    kind="participant_added",
+                    title="Новый участник встречи",
+                    body=f"К встрече «{event.title}» добавлен участник: {participant.display_name}.",
+                    dedupe_key=(
+                        f"participant-added:{participant.id}:{recipient_id}"
+                    ),
+                    now=notification_time,
+                )
         return {
             "id": str(participant.id),
             "event_id": str(participant.event_id),
