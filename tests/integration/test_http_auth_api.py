@@ -1239,7 +1239,10 @@ def test_responses_include_baseline_security_headers(tmp_path) -> None:
     with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         health = client.get("/health")
         landing_page = client.get("/verify-email")
-        rejected = client.post("/auth/logout")
+    with TestClient(app) as headerless_client:
+        rejected = headerless_client.post(
+            "/auth/logout", cookies={http_api.SESSION_COOKIE: "test-session"}
+        )
 
     for response in (health, landing_page, rejected):
         assert response.headers["X-Content-Type-Options"] == "nosniff"
@@ -1247,7 +1250,9 @@ def test_responses_include_baseline_security_headers(tmp_path) -> None:
         assert response.headers["Referrer-Policy"] == "no-referrer"
         assert response.headers["Permissions-Policy"] == "camera=(), microphone=()"
         assert "Strict-Transport-Security" not in response.headers
-    assert landing_page.headers["Content-Security-Policy"].startswith("default-src 'none'")
+    assert landing_page.headers["Content-Security-Policy"].startswith(
+        "default-src 'none'"
+    )
 
 
 def test_production_responses_include_hsts(tmp_path, monkeypatch) -> None:
@@ -1256,8 +1261,12 @@ def test_production_responses_include_hsts(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("SMTP_STARTTLS", "true")
     monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
     monkeypatch.setenv("SMTP_SENDER", "no-reply@example.com")
-    monkeypatch.setenv("EMAIL_VERIFICATION_URL", "https://app.example.com/verify-email")
-    monkeypatch.setenv("PASSWORD_RESET_URL", "https://app.example.com/reset-password")
+    monkeypatch.setenv(
+        "EMAIL_VERIFICATION_URL", "https://app.example.com/verify-email"
+    )
+    monkeypatch.setenv(
+        "PASSWORD_RESET_URL", "https://app.example.com/reset-password"
+    )
     monkeypatch.setenv(
         "PARTICIPANT_INVITATION_URL", "https://app.example.com/accept-invitation"
     )
