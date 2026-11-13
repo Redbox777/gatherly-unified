@@ -97,3 +97,14 @@ def test_trusted_proxy_cidrs_are_parsed_and_normalized() -> None:
 def test_invalid_trusted_proxy_configuration_is_rejected(value: str) -> None:
     with pytest.raises(ValueError, match="TRUSTED_PROXY_CIDRS"):
         load_trusted_proxy_networks(value)
+
+
+
+def test_forwarded_chain_with_too_many_hops_falls_back_to_peer() -> None:
+    trusted = load_trusted_proxy_networks("10.0.0.0/8")
+    chain = ", ".join("203.0.113.25" for _ in range(33))
+    assert resolve_client_ip(
+        peer_host="10.0.0.10",
+        forwarded_for=chain,
+        trusted_proxies=trusted,
+    ) == "10.0.0.10"
