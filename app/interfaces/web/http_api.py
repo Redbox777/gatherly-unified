@@ -995,6 +995,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Event not found") from error
         except ValueError as error:
             raise HTTPException(status_code=422, detail="Invalid event data") from error
+        deps.notifications.clear_pending_event_reminders(event_id=str(event_id))
         notification_time = datetime.now(UTC)
         linked_participants = deps.participants.list_participants(
             event_id=event_id, owner_id=user_id
