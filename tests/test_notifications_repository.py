@@ -20,6 +20,7 @@ def test_due_reminders_are_materialized_once_for_owner_and_linked_members(tmp_pa
             "INSERT INTO users(id, created_at) VALUES (?, ?)",
             ("member", now.isoformat()),
         )
+        connection.commit()
         connection.execute(
             "INSERT INTO events(id, owner_id, title, starts_at, created_at) "
             "VALUES (?, ?, ?, ?, ?)",
@@ -58,6 +59,7 @@ def test_notification_preferences_default_to_enabled_and_can_be_disabled(tmp_pat
             "INSERT INTO users(id, created_at) VALUES (?, ?)",
             ("user-1", now.isoformat()),
         )
+        connection.commit()
         repository = NotificationsRepository(connection)
         assert repository.get_preferences(user_id="user-1") == {
             "email_enabled": True,
