@@ -12,13 +12,20 @@ from app.infrastructure.database.connection import transaction
 class SmtpRateLimitsRepository:
     """Atomically limit SMTP attempts across app processes sharing one database."""
 
-    RECIPIENT_LIMIT = 3
-    RECIPIENT_WINDOW = timedelta(minutes=15)
-    REQUESTER_LIMIT = 5
-    REQUESTER_WINDOW = timedelta(minutes=1)
-
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        recipient_limit: int = 3,
+        recipient_window_seconds: int = 900,
+        requester_limit: int = 5,
+        requester_window_seconds: int = 60,
+    ) -> None:
         self._connection = connection
+        self._policies = (
+            (recipient_limit, timedelta(seconds=recipient_window_seconds)),
+            (requester_limit, timedelta(seconds=requester_window_seconds)),
+        )
 
     @staticmethod
     def _key_hash(value: str) -> str:
@@ -42,13 +49,13 @@ class SmtpRateLimitsRepository:
         policies = (
             (
                 self._key_hash(f"recipient:{normalized_recipient}"),
-                self.RECIPIENT_LIMIT,
-                self.RECIPIENT_WINDOW,
+                self._policies[0][0],
+                self._policies[0][1],
             ),
             (
                 self._key_hash(f"requester:{normalized_requester}"),
-                self.REQUESTER_LIMIT,
-                self.REQUESTER_WINDOW,
+                self._policies[1][0],
+                self._policies[1][1],
             ),
         )
         now_text = now_utc.isoformat()
