@@ -206,6 +206,20 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON auth_email_tokens(identity_id, purpose, activated_at, consumed_at);
         """,
     ),
+    (
+        10,
+        """
+        CREATE TABLE http_rate_limit_events (
+            id TEXT PRIMARY KEY,
+            key_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_http_rate_limit_events_key_created
+            ON http_rate_limit_events(key_hash, created_at);
+        CREATE INDEX idx_http_rate_limit_events_created
+            ON http_rate_limit_events(created_at);
+        """,
+    ),
 )
 
 
