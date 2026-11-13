@@ -40,6 +40,7 @@ from app.infrastructure.database.http_rate_limits_repository import (
     HttpRateLimitsRepository,
 )
 from app.infrastructure.database.participants_repository import ParticipantsRepository
+from app.infrastructure.database.notifications_repository import NotificationsRepository
 from app.infrastructure.database.participant_invitations_repository import (
     ParticipantInvitationsRepository,
 )
@@ -153,6 +154,17 @@ class CreateParticipantInvitationRequest(BaseModel):
     email: str = Field(min_length=3, max_length=254)
 
 
+class NotificationPreferencesRequest(BaseModel):
+    email_enabled: bool = True
+    event_updates_enabled: bool = True
+    participant_added_enabled: bool = True
+    reminders_enabled: bool = True
+
+
+class EventReminderRequest(BaseModel):
+    offsets_minutes: list[int] = Field(default_factory=list, max_length=3)
+
+
 class AcceptParticipantInvitationRequest(BaseModel):
     token: str = Field(min_length=1, max_length=512)
 
@@ -219,6 +231,7 @@ class Dependencies:
             invitations=self.participant_invitations_repository,
         )
         self.email_sender = _email_sender()
+        self.notifications = NotificationsRepository(connection)
         self.reset_requests = PasswordResetRequestService(
             identities=self.identities,
             resets=self.resets,
