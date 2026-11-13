@@ -330,7 +330,9 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     app.state.trusted_proxy_networks = load_trusted_proxy_networks(
         os.environ.get("TRUSTED_PROXY_CIDRS")
     )
-    production = os.environ.get("APP_ENV", "development").strip().casefold() == "production"
+    production = (
+        os.environ.get("APP_ENV", "development").strip().casefold() == "production"
+    )
     rate_limit_paths = {
         "/auth/login",
         "/auth/telegram/login",
