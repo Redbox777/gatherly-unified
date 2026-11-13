@@ -67,6 +67,7 @@ SESSION_COOKIE_PATH = "/"
 
 def _apply_security_headers(response: Response, *, production: bool) -> Response:
     """Apply baseline browser security headers without overriding route policies."""
+    response.headers.setdefault("Cache-Control", "no-store")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "no-referrer")
