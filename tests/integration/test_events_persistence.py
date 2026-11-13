@@ -1,4 +1,6 @@
+import os
 import sqlite3
+import time
 from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
@@ -36,6 +38,44 @@ def test_start_time_remains_utc_after_persistence(service: EventsService) -> Non
 
     assert fetched.starts_at == datetime(2026, 10, 20, 15, 30, tzinfo=UTC)
     assert fetched.created_at.tzinfo is not None
+
+
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="requires time.tzset")
+def test_update_event_normalizes_start_time_to_utc(
+    service: EventsService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    previous_tz = os.environ.get("TZ")
+    monkeypatch.setenv("TZ", "Etc/GMT-5")
+    time.tzset()
+    try:
+        local_start = datetime(
+            2026, 10, 20, 18, 30, tzinfo=timezone(timedelta(hours=3))
+        )
+        created = service.create_event(
+            owner_id="alice",
+            title="Dinner",
+            starts_at=local_start,
+        )
+
+        updated = service.update_event(
+            event_id=created.id,
+            owner_id="alice",
+            title="Dinner moved",
+            starts_at=local_start,
+        )
+        fetched = service.get_event(event_id=created.id, owner_id="alice")
+
+        expected = datetime(2026, 10, 20, 15, 30, tzinfo=UTC)
+        assert updated.starts_at == expected
+        assert updated.starts_at is not None
+        assert updated.starts_at.tzinfo is UTC
+        assert fetched.starts_at == expected
+    finally:
+        if previous_tz is None:
+            monkeypatch.delenv("TZ", raising=False)
+        else:
+            monkeypatch.setenv("TZ", previous_tz)
+        time.tzset()
 
 
 def test_other_owner_cannot_retrieve_event(service: EventsService) -> None:

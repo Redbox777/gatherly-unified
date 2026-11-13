@@ -43,13 +43,16 @@ class EventsService:
         starts_at: datetime | None = None,
     ) -> Event:
         existing = self.get_event(event_id=event_id, owner_id=owner_id)
+        validated = Event.create(
+            owner_id=existing.owner_id,
+            title=title,
+            starts_at=starts_at,
+        )
         updated = Event(
             id=existing.id,
             owner_id=existing.owner_id,
-            title=Event.create(
-                owner_id=owner_id, title=title, starts_at=starts_at
-            ).title,
-            starts_at=starts_at.astimezone() if starts_at and starts_at.tzinfo else starts_at,
+            title=validated.title,
+            starts_at=validated.starts_at,
             created_at=existing.created_at,
         )
         with transaction(self._repository.connection):
