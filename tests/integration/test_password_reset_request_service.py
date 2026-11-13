@@ -100,7 +100,7 @@ def test_request_requires_timezone_aware_datetime(request_context) -> None:
 def test_failed_reset_email_preserves_previous_active_token(request_context) -> None:
     connection, _, identity, sender, service = request_context
     resets = PasswordResetService(AuthEmailTokensRepository(connection))
-    previous_token = resets.issue(user_id=identity.user_id, now=NOW)
+    previous_token = resets.issue(identity_id=identity.identity_id, now=NOW)
     sender.fail = True
 
     assert service.request(email=EMAIL, now=NOW + timedelta(minutes=1)) == GENERIC_RESPONSE
@@ -115,7 +115,7 @@ def test_successful_reset_email_replaces_previous_active_token(request_context) 
     _, _, identity, sender, service = request_context
     connection, _, identity, sender, service = request_context
     resets = PasswordResetService(AuthEmailTokensRepository(connection))
-    previous_token = resets.issue(user_id=identity.user_id, now=NOW)
+    previous_token = resets.issue(identity_id=identity.identity_id, now=NOW)
 
     assert service.request(email=EMAIL, now=NOW + timedelta(minutes=1)) == GENERIC_RESPONSE
     new_token = sender.messages[-1][2].split("#token=", maxsplit=1)[1].splitlines()[0]
