@@ -41,6 +41,21 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
         assert "activated_at" in token_columns
         assert "identity_id" in token_columns
         assert "user_id" not in token_columns
+        token_column_details = {
+            row["name"]: row for row in connection.execute(
+                "PRAGMA table_info(auth_email_tokens)"
+            )
+        }
+        assert token_column_details["identity_id"]["notnull"] == 1
+        token_foreign_keys = connection.execute(
+            "PRAGMA foreign_key_list(auth_email_tokens)"
+        ).fetchall()
+        assert any(
+            row["table"] == "auth_identities"
+            and row["from"] == "identity_id"
+            and row["to"] == "id"
+            for row in token_foreign_keys
+        )
 
         versions = {
             row["version"]
