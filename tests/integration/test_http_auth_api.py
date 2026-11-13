@@ -205,6 +205,8 @@ def test_registration_verification_login_and_logout_flow(
         assert registration.status_code == 202
         assert len(sender.messages) == 1
         assert sender.messages[0][0] == "person@example.test"
+        assert "http://localhost:8000/verify-email#token=" in sender.messages[0][2]
+        assert "?token=" not in sender.messages[0][2]
 
         before_verification = client.post(
             "/auth/login",
@@ -249,6 +251,28 @@ def test_registration_verification_login_and_logout_flow(
         )
         assert invalid_session.status_code == 401
 
+
+
+def test_auth_token_landing_pages_are_same_origin_and_do_not_expose_fragments(
+    tmp_path,
+) -> None:
+    app = create_app(tmp_path / "auth-token-pages.sqlite3")
+    with TestClient(app) as client:
+        verification = client.get("/verify-email")
+        reset = client.get("/reset-password")
+
+    for response in (verification, reset):
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        assert response.headers["referrer-policy"] == "no-referrer"
+        assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
+        assert 'window.location.hash.slice(1)' in response.text
+        assert "window.history.replaceState" in response.text
+        assert 'method: "POST"' in response.text
+
+    assert 'fetch("/auth/verify-email"' in verification.text
+    assert 'fetch("/auth/password-reset/confirm"' in reset.text
+    assert "new_password: password.value" in reset.text
 
 def test_password_reset_delivery_failure_logs_safely_and_keeps_generic_response(
     tmp_path, monkeypatch, caplog

@@ -99,7 +99,9 @@ def test_password_reset_revokes_existing_http_session_and_allows_new_password(
         reset_link = next(
             line for line in reset_body.splitlines() if "token=" in line
         )
-        reset_token = parse_qs(urlsplit(reset_link).query)["token"][0]
+        parsed_reset_link = urlsplit(reset_link)
+        assert not parsed_reset_link.query
+        reset_token = parse_qs(parsed_reset_link.fragment)["token"][0]
 
         confirmed = client.post(
             "/auth/password-reset/confirm",
