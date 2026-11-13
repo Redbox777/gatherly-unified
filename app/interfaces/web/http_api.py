@@ -41,6 +41,9 @@ from app.infrastructure.database.participants_repository import ParticipantsRepo
 from app.infrastructure.database.participant_invitations_repository import (
     ParticipantInvitationsRepository,
 )
+from app.infrastructure.database.smtp_rate_limits_repository import (
+    SmtpRateLimitsRepository,
+)
 from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
 from app.interfaces.telegram.login_verification import verify_telegram_login
 from app.interfaces.web.runtime_config import validate_runtime_configuration
@@ -157,6 +160,7 @@ class Dependencies:
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self.connection = connection
+        self.smtp_rate_limits = SmtpRateLimitsRepository(connection)
         identity_repository = AuthIdentitiesRepository(connection)
         token_repository = AuthEmailTokensRepository(connection)
         session_repository = AuthSessionsRepository(connection)
@@ -184,6 +188,22 @@ class Dependencies:
             reset_url=os.environ.get(
                 "PASSWORD_RESET_URL", "http://localhost:8000/reset-password"
             ),
+        )
+
+
+def _enforce_email_send_rate_limit(
+    deps: Dependencies, request: Request, recipient: str, now: datetime
+) -> None:
+    """Apply a shared, database-backed quota before attempting SMTP delivery."""
+    requester = request.client.host if request.client else "unknown"
+    retry_after = deps.smtp_rate_limits.consume(
+        recipient=recipient, requester=requester, now=now
+    )
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many email requests; try again later",
+            headers={"Retry-After": str(retry_after)},
         )
 
 
@@ -485,8 +505,11 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         return {"status": "ok"}
 
     @app.post("/auth/register", status_code=status.HTTP_202_ACCEPTED)
-    def register(payload: RegisterRequest, deps: ServiceDependency) -> dict[str, str]:
+    def register(
+        payload: RegisterRequest, request: Request, deps: ServiceDependency
+    ) -> dict[str, str]:
         now = datetime.now(UTC)
+        _enforce_email_send_rate_limit(deps, request, payload.email, now)
         try:
             identity = deps.identities.register_email(
                 email=payload.email, password=payload.password, now=now
@@ -528,14 +551,23 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
 
     @app.post("/auth/verification/request", status_code=status.HTTP_202_ACCEPTED)
     def request_verification(
-        payload: PasswordResetRequest, deps: ServiceDependency
+        payload: PasswordResetRequest, request: Request, deps: ServiceDependency
     ) -> dict[str, str]:
         normalized_email = payload.email.strip().casefold()
-        identity = deps.identities.find_identity(
-            provider="email", provider_subject=normalized_email
+        now = datetime.now(UTC)
+        retry_after = deps.smtp_rate_limits.consume(
+            recipient=normalized_email,
+            requester=request.client.host if request.client else "unknown",
+            now=now,
+        )
+        identity = (
+            None
+            if retry_after is not None
+            else deps.identities.find_identity(
+                provider="email", provider_subject=normalized_email
+            )
         )
         if identity is not None and identity.verified_at is None:
-            now = datetime.now(UTC)
             token = deps.verification.issue(user_id=identity.user_id, now=now)
             verify_url = os.environ.get(
                 "EMAIL_VERIFICATION_URL", "http://localhost:8000/verify-email"
@@ -903,6 +935,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         if owner_id is None:
             raise HTTPException(status_code=401, detail="Authentication required")
         now = datetime.now(UTC)
+        _enforce_email_send_rate_limit(deps, request, payload.email, now)
         try:
             created = deps.participant_invitations.create_invitation(
                 event_id=event_id,
@@ -1145,9 +1178,17 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
 
     @app.post("/auth/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
     def request_password_reset(
-        payload: PasswordResetRequest, deps: ServiceDependency
+        payload: PasswordResetRequest, request: Request, deps: ServiceDependency
     ) -> dict[str, str]:
-        deps.reset_requests.request(email=payload.email, now=datetime.now(UTC))
+        normalized_email = payload.email.strip().casefold()
+        now = datetime.now(UTC)
+        retry_after = deps.smtp_rate_limits.consume(
+            recipient=normalized_email,
+            requester=request.client.host if request.client else "unknown",
+            now=now,
+        )
+        if retry_after is None:
+            deps.reset_requests.request(email=normalized_email, now=now)
         return GENERIC_RESET_RESPONSE
 
     @app.post("/auth/password-reset/confirm")
