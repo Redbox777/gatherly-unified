@@ -54,10 +54,44 @@ def test_registration_email_failure_logs_without_sensitive_details(
             },
         )
 
-    assert response.status_code == 503
+    assert response.status_code == 202
+    assert response.json() == http_api.GENERIC_REGISTRATION_RESPONSE
     assert "Registration verification email delivery failed (OSError)" in caplog.text
     assert "private-person@example.test" not in caplog.text
     assert "SMTP unavailable" not in caplog.text
+
+
+def test_registration_response_does_not_reveal_existing_accounts(
+    tmp_path, monkeypatch
+) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "registration-enumeration.sqlite3")
+
+    with TestClient(app) as client:
+        new_account = client.post(
+            "/auth/register",
+            json={"email": "enumeration@example.test", "password": "correct horse battery staple"},
+        )
+        duplicate_unverified = client.post(
+            "/auth/register",
+            json={"email": "enumeration@example.test", "password": "another secure password"},
+        )
+        token = sender.messages[0][2].split("token=", maxsplit=1)[1].splitlines()[0]
+        assert client.post("/auth/verify-email", json={"token": token}).status_code == 200
+        duplicate_verified = client.post(
+            "/auth/register",
+            json={"email": "enumeration@example.test", "password": "yet another secure password"},
+        )
+        unknown = client.post(
+            "/auth/register",
+            json={"email": "brand-new@example.test", "password": "correct horse battery staple"},
+        )
+
+    responses = (new_account, duplicate_unverified, duplicate_verified, unknown)
+    assert all(response.status_code == 202 for response in responses)
+    assert all(response.json() == http_api.GENERIC_REGISTRATION_RESPONSE for response in responses)
+    assert len(sender.messages) == 2
 
 
 def test_registration_can_recover_after_email_delivery_failure(
@@ -86,7 +120,8 @@ def test_registration_can_recover_after_email_delivery_failure(
                 "password": "correct horse battery staple",
             },
         )
-        assert registration.status_code == 503
+        assert registration.status_code == 202
+        assert registration.json() == http_api.GENERIC_REGISTRATION_RESPONSE
 
         resend = client.post(
             "/auth/verification/request", json={"email": "retry@example.test"}
