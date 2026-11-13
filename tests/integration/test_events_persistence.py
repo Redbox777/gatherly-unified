@@ -40,7 +40,6 @@ def test_start_time_remains_utc_after_persistence(service: EventsService) -> Non
     assert fetched.created_at.tzinfo is not None
 
 
-
 @pytest.mark.skipif(not hasattr(time, "tzset"), reason="requires time.tzset")
 def test_update_event_normalizes_start_time_to_utc(
     service: EventsService, monkeypatch: pytest.MonkeyPatch
