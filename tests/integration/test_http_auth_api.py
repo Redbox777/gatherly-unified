@@ -20,6 +20,7 @@ def test_health_endpoint_uses_temporary_database(tmp_path) -> None:
         response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+    assert response.headers["cache-control"] == "no-store"
 
 
 def test_password_reset_request_has_generic_response(tmp_path) -> None:
@@ -279,6 +280,7 @@ def test_registration_verification_login_and_logout_flow(
 
         current_user = client.get("/auth/me")
         assert current_user.status_code == 200
+        assert current_user.headers["cache-control"] == "no-store"
         user_id = current_user.json()["user_id"]
         assert user_id
 
