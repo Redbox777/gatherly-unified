@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title">
+  <title id="title">Gatherly magpie mark</title>
+  <defs>
+    <linearGradient id="feather" x1="18" y1="18" x2="138" y2="142" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#102f43"/><stop offset=".48" stop-color="#087f91"/><stop offset=".76" stop-color="#25c8bd"/><stop offset="1" stop-color="#07536a"/>
+    </linearGradient>
+    <linearGradient id="wing" x1="42" y1="105" x2="126" y2="38" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#063c55"/><stop offset=".55" stop-color="#0b9da8"/><stop offset="1" stop-color="#69e1d0"/>
+    </linearGradient>
+  </defs>
+  <path d="M23 92c-8-30 11-61 42-70 21-6 43 0 57 15-15-7-31-8-46-2-25 10-38 36-31 61 5 19 21 32 42 36-29 8-56-8-64-40Z" fill="url(#feather)"/>
+  <path d="M54 88c11-23 29-39 53-47l31-10-20 19c-10 9-18 18-23 29 17 1 30 8 41 20-21-5-38-4-52 5-14 9-25 9-35-1 1-5 3-10 5-15Z" fill="#0b2634"/>
+  <path d="M70 91c17-18 35-29 57-34-11 11-19 21-23 34 12 3 23 9 33 18-19-4-34-3-47 5-12 7-23 6-31-2 2-8 5-15 11-21Z" fill="url(#wing)"/>
+  <path d="M54 112c19 9 37 8 55-4-8 17-23 27-42 26-9-5-14-12-13-22Z" fill="#f4fbf8"/>
+  <circle cx="108" cy="48" r="5.4" fill="#f4fbf8"/><circle cx="109" cy="48" r="2.8" fill="#092c3a"/>
+  <path d="m138 38 17-8-13 16" fill="#16b9b2"/>
+  <path d="M39 108c12 20 30 30 54 31" fill="none" stroke="#56d9cb" stroke-width="3" stroke-linecap="round" opacity=".8"/>
+</svg>
