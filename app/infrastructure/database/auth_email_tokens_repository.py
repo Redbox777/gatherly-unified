@@ -163,6 +163,15 @@ class AuthEmailTokensRepository:
             if row is None:
                 return False
             user_id = str(row["user_id"])
+            identity = self._connection.execute(
+                """SELECT verified_at FROM auth_identities
+                   WHERE user_id = ? AND provider = 'email'""",
+                (user_id,),
+            ).fetchone()
+            if identity is None or (
+                (purpose == "reset_password") != (identity["verified_at"] is not None)
+            ):
+                return False
             self._connection.execute(
                 """UPDATE auth_email_tokens SET consumed_at = ?
                    WHERE user_id = ? AND purpose = ? AND id != ?
