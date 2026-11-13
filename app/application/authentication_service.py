@@ -22,11 +22,15 @@ class AuthenticationService:
     def login_email(
         self, *, email: str, password: str, now: datetime
     ) -> CreatedSession | None:
-        """Return a new session for a verified email identity, else None."""
+        """Return a session only if the verified password remains current at issuance."""
         identity = self._identities.authenticate_email(email=email, password=password)
-        if identity is None:
+        if identity is None or identity.password_hash is None:
             return None
-        return self._sessions.create(user_id=identity.user_id, now=now)
+        return self._sessions.create_for_current_email_identity(
+            identity_id=identity.identity_id,
+            expected_password_hash=identity.password_hash,
+            now=now,
+        )
 
     def login_telegram(
         self, *, telegram_subject: str, now: datetime, verified_at: datetime

@@ -57,6 +57,58 @@ class AuthSessionsRepository:
             expires_at=expires_at,
         )
 
+    def create_if_email_identity_matches(
+        self,
+        *,
+        identity_id: str,
+        expected_password_hash: str,
+        now: datetime,
+        expires_at: datetime,
+    ) -> CreatedSession | None:
+        """Issue a session only if the verified email credential is still current.
+
+        The identity check and session insert share one write transaction. A
+        concurrent password change or reset therefore either happens first
+        and prevents issuance, or happens afterward and revokes the new session.
+        """
+        self._validate_times(now=now, expires_at=expires_at)
+        if not identity_id.strip() or not expected_password_hash.strip():
+            raise ValueError("Identity ID and expected password hash must not be blank")
+
+        with transaction(self._connection):
+            identity = self._connection.execute(
+                """SELECT user_id FROM auth_identities
+                   WHERE id = ? AND provider = 'email'
+                     AND verified_at IS NOT NULL AND password_hash = ?""",
+                (identity_id, expected_password_hash),
+            ).fetchone()
+            if identity is None:
+                return None
+
+            user_id = str(identity["user_id"])
+            issued = issue_token()
+            session_id = str(uuid4())
+            self._connection.execute(
+                """INSERT INTO auth_sessions(
+                    id, user_id, token_hash, created_at, expires_at, revoked_at
+                ) VALUES (?, ?, ?, ?, ?, NULL)""",
+                (
+                    session_id,
+                    user_id,
+                    issued.digest,
+                    self._format(now),
+                    self._format(expires_at),
+                ),
+            )
+
+        return CreatedSession(
+            session_id=session_id,
+            user_id=user_id,
+            raw_token=issued.raw,
+            created_at=now,
+            expires_at=expires_at,
+        )
+
     def get_active_user_id(self, *, raw_token: str, now: datetime) -> str | None:
         """Return the session owner only when the token is valid and active."""
         self._require_aware(now)

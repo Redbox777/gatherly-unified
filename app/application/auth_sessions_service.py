@@ -30,6 +30,21 @@ class AuthSessionsService:
             expires_at=now + self._lifetime,
         )
 
+    def create_for_current_email_identity(
+        self,
+        *,
+        identity_id: str,
+        expected_password_hash: str,
+        now: datetime,
+    ) -> CreatedSession | None:
+        """Issue a session only while the verified email credential remains unchanged."""
+        return self._repository.create_if_email_identity_matches(
+            identity_id=identity_id,
+            expected_password_hash=expected_password_hash,
+            now=now,
+            expires_at=now + self._lifetime,
+        )
+
     def resolve(self, *, raw_token: str, now: datetime) -> str | None:
         """Resolve an active session token to its internal user ID."""
         return self._repository.get_active_user_id(raw_token=raw_token, now=now)
