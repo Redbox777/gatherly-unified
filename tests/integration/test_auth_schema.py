@@ -1,10 +1,17 @@
 import sqlite3
+from datetime import datetime
 
 import pytest
 
 from app.domain.auth_tokens import hash_token
 from app.infrastructure.database.auth_email_tokens_repository import AuthEmailTokensRepository
-from app.infrastructure.database.connection import MIGRATIONS, _execute_migration, connect, migrate, transaction
+from app.infrastructure.database.connection import (
+    MIGRATIONS,
+    _execute_migration,
+    connect,
+    migrate,
+    transaction,
+)
 
 
 def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) -> None:
