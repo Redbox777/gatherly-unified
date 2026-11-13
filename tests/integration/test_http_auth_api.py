@@ -474,7 +474,13 @@ def test_authenticated_password_change_revokes_all_sessions(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "password-change-http.sqlite3")
 
-    with TestClient(app, headers={"Origin": "http://testserver"}) as client, TestClient(app, headers={"Origin": "http://testserver"}) as other_client:
+    with (
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as client,
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as other_client,
+
+    ):
         registration = client.post(
             "/auth/register",
             json={
@@ -707,7 +713,13 @@ def test_event_routes_require_authentication_and_hide_other_owners(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "event-ownership-http.sqlite3")
 
-    with TestClient(app, headers={"Origin": "http://testserver"}) as owner, TestClient(app, headers={"Origin": "http://testserver"}) as other_user:
+    with (
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as owner,
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as other_user,
+
+    ):
         assert owner.post("/events", json={"title": "No session"}).status_code == 401
         assert (
             owner.get("/events/00000000-0000-0000-0000-000000000001").status_code
@@ -869,7 +881,10 @@ def test_event_update_and_delete_are_owner_only(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("COOKIE_SECURE", "false")
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "event-edit-owner-only.sqlite3")
-    with TestClient(app, headers={"Origin": "http://testserver"}) as owner, TestClient(app, headers={"Origin": "http://testserver"}) as other:
+    with (
+        TestClient(app, headers={"Origin": "http://testserver"}) as owner,
+        TestClient(app, headers={"Origin": "http://testserver"}) as other,
+    ):
         for client, email, password in (
             (owner, "event-owner@example.test", "owner password long enough"),
             (other, "event-other@example.test", "other password long enough"),
@@ -898,7 +913,13 @@ def test_authenticated_user_can_list_only_their_own_events(tmp_path, monkeypatch
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "event-list-http.sqlite3")
 
-    with TestClient(app, headers={"Origin": "http://testserver"}) as owner, TestClient(app, headers={"Origin": "http://testserver"}) as other:
+    with (
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as owner,
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as other,
+
+    ):
         assert owner.get("/events").status_code == 401
 
         for client, email, password in (
@@ -1003,7 +1024,13 @@ def test_only_event_owner_can_remove_participant(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "participant-remove-owner-only.sqlite3")
 
-    with TestClient(app, headers={"Origin": "http://testserver"}) as owner, TestClient(app, headers={"Origin": "http://testserver"}) as other:
+    with (
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as owner,
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as other,
+
+    ):
         for client, email, password in (
             (owner, "participant-owner@example.test", "owner password long enough"),
             (other, "participant-other@example.test", "other password long enough"),
@@ -1061,7 +1088,13 @@ def test_each_http_request_uses_its_own_database_connection(
 
     monkeypatch.setattr(http_api, "connect", track_connection)
 
-    with TestClient(app, headers={"Origin": "http://testserver"}) as first_client, TestClient(app, headers={"Origin": "http://testserver"}) as second_client:
+    with (
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as first_client,
+
+        TestClient(app, headers={"Origin": "http://testserver"}) as second_client,
+
+    ):
         with ThreadPoolExecutor(max_workers=2) as executor:
             responses = list(
                 executor.map(
