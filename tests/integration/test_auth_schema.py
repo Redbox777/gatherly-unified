@@ -32,6 +32,7 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             "auth_telegram_login_payloads",
             "participant_invitations",
             "smtp_rate_limit_events",
+            "http_rate_limit_events",
         } <= tables
 
         token_columns = {
@@ -61,7 +62,7 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             row["version"]
             for row in connection.execute("SELECT version FROM schema_migrations").fetchall()
         }
-        assert versions == {1, 2, 3, 4, 5, 6, 7, 8, 9}
+        assert versions == {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
     finally:
         connection.close()
 
@@ -76,7 +77,7 @@ def test_migration_preserves_existing_active_email_tokens(tmp_path) -> None:
             "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
         )
         connection.commit()
-        for version, script in MIGRATIONS[:-1]:
+        for version, script in MIGRATIONS[:-2]:
             with transaction(connection):
                 _execute_migration(connection, script)
                 connection.execute(
@@ -273,7 +274,7 @@ def test_identity_token_migration_refuses_ambiguous_legacy_ownership(tmp_path) -
             "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
         )
         connection.commit()
-        for version, script in MIGRATIONS[:-1]:
+        for version, script in MIGRATIONS[:-2]:
             with transaction(connection):
                 _execute_migration(connection, script)
                 connection.execute(

@@ -37,7 +37,7 @@ Web adapter ───────┘              │
 - Never log bot tokens, session secrets, authentication codes, or sensitive payloads.
 - SMTP authentication must use STARTTLS; do not disable TLS when credentials are configured.
 - Set `COOKIE_SECURE=true` in production behind HTTPS. The development example also defaults to secure cookies; use `false` only for local plain-HTTP testing.
-- The current in-process HTTP rate limiter is per worker and is not a distributed abuse-control boundary. Use a shared limiter at the edge or in a shared store before multi-worker/public deployment.
+- Sensitive HTTP POST routes use a SQLite-backed rate limiter shared by processes using the same local database. It is suitable for a single-host deployment only; use an edge/shared network limiter and reassess the database before deploying multiple hosts. Source-address quotas also depend on correct trusted-proxy configuration.
 - Use parameterized database queries.
 - Apply authorization on every object-level read/write, not just in the UI.
 - Validate input at interface boundaries and enforce business invariants in the application/domain layer.

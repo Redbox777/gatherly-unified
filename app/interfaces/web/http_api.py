@@ -1,6 +1,5 @@
 """HTTP adapter for email authentication and server-managed sessions."""
 
-from collections import OrderedDict, deque
 from collections.abc import Awaitable, Callable, Iterator
 from datetime import UTC, datetime
 from uuid import UUID
@@ -9,13 +8,12 @@ import logging
 import os
 from pathlib import Path
 import sqlite3
-from threading import Lock
-from time import monotonic
 from typing import Annotated
 from urllib.parse import urlencode, urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.auth_identities_service import AuthIdentitiesService
@@ -37,6 +35,9 @@ from app.infrastructure.database.auth_identities_repository import AuthIdentitie
 from app.infrastructure.database.auth_sessions_repository import AuthSessionsRepository
 from app.infrastructure.database.connection import connect, migrate, transaction
 from app.infrastructure.database.events_repository import EventsRepository
+from app.infrastructure.database.http_rate_limits_repository import (
+    HttpRateLimitsRepository,
+)
 from app.infrastructure.database.participants_repository import ParticipantsRepository
 from app.infrastructure.database.participant_invitations_repository import (
     ParticipantInvitationsRepository,
@@ -210,6 +211,23 @@ class Dependencies:
         )
 
 
+def _consume_http_rate_limit(
+    database_path: str | Path, requester: str, route: str
+) -> int | None:
+    """Perform blocking SQLite throttling work outside the ASGI event loop."""
+    connection = connect(database_path)
+    try:
+        return HttpRateLimitsRepository(connection).consume(
+            requester=requester,
+            route=route,
+            now=datetime.now(UTC),
+            limit=5,
+            window_seconds=60,
+        )
+    finally:
+        connection.close()
+
+
 def _enforce_email_send_rate_limit(
     deps: Dependencies, request: Request, recipient: str, now: datetime
 ) -> None:
@@ -282,8 +300,6 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     validate_runtime_configuration(os.environ)
     smtp_rate_limit_settings = load_smtp_rate_limit_settings(os.environ)
     app = FastAPI(title="Gatherly Authentication API", version="0.1.0")
-    rate_limit_window_seconds = 60.0
-    rate_limit_max_requests = 5
     rate_limit_paths = {
         "/auth/login",
         "/auth/telegram/login",
@@ -295,66 +311,26 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         "/auth/verification/request",
         "/participant-invitations/accept",
     }
-    # Bound memory if requests arrive from many distinct client addresses.
-    rate_limit_max_tracked_keys = 10_000
-    request_times: OrderedDict[tuple[str, str], deque[float]] = OrderedDict()
-    request_times_lock = Lock()
 
     @app.middleware("http")
     async def validate_browser_origin(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         if request.method == "POST" and request.url.path in rate_limit_paths:
-            client_host = request.client.host if request.client else "unknown"
-            key = (client_host, request.url.path)
-            current_time = monotonic()
-            with request_times_lock:
-                timestamps = request_times.get(key)
-                if timestamps is None and len(request_times) >= rate_limit_max_tracked_keys:
-                    # Reclaim expired entries before applying the bounded fallback.
-                    for tracked_key, tracked_times in list(request_times.items()):
-                        while (
-                            tracked_times
-                            and current_time - tracked_times[0] >= rate_limit_window_seconds
-                        ):
-                            tracked_times.popleft()
-                        if not tracked_times:
-                            del request_times[tracked_key]
-                    timestamps = request_times.get(key)
-                    if timestamps is None:
-                        # Never evict an active client's counter to grant a fresh quota.
-                        # Under key exhaustion, new clients share a per-route overflow bucket.
-                        key = ("\\x00overflow", request.url.path)
-                        timestamps = request_times.get(key)
-                        if timestamps is None:
-                            if len(request_times) >= rate_limit_max_tracked_keys:
-                                # Preserve every active client's counter. If no slot is
-                                # available for the shared overflow bucket, fail closed.
-                                return Response(
-                                    content='{"detail":"Too many requests; try again later"}',
-                                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                                    headers={"Retry-After": str(int(rate_limit_window_seconds))},
-                                    media_type="application/json",
-                                )
-                            timestamps = deque()
-                            request_times[key] = timestamps
-                elif timestamps is None:
-                    timestamps = deque()
-                    request_times[key] = timestamps
-                request_times.move_to_end(key)
-                while (
-                    timestamps
-                    and current_time - timestamps[0] >= rate_limit_window_seconds
-                ):
-                    timestamps.popleft()
-                if len(timestamps) >= rate_limit_max_requests:
-                    return Response(
-                        content='{"detail":"Too many requests; try again later"}',
-                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                        headers={"Retry-After": str(int(rate_limit_window_seconds))},
-                        media_type="application/json",
-                    )
-                timestamps.append(current_time)
+            requester = request.client.host if request.client else "unknown"
+            retry_after = await run_in_threadpool(
+                _consume_http_rate_limit,
+                request.app.state.database_path,
+                requester,
+                request.url.path,
+            )
+            if retry_after is not None:
+                return Response(
+                    content='{"detail":"Too many requests; try again later"}',
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    headers={"Retry-After": str(retry_after)},
+                    media_type="application/json",
+                )
 
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             origin = request.headers.get("origin")
