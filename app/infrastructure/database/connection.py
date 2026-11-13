@@ -227,7 +227,9 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             event_id TEXT NULL REFERENCES events(id) ON DELETE CASCADE,
-            kind TEXT NOT NULL CHECK (kind IN ('event_updated', 'participant_added', 'event_reminder')),
+            kind TEXT NOT NULL CHECK (
+                kind IN ('event_updated', 'participant_added', 'event_reminder')
+            ),
             title TEXT NOT NULL CHECK (length(trim(title)) BETWEEN 1 AND 200),
             body TEXT NOT NULL CHECK (length(trim(body)) BETWEEN 1 AND 1000),
             dedupe_key TEXT NOT NULL UNIQUE,
@@ -245,8 +247,10 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
         CREATE TABLE notification_preferences (
             user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
             email_enabled INTEGER NOT NULL DEFAULT 1 CHECK (email_enabled IN (0, 1)),
-            event_updates_enabled INTEGER NOT NULL DEFAULT 1 CHECK (event_updates_enabled IN (0, 1)),
-            participant_added_enabled INTEGER NOT NULL DEFAULT 1 CHECK (participant_added_enabled IN (0, 1)),
+            event_updates_enabled INTEGER NOT NULL DEFAULT 1
+                CHECK (event_updates_enabled IN (0, 1)),
+            participant_added_enabled INTEGER NOT NULL DEFAULT 1
+                CHECK (participant_added_enabled IN (0, 1)),
             reminders_enabled INTEGER NOT NULL DEFAULT 1 CHECK (reminders_enabled IN (0, 1)),
             updated_at TEXT NOT NULL
         );
