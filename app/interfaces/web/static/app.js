@@ -318,9 +318,45 @@
       notificationList.append(card);
     });
   };
+  const loadNotificationPreferences = async () => {
+    const status = document.getElementById("preferences-status");
+    try {
+      const preferences = await api("/notification-preferences");
+      document.getElementById("pref-email").checked = preferences.email_enabled;
+      document.getElementById("pref-updates").checked = preferences.event_updates_enabled;
+      document.getElementById("pref-participants").checked = preferences.participant_added_enabled;
+      document.getElementById("pref-reminders").checked = preferences.reminders_enabled;
+    } catch (error) {
+      status.textContent = error.message;
+    }
+  };
+  document.getElementById("preferences-save").addEventListener("click", async () => {
+    const button = document.getElementById("preferences-save");
+    const status = document.getElementById("preferences-status");
+    button.disabled = true;
+    status.textContent = "Сохраняем…";
+    try {
+      await api("/notification-preferences", {
+        method:"PUT",
+        body:JSON.stringify({
+          email_enabled:document.getElementById("pref-email").checked,
+          event_updates_enabled:document.getElementById("pref-updates").checked,
+          participant_added_enabled:document.getElementById("pref-participants").checked,
+          reminders_enabled:document.getElementById("pref-reminders").checked
+        })
+      });
+      status.textContent = "Настройки сохранены.";
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   const loadNotifications = async () => {
     try {
       renderNotifications(await api("/notifications"));
+      await loadNotificationPreferences();
     } catch (error) {
       notificationList.replaceChildren();
       const message = document.createElement("p");
