@@ -62,7 +62,7 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             row["version"]
             for row in connection.execute("SELECT version FROM schema_migrations").fetchall()
         }
-        assert versions == {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+        assert versions == {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
     finally:
         connection.close()
 
@@ -77,7 +77,7 @@ def test_migration_preserves_existing_active_email_tokens(tmp_path) -> None:
             "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
         )
         connection.commit()
-        for version, script in MIGRATIONS[:-2]:
+        for version, script in MIGRATIONS[:8]:
             with transaction(connection):
                 _execute_migration(connection, script)
                 connection.execute(
