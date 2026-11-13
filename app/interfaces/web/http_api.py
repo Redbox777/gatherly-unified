@@ -384,7 +384,11 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             headers={
                 "Cache-Control": "no-store",
                 "Referrer-Policy": "no-referrer",
-                "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+                "Content-Security-Policy": (
+                    "default-src 'none'; style-src 'unsafe-inline'; "
+                    "script-src 'unsafe-inline'; connect-src 'self'; "
+                    "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+                ),
             },
         )
 
@@ -434,7 +438,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         if (!token) {
-          status.textContent = "This link is missing its token. Request a new password-reset email.";
+          status.textContent = "This link is missing its token. " +
+            "Request a new password-reset email.";
           return;
         }
         button.disabled = true;
@@ -451,7 +456,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             form.hidden = true;
             status.textContent = "Your password has been updated. You can now sign in.";
           } else {
-            status.textContent = "This link is invalid, expired, or already used. Request a new password-reset email.";
+            status.textContent = "This link is invalid, expired, or already used. " +
+              "Request a new password-reset email.";
           }
         } catch (_) {
           status.textContent = "Network error. Check your connection and try again.";
@@ -466,7 +472,11 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             headers={
                 "Cache-Control": "no-store",
                 "Referrer-Policy": "no-referrer",
-                "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+                "Content-Security-Policy": (
+                    "default-src 'none'; style-src 'unsafe-inline'; "
+                    "script-src 'unsafe-inline'; connect-src 'self'; "
+                    "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+                ),
             },
         )
 
