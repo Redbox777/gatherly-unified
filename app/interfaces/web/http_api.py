@@ -396,11 +396,11 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                     production=production,
                 )
         response = await call_next(request)
-        if request.url.path in {"/", "/index.html"}:
+        if request.url.path in {"/", "/index.html", "/auth.html"}:
             response.headers.setdefault(
                 "Content-Security-Policy",
-                "default-src 'self'; style-src 'self' https://fonts.googleapis.com; "
-                "font-src https://fonts.gstatic.com; img-src 'self' data:; "
+                "default-src 'self'; style-src 'self' "
+                "font-src img-src 'self' data:; "
                 "script-src 'self'; connect-src 'self'; base-uri 'self'; "
                 "form-action 'self'; frame-ancestors 'none'",
             )
