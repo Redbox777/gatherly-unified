@@ -84,12 +84,30 @@
         <section class="section-block" id="meetings">
           <div class="section-heading">
             <div><p class="eyebrow">ВАШ РИТМ</p><h2>Мои встречи</h2></div>
-            <span class="muted-link" id="event-count">Загружаем…</span>
+            <div class="meeting-actions"><span class="muted-link" id="event-count">Загружаем…</span><button class="primary-button create-event-button" id="create-event-button" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#icon-plus"></use></svg> Новая встреча</button></div>
           </div>
           <div class="meeting-grid" id="meeting-grid" aria-live="polite">
             <div class="dashboard-state" role="status">Загружаем ваши встречи…</div>
           </div>
         </section>
+
+        <dialog class="event-dialog" id="event-dialog" aria-labelledby="event-dialog-title">
+          <form class="event-form" id="event-form">
+            <div class="dialog-heading"><div><p class="eyebrow" id="event-dialog-eyebrow">НОВОЕ СОБЫТИЕ</p><h2 id="event-dialog-title">Создать встречу</h2></div><button class="dialog-close" id="dialog-close" type="button" aria-label="Закрыть">×</button></div>
+            <label for="event-title">Название встречи</label>
+            <input id="event-title" name="title" type="text" maxlength="200" required placeholder="Например, прогулка в парке">
+            <label for="event-starts-at">Дата и время</label>
+            <input id="event-starts-at" name="starts_at" type="datetime-local">
+            <p class="form-hint">Дату можно оставить пустой и назначить позже.</p>
+            <p class="form-status" id="event-form-status" role="status" aria-live="polite"></p>
+            <div class="dialog-actions"><button class="secondary-button" id="event-cancel" type="button">Отмена</button><button class="primary-button" id="event-save" type="submit">Сохранить</button></div>
+          </form>
+          <section class="event-detail" id="event-detail" hidden>
+            <div class="dialog-heading"><div><p class="eyebrow">ВАША ВСТРЕЧА</p><h2 id="detail-title">Встреча</h2></div><button class="dialog-close" id="detail-close" type="button" aria-label="Закрыть">×</button></div>
+            <p class="detail-date" id="detail-date"></p><p class="detail-created" id="detail-created"></p>
+            <div class="dialog-actions detail-actions"><button class="danger-button" id="delete-event-button" type="button">Удалить</button><button class="primary-button" id="edit-event-button" type="button">Изменить</button></div>
+          </section>
+        </dialog>
 
         <section class="bottom-grid">
           <article class="tip-card" id="people">
