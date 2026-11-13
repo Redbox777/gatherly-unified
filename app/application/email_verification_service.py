@@ -22,24 +22,24 @@ class EmailVerificationService:
         self._repository = repository
         self._lifetime = lifetime
 
-    def issue(self, *, user_id: str, now: datetime) -> str:
+    def issue(self, *, identity_id: str, now: datetime) -> str:
         """Create a verification token; return the raw token only to the caller."""
         self._require_aware(now)
         issued = issue_token()
         self._repository.create_verification_token(
-            user_id=user_id,
+            identity_id=identity_id,
             token_digest=issued.digest,
             now=now,
             expires_at=now + self._lifetime,
         )
         return issued.raw
 
-    def issue_pending(self, *, user_id: str, now: datetime) -> tuple[str, str]:
+    def issue_pending(self, *, identity_id: str, now: datetime) -> tuple[str, str]:
         """Stage a token while keeping the previously delivered token usable."""
         self._require_aware(now)
         issued = issue_token()
         token_id = self._repository.create_pending_verification_token(
-            user_id=user_id,
+            identity_id=identity_id,
             token_digest=issued.digest,
             now=now,
             expires_at=now + self._lifetime,
