@@ -52,6 +52,11 @@ SESSION_COOKIE = "gatherly_session"
 SESSION_COOKIE_PATH = "/"
 
 
+def _token_fragment_link(base_url: str, token: str) -> str:
+    """Build a bearer-token link without placing the token in the HTTP request URL."""
+    return f"{base_url.split('#', maxsplit=1)[0]}#{urlencode({'token': token})}"
+
+
 def _is_same_origin(candidate: str, request_url: str, *, origin_header: bool) -> bool:
     """Compare an Origin or Referer value with the request's effective origin."""
     if not candidate or candidate != candidate.strip():
@@ -315,6 +320,156 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
 
     ServiceDependency = Annotated[Dependencies, Depends(services)]
 
+    @app.get("/verify-email", response_class=HTMLResponse)
+    def verify_email_page() -> HTMLResponse:
+        """Serve the same-origin email verification page."""
+        return HTMLResponse(
+            content="""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Verify Gatherly email</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
+    main { width: min(100%, 28rem); box-sizing: border-box; padding: 1.5rem;
+      border: 1px solid #8886; border-radius: 1rem; }
+    button { width: 100%; padding: .75rem; margin-top: 1rem; font: inherit; cursor: pointer; }
+    #status { min-height: 1.5em; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Verify your Gatherly email</h1>
+    <p>Confirm that you control this email address.</p>
+    <button id="verify" type="button">Verify email</button>
+    <p id="status" role="status" aria-live="polite"></p>
+  </main>
+  <script>
+    (() => {
+      let token = new URLSearchParams(window.location.hash.slice(1)).get("token") || "";
+      window.history.replaceState({}, document.title, window.location.pathname);
+      const button = document.getElementById("verify");
+      const status = document.getElementById("status");
+      button.addEventListener("click", async () => {
+        if (!token) {
+          status.textContent = "This link is missing its token. Request a new verification email.";
+          return;
+        }
+        button.disabled = true;
+        try {
+          const response = await fetch("/auth/verify-email", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token })
+          });
+          token = "";
+          status.textContent = response.ok
+            ? "Your email address has been verified. You can now sign in."
+            : "This link is invalid, expired, or already used. Request a new verification email.";
+          if (response.ok) button.hidden = true;
+        } catch (_) {
+          status.textContent = "Network error. Check your connection and try again.";
+        } finally {
+          button.disabled = false;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>""",
+            headers={
+                "Cache-Control": "no-store",
+                "Referrer-Policy": "no-referrer",
+                "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+            },
+        )
+
+    @app.get("/reset-password", response_class=HTMLResponse)
+    def reset_password_page() -> HTMLResponse:
+        """Serve the same-origin password-reset page."""
+        return HTMLResponse(
+            content="""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Reset Gatherly password</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
+    main { width: min(100%, 28rem); box-sizing: border-box; padding: 1.5rem;
+      border: 1px solid #8886; border-radius: 1rem; }
+    label { display: block; margin-top: 1rem; }
+    input, button { box-sizing: border-box; width: 100%; padding: .75rem;
+      margin-top: .35rem; font: inherit; }
+    button { margin-top: 1.25rem; cursor: pointer; }
+    #status { min-height: 1.5em; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Choose a new password</h1>
+    <form id="reset-form">
+      <label for="password">New password
+        <input id="password" name="password" type="password" autocomplete="new-password"
+          minlength="12" maxlength="1024" required>
+      </label>
+      <button id="submit" type="submit">Update password</button>
+    </form>
+    <p id="status" role="status" aria-live="polite"></p>
+  </main>
+  <script>
+    (() => {
+      let token = new URLSearchParams(window.location.hash.slice(1)).get("token") || "";
+      window.history.replaceState({}, document.title, window.location.pathname);
+      const form = document.getElementById("reset-form");
+      const password = document.getElementById("password");
+      const button = document.getElementById("submit");
+      const status = document.getElementById("status");
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!token) {
+          status.textContent = "This link is missing its token. Request a new password-reset email.";
+          return;
+        }
+        button.disabled = true;
+        try {
+          const response = await fetch("/auth/password-reset/confirm", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token, new_password: password.value })
+          });
+          token = "";
+          if (response.ok) {
+            password.value = "";
+            form.hidden = true;
+            status.textContent = "Your password has been updated. You can now sign in.";
+          } else {
+            status.textContent = "This link is invalid, expired, or already used. Request a new password-reset email.";
+          }
+        } catch (_) {
+          status.textContent = "Network error. Check your connection and try again.";
+        } finally {
+          button.disabled = false;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>""",
+            headers={
+                "Cache-Control": "no-store",
+                "Referrer-Policy": "no-referrer",
+                "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+            },
+        )
+
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
@@ -334,15 +489,16 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             ) from error
         token = deps.verification.issue(user_id=identity.user_id, now=now)
         verify_url = os.environ.get(
-            "EMAIL_VERIFICATION_URL", "http://localhost:8000/auth/verify-email"
+            "EMAIL_VERIFICATION_URL", "http://localhost:8000/verify-email"
         )
+        verification_link = _token_fragment_link(verify_url, token)
         try:
             deps.email_sender.send_text(
                 recipient=identity.provider_subject,
                 subject="Verify your Gatherly email",
                 body=(
                     "Confirm your email address using this one-time token:\n\n"
-                    f"{verify_url}?token={token}\n\n"
+                    f"{verification_link}\n\n"
                     "If you did not create this account, you can ignore this email."
                 ),
             )
@@ -372,15 +528,16 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             now = datetime.now(UTC)
             token = deps.verification.issue(user_id=identity.user_id, now=now)
             verify_url = os.environ.get(
-                "EMAIL_VERIFICATION_URL", "http://localhost:8000/auth/verify-email"
+                "EMAIL_VERIFICATION_URL", "http://localhost:8000/verify-email"
             )
+            verification_link = _token_fragment_link(verify_url, token)
             try:
                 deps.email_sender.send_text(
                     recipient=identity.provider_subject,
                     subject="Verify your Gatherly email",
                     body=(
                         "Confirm your email address using this one-time token:\n\n"
-                        f"{verify_url}?token={token}\n\n"
+                        f"{verification_link}\n\n"
                         "If you did not create this account, you can ignore this email."
                     ),
                 )
