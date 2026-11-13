@@ -46,7 +46,11 @@ from app.infrastructure.database.smtp_rate_limits_repository import (
 )
 from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
 from app.interfaces.telegram.login_verification import verify_telegram_login
-from app.interfaces.web.runtime_config import validate_runtime_configuration
+from app.interfaces.web.runtime_config import (
+    SmtpRateLimitSettings,
+    load_smtp_rate_limit_settings,
+    validate_runtime_configuration,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -158,9 +162,19 @@ class PasswordResetConfirmRequest(BaseModel):
 class Dependencies:
     """Construct request-scoped services around a database connection and mail adapter."""
 
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        smtp_rate_limit_settings: SmtpRateLimitSettings,
+    ) -> None:
         self.connection = connection
-        self.smtp_rate_limits = SmtpRateLimitsRepository(connection)
+        self.smtp_rate_limits = SmtpRateLimitsRepository(
+            connection,
+            recipient_limit=smtp_rate_limit_settings.recipient_limit,
+            recipient_window_seconds=smtp_rate_limit_settings.recipient_window_seconds,
+            requester_limit=smtp_rate_limit_settings.requester_limit,
+            requester_window_seconds=smtp_rate_limit_settings.requester_window_seconds,
+        )
         identity_repository = AuthIdentitiesRepository(connection)
         token_repository = AuthEmailTokensRepository(connection)
         session_repository = AuthSessionsRepository(connection)
@@ -223,6 +237,7 @@ def _email_sender() -> SmtpEmailSender:
 def create_app(database_path: str | Path | None = None) -> FastAPI:
     """Create an API app; tests may inject a temporary SQLite database path."""
     validate_runtime_configuration(os.environ)
+    smtp_rate_limit_settings = load_smtp_rate_limit_settings(os.environ)
     app = FastAPI(title="Gatherly Authentication API", version="0.1.0")
     rate_limit_window_seconds = 60.0
     rate_limit_max_requests = 5
@@ -334,7 +349,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         # one request's commit/rollback from affecting another request.
         connection = connect(request.app.state.database_path)
         try:
-            yield Dependencies(connection)
+            yield Dependencies(connection, smtp_rate_limit_settings)
         finally:
             connection.close()
 
