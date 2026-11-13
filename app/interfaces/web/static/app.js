@@ -13,6 +13,13 @@
   const dateInput = document.getElementById("event-starts-at");
   const formStatus = document.getElementById("event-form-status");
   const saveButton = document.getElementById("event-save");
+  const participantsList = document.getElementById("participants-list");
+  const participantsCount = document.getElementById("participants-count");
+  const participantForm = document.getElementById("participant-add-form");
+  const participantName = document.getElementById("participant-name");
+  const participantStatus = document.getElementById("participant-status");
+  const participantAddButton = document.getElementById("participant-add-button");
+  let participantsBusy = false;
   let events = [];
   let activeEvent = null;
   let busy = false;
@@ -126,6 +133,14 @@
     document.getElementById("detail-created").textContent = formatDate(event.created_at)
       ? "Создано " + formatDate(event.created_at) : "";
     if (!dialog.open) dialog.showModal();
+    participantStatus.textContent = "";
+    participantsCount.textContent = "Загрузка…";
+    participantsList.replaceChildren();
+    const loading = document.createElement("p");
+    loading.className = "participants-empty";
+    loading.textContent = "Загружаем список участников…";
+    participantsList.append(loading);
+    loadParticipants(event.id);
     try {
       const fresh = await api("/events/" + encodeURIComponent(event.id));
       activeEvent = fresh;
@@ -137,6 +152,62 @@
       if (dialog.open) document.getElementById("detail-created").textContent = error.message;
     }
   };
+  const loadParticipants = async eventId => {
+    try {
+      const list = await api("/events/" + encodeURIComponent(eventId) + "/participants");
+      if (!dialog.open || activeEvent?.id !== eventId) return;
+      renderParticipants(list, eventId);
+    } catch (error) {
+      if (!dialog.open || activeEvent?.id !== eventId) return;
+      participantsCount.textContent = "Недоступно";
+      participantsList.replaceChildren();
+      const message = document.createElement("p");
+      message.className = "participants-empty";
+      message.textContent = error.message;
+      participantsList.append(message);
+    }
+  };
+  const renderParticipants = (list, eventId) => {
+    participantsCount.textContent = String(list.length);
+    participantsList.replaceChildren();
+    if (!list.length) {
+      const empty = document.createElement("p");
+      empty.className = "participants-empty";
+      empty.textContent = "Пока никого нет. Добавьте первого участника.";
+      participantsList.append(empty);
+      return;
+    }
+    list.forEach(participant => {
+      const row = document.createElement("div");
+      row.className = "participant-row";
+      const name = document.createElement("span");
+      name.className = "participant-name";
+      name.textContent = participant.display_name;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "participant-remove";
+      remove.textContent = "Удалить";
+      remove.setAttribute("aria-label", "Удалить участника " + participant.display_name);
+      remove.addEventListener("click", async () => {
+        if (participantsBusy || !window.confirm("Удалить участника «" + participant.display_name + "»?")) return;
+        participantsBusy = true;
+        remove.disabled = true;
+        participantStatus.textContent = "";
+        try {
+          await api("/events/" + encodeURIComponent(eventId) + "/participants/" + encodeURIComponent(participant.id), {method:"DELETE"});
+          await loadParticipants(eventId);
+        } catch (error) {
+          participantStatus.textContent = error.message;
+          remove.disabled = false;
+        } finally {
+          participantsBusy = false;
+        }
+      });
+      row.append(name, remove);
+      participantsList.append(row);
+    });
+  };
+
   const renderEvents = list => {
     events = list;
     grid.replaceChildren();
@@ -201,6 +272,34 @@
     }
   };
 
+  participantForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (participantsBusy || !activeEvent) return;
+    const displayName = participantName.value.trim();
+    if (!displayName || displayName.length > 120) {
+      participantStatus.textContent = "Введите имя длиной от 1 до 120 символов.";
+      participantName.focus();
+      return;
+    }
+    participantsBusy = true;
+    participantAddButton.disabled = true;
+    participantAddButton.textContent = "Добавляем…";
+    participantStatus.textContent = "";
+    try {
+      await api("/events/" + encodeURIComponent(activeEvent.id) + "/participants", {
+        method:"POST", body:JSON.stringify({display_name:displayName})
+      });
+      participantForm.reset();
+      await loadParticipants(activeEvent.id);
+    } catch (error) {
+      participantStatus.textContent = error.message === "Не удалось выполнить запрос. Попробуйте ещё раз."
+        ? "Не удалось добавить участника. Возможно, такое имя уже есть в этой встрече." : error.message;
+    } finally {
+      participantsBusy = false;
+      participantAddButton.disabled = false;
+      participantAddButton.textContent = "Добавить";
+    }
+  });
   document.getElementById("create-event-button").addEventListener("click", () => openForm(null));
   document.getElementById("dialog-close").addEventListener("click", () => dialog.close());
   document.getElementById("detail-close").addEventListener("click", () => dialog.close());

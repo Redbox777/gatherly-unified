@@ -160,3 +160,21 @@ a:focus-visible,button:focus-visible{outline:3px solid #27bdb2;outline-offset:3p
 button:disabled{opacity:.55;cursor:wait}
 @media(max-width:760px){.section-heading{gap:10px;align-items:center}.meeting-actions{gap:8px;flex-direction:column;align-items:flex-end}.create-event-button{padding:9px 11px;font-size:10px}.event-form,.event-detail{padding:21px}.event-dialog{border-radius:16px}}
 @media(max-width:380px){.section-heading{align-items:flex-start}.meeting-actions{gap:6px}.create-event-button{font-size:9px;padding:8px 9px}}
+
+/* PR26: event participant management */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.participants-panel{margin-top:20px;padding:17px;border:1px solid #e5efec;border-radius:13px;background:#fbfdfc}
+.participants-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.participants-heading h3{margin:0;color:#24464d;font-size:13px}
+.participants-heading span{font-size:10px;color:#82999a}
+.participants-list{display:grid;gap:7px}
+.participants-empty{margin:0;padding:9px 0;color:#8ba0a0;font-size:11px;line-height:1.5}
+.participant-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 11px;border-radius:9px;background:#f0f7f4}
+.participant-name{min-width:0;overflow-wrap:anywhere;color:#31575b;font-size:12px;font-weight:600}
+.participant-remove{flex:none;border:0;background:transparent;color:#a85d53;font-size:10px;font-weight:700;cursor:pointer}
+.participant-remove:hover{text-decoration:underline}
+.participant-add-form{display:flex;gap:8px;margin-top:12px}
+.participant-add-form input{flex:1;min-width:0;min-height:40px;padding:9px 11px;border:1px solid #dce9e5;border-radius:9px;background:#fff;color:#173941;font:inherit;font-size:12px}
+.participant-add-form .primary-button{justify-content:center;padding:9px 13px;font-size:10px;cursor:pointer}
+.participant-status{min-height:15px;margin:7px 0 0;color:#a44b42;font-size:10px;line-height:1.5}
+@media(max-width:420px){.participants-panel{padding:13px}.participant-add-form{flex-wrap:wrap}.participant-add-form input{flex-basis:100%}.participant-add-form .primary-button{width:100%}}

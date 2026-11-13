@@ -105,6 +105,16 @@
           <section class="event-detail" id="event-detail" hidden>
             <div class="dialog-heading"><div><p class="eyebrow">ВАША ВСТРЕЧА</p><h2 id="detail-title">Встреча</h2></div><button class="dialog-close" id="detail-close" type="button" aria-label="Закрыть">×</button></div>
             <p class="detail-date" id="detail-date"></p><p class="detail-created" id="detail-created"></p>
+            <section class="participants-panel" aria-labelledby="participants-heading">
+              <div class="participants-heading"><h3 id="participants-heading">Участники</h3><span id="participants-count">Загрузка…</span></div>
+              <div class="participants-list" id="participants-list" aria-live="polite"><p class="participants-empty">Загружаем список…</p></div>
+              <form class="participant-add-form" id="participant-add-form">
+                <label class="sr-only" for="participant-name">Имя участника</label>
+                <input id="participant-name" name="display_name" type="text" maxlength="120" required placeholder="Имя участника">
+                <button class="primary-button" id="participant-add-button" type="submit">Добавить</button>
+              </form>
+              <p class="participant-status" id="participant-status" role="status" aria-live="polite"></p>
+            </section>
             <div class="dialog-actions detail-actions"><button class="danger-button" id="delete-event-button" type="button">Удалить</button><button class="primary-button" id="edit-event-button" type="button">Изменить</button></div>
           </section>
         </dialog>
