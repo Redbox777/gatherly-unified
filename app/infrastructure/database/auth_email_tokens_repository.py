@@ -1,4 +1,4 @@
-""""Persistence operations for one-time email verification and reset tokens."""
+"""Persistence operations for one-time email verification and reset tokens."""
 
 from datetime import UTC, datetime
 import sqlite3
@@ -15,7 +15,12 @@ class AuthEmailTokensRepository:
         self._connection = connection
 
     def create_verification_token(
-        self, *, identity_id: str, token_digest: str, now: datetime, expires_at: datetime
+        self,
+        *,
+        identity_id: str,
+        token_digest: str,
+        now: datetime,
+        expires_at: datetime,
     ) -> str:
         """Store and immediately activate a verification token."""
         return self._create_token(
@@ -25,7 +30,12 @@ class AuthEmailTokensRepository:
         )
 
     def create_password_reset_token(
-        self, *, identity_id: str, token_digest: str, now: datetime, expires_at: datetime
+        self,
+        *,
+        identity_id: str,
+        token_digest: str,
+        now: datetime,
+        expires_at: datetime,
     ) -> str:
         """Store and immediately activate a password-reset token."""
         return self._create_token(
@@ -35,7 +45,12 @@ class AuthEmailTokensRepository:
         )
 
     def create_pending_verification_token(
-        self, *, identity_id: str, token_digest: str, now: datetime, expires_at: datetime
+        self,
+        *,
+        identity_id: str,
+        token_digest: str,
+        now: datetime,
+        expires_at: datetime,
     ) -> str:
         """Stage a verification token without replacing the current usable token."""
         return self._create_token(
@@ -45,7 +60,12 @@ class AuthEmailTokensRepository:
         )
 
     def create_pending_password_reset_token(
-        self, *, identity_id: str, token_digest: str, now: datetime, expires_at: datetime
+        self,
+        *,
+        identity_id: str,
+        token_digest: str,
+        now: datetime,
+        expires_at: datetime,
     ) -> str:
         """Stage a reset token without replacing the current usable token."""
         return self._create_token(
@@ -55,8 +75,14 @@ class AuthEmailTokensRepository:
         )
 
     def _create_token(
-        self, *, identity_id: str, token_digest: str, now: datetime,
-        expires_at: datetime, purpose: str, require_verified: bool,
+        self,
+        *,
+        identity_id: str,
+        token_digest: str,
+        now: datetime,
+        expires_at: datetime,
+        purpose: str,
+        require_verified: bool,
         activate_immediately: bool,
     ) -> str:
         self._validate_times(now=now, expires_at=expires_at)
@@ -65,7 +91,9 @@ class AuthEmailTokensRepository:
         if not token_digest.strip():
             raise ValueError("Token digest must not be blank")
         token_id = str(uuid4())
-        verification_clause = "verified_at IS NOT NULL" if require_verified else "verified_at IS NULL"
+        verification_clause = (
+            "verified_at IS NOT NULL" if require_verified else "verified_at IS NULL"
+        )
         now_text = self._format(now)
         with transaction(self._connection):
             identity = self._connection.execute(
@@ -194,7 +222,7 @@ class AuthEmailTokensRepository:
         now_text = self._format(now)
         with transaction(self._connection):
             row = self._connection.execute(
-                """SELECT token.id, token.identity_id, identity.user_id
+                """SELECT token.id, token.identity_id, identity.user_id, identity.verified_at
                    FROM auth_email_tokens AS token
                    JOIN auth_identities AS identity ON identity.id = token.identity_id
                    WHERE token.token_hash = ? AND token.purpose = 'reset_password'
