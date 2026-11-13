@@ -43,6 +43,7 @@ from app.infrastructure.database.participant_invitations_repository import (
 )
 from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
 from app.interfaces.telegram.login_verification import verify_telegram_login
+from app.interfaces.web.runtime_config import validate_runtime_configuration
 
 
 logger = logging.getLogger(__name__)
@@ -165,6 +166,7 @@ def _email_sender() -> SmtpEmailSender:
 
 def create_app(database_path: str | Path | None = None) -> FastAPI:
     """Create an API app; tests may inject a temporary SQLite database path."""
+    validate_runtime_configuration(os.environ)
     app = FastAPI(title="Gatherly Authentication API", version="0.1.0")
     rate_limit_window_seconds = 60.0
     rate_limit_max_requests = 5
