@@ -1059,9 +1059,13 @@ def test_outbound_email_limit_is_shared_across_auth_flows(
             "/auth/password-reset/request",
             json={"email": "smtp-limit@example.test"},
         )
+        unknown_reset = client.post(
+            "/auth/password-reset/request",
+            json={"email": "unknown-reset@example.test"},
+        )
 
     assert first_resend.status_code == second_resend.status_code == 202
     assert blocked_resend.status_code == blocked_reset.status_code == 202
     assert first_resend.json() == blocked_resend.json()
-    assert blocked_reset.json() == blocked_resend.json()
+    assert blocked_reset.json() == unknown_reset.json()
     assert len(sender.messages) == 3
