@@ -54,7 +54,7 @@ def test_login_cookie_matches_server_session_lifetime_and_security_attributes(
     database_path = tmp_path / "session-cookie-contract.sqlite3"
     app = create_app(database_path)
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         _register_and_verify(client, sender)
         login = client.post(
             "/auth/login",
@@ -101,7 +101,7 @@ def test_logout_revokes_server_session_and_expires_browser_cookie(
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     app = create_app(tmp_path / "session-logout-contract.sqlite3")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         _register_and_verify(client, sender)
         raw_token = _login(client)
 
@@ -133,7 +133,7 @@ def test_http_authentication_rejects_a_session_expired_in_the_database(
     database_path = tmp_path / "session-expiry-contract.sqlite3"
     app = create_app(database_path)
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         _register_and_verify(client, sender)
         raw_token = _login(client)
 
