@@ -13,6 +13,7 @@ from urllib.parse import urlencode, urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.auth_identities_service import AuthIdentitiesService
@@ -210,6 +211,23 @@ class Dependencies:
         )
 
 
+def _consume_http_rate_limit(
+    database_path: str | Path, requester: str, route: str
+) -> int | None:
+    """Perform blocking SQLite throttling work outside the ASGI event loop."""
+    connection = connect(database_path)
+    try:
+        return HttpRateLimitsRepository(connection).consume(
+            requester=requester,
+            route=route,
+            now=datetime.now(UTC),
+            limit=5,
+            window_seconds=60,
+        )
+    finally:
+        connection.close()
+
+
 def _enforce_email_send_rate_limit(
     deps: Dependencies, request: Request, recipient: str, now: datetime
 ) -> None:
@@ -300,17 +318,12 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     ) -> Response:
         if request.method == "POST" and request.url.path in rate_limit_paths:
             requester = request.client.host if request.client else "unknown"
-            connection = connect(request.app.state.database_path)
-            try:
-                retry_after = HttpRateLimitsRepository(connection).consume(
-                    requester=requester,
-                    route=request.url.path,
-                    now=datetime.now(UTC),
-                    limit=5,
-                    window_seconds=60,
-                )
-            finally:
-                connection.close()
+            retry_after = await run_in_threadpool(
+                _consume_http_rate_limit,
+                request.app.state.database_path,
+                requester,
+                request.url.path,
+            )
             if retry_after is not None:
                 return Response(
                     content='{"detail":"Too many requests; try again later"}',
