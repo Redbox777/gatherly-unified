@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 from fastapi.testclient import TestClient
 
 import app.interfaces.web.http_api as http_api
@@ -940,3 +942,33 @@ def test_participant_removal_requires_authentication(tmp_path, monkeypatch) -> N
             "00000000-0000-0000-0000-000000000002"
         )
         assert response.status_code == 401
+
+
+
+def test_each_http_request_uses_its_own_database_connection(
+    tmp_path, monkeypatch
+) -> None:
+    app = create_app(tmp_path / "request-connections.sqlite3")
+    opened_connections = []
+    original_connect = http_api.connect
+
+    def track_connection(database_path):
+        connection = original_connect(database_path)
+        opened_connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(http_api, "connect", track_connection)
+
+    with TestClient(app) as first_client, TestClient(app) as second_client:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            responses = list(
+                executor.map(
+                    lambda client: client.get("/events"),
+                    (first_client, second_client),
+                )
+            )
+
+    assert [response.status_code for response in responses] == [401, 401]
+    assert len(opened_connections) == 2
+    assert opened_connections[0] is not opened_connections[1]
+    assert all(not connection.in_transaction for connection in opened_connections)
