@@ -302,8 +302,9 @@ def test_auth_token_landing_pages_are_same_origin_and_do_not_expose_fragments(
     with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         verification = client.get("/verify-email")
         reset = client.get("/reset-password")
+        invitation = client.get("/accept-invitation")
 
-    for response in (verification, reset):
+    for response in (verification, reset, invitation):
         assert response.status_code == 200
         assert response.headers["cache-control"] == "no-store"
         assert response.headers["referrer-policy"] == "no-referrer"
@@ -314,6 +315,8 @@ def test_auth_token_landing_pages_are_same_origin_and_do_not_expose_fragments(
 
     assert 'fetch("/auth/verify-email"' in verification.text
     assert 'fetch("/auth/password-reset/confirm"' in reset.text
+    assert 'fetch("/auth/login"' in invitation.text
+    assert 'fetch("/participant-invitations/accept"' in invitation.text
     assert "new_password: password.value" in reset.text
 
 def test_password_reset_delivery_failure_logs_safely_and_keeps_generic_response(
