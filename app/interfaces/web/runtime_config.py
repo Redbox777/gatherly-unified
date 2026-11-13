@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import math
 from urllib.parse import urlsplit
 
 
@@ -58,6 +59,33 @@ def load_smtp_rate_limit_settings(
 def validate_runtime_configuration(environ: Mapping[str, str]) -> None:
     """Reject unsafe or incomplete settings before a production app starts."""
     load_smtp_rate_limit_settings(environ)
+
+    try:
+        smtp_port = int(environ.get("SMTP_PORT", "587"))
+    except ValueError as error:
+        raise ValueError("SMTP_PORT must be an integer") from error
+    if not 1 <= smtp_port <= 65535:
+        raise ValueError("SMTP_PORT must be between 1 and 65535")
+
+    try:
+        smtp_timeout = float(environ.get("SMTP_TIMEOUT", "10"))
+    except ValueError as error:
+        raise ValueError("SMTP_TIMEOUT must be a finite number") from error
+    if not math.isfinite(smtp_timeout) or not 0 < smtp_timeout <= 300:
+        raise ValueError("SMTP_TIMEOUT must be greater than 0 and at most 300 seconds")
+
+    smtp_starttls_value = environ.get("SMTP_STARTTLS", "true").strip().casefold()
+    if smtp_starttls_value not in {"true", "false"}:
+        raise ValueError("SMTP_STARTTLS must be true or false")
+    smtp_starttls = smtp_starttls_value == "true"
+
+    smtp_username = environ.get("SMTP_USERNAME", "")
+    smtp_password = environ.get("SMTP_PASSWORD", "")
+    if bool(smtp_username) != bool(smtp_password):
+        raise ValueError("SMTP_USERNAME and SMTP_PASSWORD must be configured together")
+    if smtp_username and not smtp_starttls:
+        raise ValueError("SMTP authentication requires SMTP_STARTTLS=true")
+
     environment = environ.get("APP_ENV", "development").strip().casefold()
     if environment not in _ALLOWED_ENVIRONMENTS:
         raise ValueError("APP_ENV must be development, test, or production")
@@ -67,7 +95,7 @@ def validate_runtime_configuration(environ: Mapping[str, str]) -> None:
     if environ.get("COOKIE_SECURE", "true").strip().casefold() != "true":
         raise ValueError("COOKIE_SECURE must be true in production")
 
-    if environ.get("SMTP_STARTTLS", "true").strip().casefold() != "true":
+    if not smtp_starttls:
         raise ValueError("SMTP_STARTTLS must be true in production")
 
     smtp_host = environ.get("SMTP_HOST", "").strip()
@@ -79,14 +107,6 @@ def validate_runtime_configuration(environ: Mapping[str, str]) -> None:
         (".local", ".test", "@localhost")
     ):
         raise ValueError("SMTP_SENDER must be a real sender address in production")
-
-    try:
-        smtp_port = int(environ.get("SMTP_PORT", "587"))
-        smtp_timeout = float(environ.get("SMTP_TIMEOUT", "10"))
-    except ValueError as error:
-        raise ValueError("SMTP_PORT and SMTP_TIMEOUT must be valid numbers") from error
-    if not 1 <= smtp_port <= 65535 or smtp_timeout <= 0:
-        raise ValueError("SMTP_PORT or SMTP_TIMEOUT is outside its valid range")
 
     for setting in _PUBLIC_URL_SETTINGS:
         value = environ.get(setting, "").strip()
