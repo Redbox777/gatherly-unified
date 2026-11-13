@@ -25,11 +25,14 @@ def load_trusted_proxy_networks(value: str | None) -> tuple[IPNetwork, ...]:
         if not entry:
             raise ValueError("TRUSTED_PROXY_CIDRS contains an empty entry")
         try:
-            networks.append(ip_network(entry, strict=False))
+            network = ip_network(entry, strict=False)
         except ValueError as error:
             raise ValueError(
                 f"TRUSTED_PROXY_CIDRS contains an invalid network: {entry}"
             ) from error
+        if network.prefixlen == 0:
+            raise ValueError("TRUSTED_PROXY_CIDRS must not trust every IP address")
+        networks.append(network)
     return tuple(networks)
 
 
@@ -63,7 +66,7 @@ def resolve_client_ip(
         return str(peer)
 
     raw_addresses = forwarded_for.split(",")
-    if any(not item.strip() for item in raw_addresses):
+    if len(raw_addresses) > 32 or any(not item.strip() for item in raw_addresses):
         return str(peer)
 
     try:
