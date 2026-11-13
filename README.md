@@ -104,3 +104,7 @@ See [notification delivery and worker scheduling](docs/notifications.md). Run th
 python -m app.infrastructure.notifications_worker
 ```
 
+
+## Event notes
+
+Event notes support private entries and shared entries. Private notes are visible only to their author; shared notes are visible to the event owner and linked Gatherly participants. Notes are scoped to event membership, and edits are limited to the author. Event owners can remove shared notes for moderation. Unlinked guest records cannot access the application or notes.
