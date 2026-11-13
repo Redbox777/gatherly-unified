@@ -74,7 +74,12 @@ class NotificationsRepository:
                 "participant_added_enabled": True,
                 "reminders_enabled": True,
             }
-        return {key: bool(row[key]) for key in row.keys()}
+        return {
+            "email_enabled": bool(row["email_enabled"]),
+            "event_updates_enabled": bool(row["event_updates_enabled"]),
+            "participant_added_enabled": bool(row["participant_added_enabled"]),
+            "reminders_enabled": bool(row["reminders_enabled"]),
+        }
 
     def set_preferences(
         self, *, user_id: str, values: dict[str, bool], now: datetime
@@ -134,6 +139,8 @@ class NotificationsRepository:
 
     def materialize_due_reminders(self, *, now: datetime) -> int:
         """Create one inbox item per recipient/reminder; unique keys prevent duplicates."""
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("now must be timezone-aware")
         now_utc = now.astimezone(UTC)
         rows = self._connection.execute(
             """SELECT reminder.event_id, reminder.owner_id, reminder.offset_minutes,
