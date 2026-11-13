@@ -1,7 +1,16 @@
 from fastapi.testclient import TestClient
 
 import app.interfaces.web.http_api as http_api
+from app.infrastructure.database.connection import connect
 from app.interfaces.web.http_api import create_app
+
+
+def _read_rows(app, query: str, parameters: tuple = ()):
+    connection = connect(app.state.database_path)
+    try:
+        return connection.execute(query, parameters).fetchall()
+    finally:
+        connection.close()
 
 
 class FakeEmailSender:
@@ -75,10 +84,11 @@ def test_invitation_api_requires_owner_and_accepts_only_authenticated_session(
         )
         assert replayed.status_code == 400
 
-        participant_row = app.state.auth_dependencies.connection.execute(
+        participant_row = _read_rows(
+            app,
             "SELECT linked_user_id FROM event_participants WHERE id = ?",
             (participant_id,),
-        ).fetchone()
+        )[0]
         assert participant_row["linked_user_id"] is not None
 
 
@@ -103,9 +113,9 @@ def test_delivery_failure_revokes_new_invitation(tmp_path, monkeypatch, caplog) 
         assert "Invitation email delivery failed (OSError)" in caplog.text
         assert "invitee@example.test" not in caplog.text
         assert "SMTP unavailable" not in caplog.text
-        row = app.state.auth_dependencies.connection.execute(
-            "SELECT accepted_at, revoked_at FROM participant_invitations"
-        ).fetchone()
+        row = _read_rows(
+            app, "SELECT accepted_at, revoked_at FROM participant_invitations"
+        )[0]
         assert row["accepted_at"] is None
         assert row["revoked_at"] is not None
 
@@ -155,9 +165,9 @@ def test_invitation_rejects_wrong_signed_in_account_and_ignores_client_user_id(
             json={"token": invitation_token, "user_id": "invitee-user"},
         )
         assert wrong_account.status_code == 400
-        row = app.state.auth_dependencies.connection.execute(
-            "SELECT accepted_at FROM participant_invitations"
-        ).fetchone()
+        row = _read_rows(
+            app, "SELECT accepted_at FROM participant_invitations"
+        )[0]
         assert row["accepted_at"] is None
 
         _register_and_sign_in(client, sender, "invitee@example.test")
@@ -166,15 +176,17 @@ def test_invitation_rejects_wrong_signed_in_account_and_ignores_client_user_id(
             json={"token": invitation_token, "user_id": "owner-user"},
         )
         assert accepted.status_code == 200
-        linked = app.state.auth_dependencies.connection.execute(
+        linked = _read_rows(
+            app,
             "SELECT linked_user_id FROM event_participants WHERE id = ?",
             (participant["id"],),
-        ).fetchone()["linked_user_id"]
+        )[0]["linked_user_id"]
         assert linked is not None
-        identity = app.state.auth_dependencies.connection.execute(
+        identity = _read_rows(
+            app,
             "SELECT provider_subject FROM auth_identities WHERE user_id = ?",
             (linked,),
-        ).fetchone()
+        )[0]
         assert identity["provider_subject"] == "invitee@example.test"
 
 
@@ -201,9 +213,9 @@ def test_invitation_cannot_target_participant_from_another_event(
         )
 
         assert response.status_code == 404
-        assert app.state.auth_dependencies.connection.execute(
-            "SELECT COUNT(*) FROM participant_invitations"
-        ).fetchone()[0] == 0
+        assert _read_rows(
+            app, "SELECT COUNT(*) FROM participant_invitations"
+        )[0][0] == 0
 
 
 
@@ -246,9 +258,10 @@ def test_resend_invalidates_old_token_and_owner_can_revoke_new_invitation(
             "/participant-invitations/accept", json={"token": second_token}
         ).status_code == 400
 
-        rows = app.state.auth_dependencies.connection.execute(
-            "SELECT accepted_at, revoked_at FROM participant_invitations ORDER BY created_at"
-        ).fetchall()
+        rows = _read_rows(
+            app,
+            "SELECT accepted_at, revoked_at FROM participant_invitations ORDER BY created_at",
+        )
         assert len(rows) == 2
         assert all(row["accepted_at"] is None for row in rows)
         assert all(row["revoked_at"] is not None for row in rows)
