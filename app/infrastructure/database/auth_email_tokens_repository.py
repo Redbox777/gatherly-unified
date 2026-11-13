@@ -22,7 +22,7 @@ class AuthEmailTokensRepository:
         now: datetime,
         expires_at: datetime,
     ) -> str:
-        """Store a digest for a single email-verification attempt."""
+        """Store and immediately activate a verification token."""
         return self._create_token(
             user_id=user_id,
             token_digest=token_digest,
@@ -30,6 +30,7 @@ class AuthEmailTokensRepository:
             expires_at=expires_at,
             purpose="verify_email",
             require_verified=False,
+            activate_immediately=True,
         )
 
     def create_password_reset_token(
@@ -40,7 +41,7 @@ class AuthEmailTokensRepository:
         now: datetime,
         expires_at: datetime,
     ) -> str:
-        """Store a digest for a single password-reset attempt."""
+        """Store and immediately activate a password-reset token."""
         return self._create_token(
             user_id=user_id,
             token_digest=token_digest,
@@ -48,6 +49,45 @@ class AuthEmailTokensRepository:
             expires_at=expires_at,
             purpose="reset_password",
             require_verified=True,
+            activate_immediately=True,
+        )
+
+    def create_pending_verification_token(
+        self,
+        *,
+        user_id: str,
+        token_digest: str,
+        now: datetime,
+        expires_at: datetime,
+    ) -> str:
+        """Store a verification token without replacing the current usable token."""
+        return self._create_token(
+            user_id=user_id,
+            token_digest=token_digest,
+            now=now,
+            expires_at=expires_at,
+            purpose="verify_email",
+            require_verified=False,
+            activate_immediately=False,
+        )
+
+    def create_pending_password_reset_token(
+        self,
+        *,
+        user_id: str,
+        token_digest: str,
+        now: datetime,
+        expires_at: datetime,
+    ) -> str:
+        """Store a reset token without replacing the current usable token."""
+        return self._create_token(
+            user_id=user_id,
+            token_digest=token_digest,
+            now=now,
+            expires_at=expires_at,
+            purpose="reset_password",
+            require_verified=True,
+            activate_immediately=False,
         )
 
     def _create_token(
@@ -59,6 +99,7 @@ class AuthEmailTokensRepository:
         expires_at: datetime,
         purpose: str,
         require_verified: bool,
+        activate_immediately: bool,
     ) -> str:
         self._validate_times(now=now, expires_at=expires_at)
         if not user_id.strip():
@@ -69,6 +110,7 @@ class AuthEmailTokensRepository:
         verification_clause = (
             "verified_at IS NOT NULL" if require_verified else "verified_at IS NULL"
         )
+        now_text = self._format(now)
         with transaction(self._connection):
             identity = self._connection.execute(
                 f"""SELECT 1 FROM auth_identities
@@ -79,39 +121,87 @@ class AuthEmailTokensRepository:
             if identity is None:
                 requirement = "verified" if require_verified else "unverified"
                 raise ValueError(f"A {requirement} email identity is required")
-            if purpose in {"verify_email", "reset_password"}:
-                # Issuing a fresh token invalidates older outstanding links for
-                # the same purpose, so only the newest email can authorize action.
+            if activate_immediately:
                 self._connection.execute(
                     """UPDATE auth_email_tokens SET consumed_at = ?
                        WHERE user_id = ? AND purpose = ?
-                         AND consumed_at IS NULL""",
-                    (self._format(now), user_id, purpose),
+                         AND activated_at IS NOT NULL AND consumed_at IS NULL""",
+                    (now_text, user_id, purpose),
                 )
             self._connection.execute(
                 """INSERT INTO auth_email_tokens(
                     id, user_id, token_hash, purpose, created_at, expires_at,
-                    consumed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, NULL)""",
+                    consumed_at, activated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)""",
                 (
                     token_id,
                     user_id,
                     token_digest,
                     purpose,
-                    self._format(now),
+                    now_text,
                     self._format(expires_at),
+                    now_text if activate_immediately else None,
                 ),
             )
         return token_id
 
+    def activate_pending_token(
+        self, *, token_id: str, purpose: str, now: datetime
+    ) -> bool:
+        """Atomically make a delivered token current and retire older active tokens."""
+        self._require_aware(now)
+        if purpose not in {"verify_email", "reset_password"}:
+            raise ValueError("Unsupported email-token purpose")
+        now_text = self._format(now)
+        with transaction(self._connection):
+            row = self._connection.execute(
+                """SELECT user_id FROM auth_email_tokens
+                   WHERE id = ? AND purpose = ? AND activated_at IS NULL
+                     AND consumed_at IS NULL AND expires_at > ?""",
+                (token_id, purpose, now_text),
+            ).fetchone()
+            if row is None:
+                return False
+            user_id = str(row["user_id"])
+            self._connection.execute(
+                """UPDATE auth_email_tokens SET consumed_at = ?
+                   WHERE user_id = ? AND purpose = ? AND id != ?
+                     AND activated_at IS NOT NULL AND consumed_at IS NULL""",
+                (now_text, user_id, purpose, token_id),
+            )
+            cursor = self._connection.execute(
+                """UPDATE auth_email_tokens SET activated_at = ?
+                   WHERE id = ? AND purpose = ? AND activated_at IS NULL
+                     AND consumed_at IS NULL AND expires_at > ?""",
+                (now_text, token_id, purpose, now_text),
+            )
+            return cursor.rowcount == 1
+
+    def discard_pending_token(
+        self, *, token_id: str, purpose: str, now: datetime
+    ) -> bool:
+        """Invalidate a staged token after its delivery attempt fails."""
+        self._require_aware(now)
+        if purpose not in {"verify_email", "reset_password"}:
+            raise ValueError("Unsupported email-token purpose")
+        cursor = self._connection.execute(
+            """UPDATE auth_email_tokens SET consumed_at = ?
+               WHERE id = ? AND purpose = ? AND activated_at IS NULL
+                 AND consumed_at IS NULL""",
+            (self._format(now), token_id, purpose),
+        )
+        self._connection.commit()
+        return cursor.rowcount == 1
+
     def consume_verification_token(self, *, raw_token: str, now: datetime) -> bool:
-        """Consume a valid token once and mark the user's email identity verified."""
+        """Consume an active valid token once and mark the user's email identity verified."""
         self._require_aware(now)
         digest = hash_token(raw_token)
         with transaction(self._connection):
             row = self._connection.execute(
                 """SELECT id, user_id FROM auth_email_tokens
                    WHERE token_hash = ? AND purpose = 'verify_email'
+                     AND activated_at IS NOT NULL
                      AND consumed_at IS NULL AND expires_at > ?""",
                 (digest, self._format(now)),
             ).fetchone()
@@ -136,7 +226,7 @@ class AuthEmailTokensRepository:
     def consume_password_reset_token(
         self, *, raw_token: str, password_hash: str, now: datetime
     ) -> bool:
-        """Consume a reset token, replace the password, and revoke all sessions."""
+        """Consume an active reset token, replace the password, and revoke all sessions."""
         self._require_aware(now)
         if not password_hash.strip():
             raise ValueError("Password hash must not be blank")
@@ -145,6 +235,7 @@ class AuthEmailTokensRepository:
             row = self._connection.execute(
                 """SELECT id, user_id FROM auth_email_tokens
                    WHERE token_hash = ? AND purpose = 'reset_password'
+                     AND activated_at IS NOT NULL
                      AND consumed_at IS NULL AND expires_at > ?""",
                 (digest, self._format(now)),
             ).fetchone()
