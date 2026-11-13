@@ -22,13 +22,14 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             "auth_email_tokens",
             "auth_telegram_login_payloads",
             "participant_invitations",
+            "smtp_rate_limit_events",
         } <= tables
 
         versions = {
             row["version"]
             for row in connection.execute("SELECT version FROM schema_migrations").fetchall()
         }
-        assert versions == {1, 2, 3, 4, 5, 6}
+        assert versions == {1, 2, 3, 4, 5, 6, 7}
     finally:
         connection.close()
 

@@ -1019,3 +1019,48 @@ def test_unsafe_http_requests_validate_all_origin_header_variants(tmp_path) -> N
                 headers=headers,
             )
         assert response.status_code == expected_status, headers
+
+
+
+def test_outbound_email_limit_is_shared_across_auth_flows(
+    tmp_path, monkeypatch
+) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "smtp-recipient-http-limit.sqlite3")
+
+    with TestClient(app) as client:
+        registration = client.post(
+            "/auth/register",
+            json={
+                "email": "smtp-limit@example.test",
+                "password": "correct horse battery staple",
+            },
+        )
+        assert registration.status_code == 202
+        first_resend = client.post(
+            "/auth/verification/request",
+            json={"email": "smtp-limit@example.test"},
+        )
+        second_resend = client.post(
+            "/auth/verification/request",
+            json={"email": "smtp-limit@example.test"},
+        )
+        blocked_resend = client.post(
+            "/auth/verification/request",
+            json={"email": "smtp-limit@example.test"},
+        )
+        blocked_reset = client.post(
+            "/auth/password-reset/request",
+            json={"email": "smtp-limit@example.test"},
+        )
+        unknown_reset = client.post(
+            "/auth/password-reset/request",
+            json={"email": "unknown-reset@example.test"},
+        )
+
+    assert first_resend.status_code == second_resend.status_code == 202
+    assert blocked_resend.status_code == blocked_reset.status_code == 202
+    assert first_resend.json() == blocked_resend.json()
+    assert blocked_reset.json() == unknown_reset.json()
+    assert len(sender.messages) == 3

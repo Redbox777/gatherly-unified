@@ -127,6 +127,20 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON participant_invitations(target_email);
         """,
     ),
+    (
+        7,
+        """
+        CREATE TABLE smtp_rate_limit_events (
+            id TEXT PRIMARY KEY,
+            key_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_smtp_rate_limit_events_key_created
+            ON smtp_rate_limit_events(key_hash, created_at);
+        CREATE INDEX idx_smtp_rate_limit_events_created
+            ON smtp_rate_limit_events(created_at);
+        """,
+    ),
 )
 
 
