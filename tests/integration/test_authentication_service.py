@@ -5,6 +5,7 @@ import pytest
 from app.application.auth_identities_service import AuthIdentitiesService
 from app.application.auth_sessions_service import AuthSessionsService
 from app.application.authentication_service import AuthenticationService
+from app.domain.passwords import hash_password
 from app.infrastructure.database.auth_identities_repository import AuthIdentitiesRepository
 from app.infrastructure.database.auth_sessions_repository import AuthSessionsRepository
 from app.infrastructure.database.connection import connect, migrate
@@ -74,3 +75,56 @@ def test_failed_or_unverified_login_does_not_issue_session(authentication_servic
     ) is None
     count = connection.execute("SELECT COUNT(*) FROM auth_sessions").fetchone()[0]
     assert count == 0
+
+
+def test_login_does_not_issue_session_if_password_changes_after_verification(
+    tmp_path, monkeypatch
+) -> None:
+    connection = connect(tmp_path / "authentication-password-race.sqlite3")
+    migrate(connection)
+    identity_repository = AuthIdentitiesRepository(connection)
+    identities = AuthIdentitiesService(identity_repository)
+    sessions = AuthSessionsService(
+        AuthSessionsRepository(connection),
+        lifetime=timedelta(hours=2),
+    )
+    service = AuthenticationService(identities, sessions)
+    identity = identities.register_email(
+        email="race@example.test",
+        password="the original secure password",
+        now=NOW,
+    )
+    connection.execute(
+        "UPDATE auth_identities SET verified_at = ? WHERE id = ?",
+        (NOW.isoformat(), identity.identity_id),
+    )
+    connection.commit()
+
+    original_authenticate = identities.authenticate_email
+
+    def authenticate_then_change_password(*, email: str, password: str):
+        authenticated = original_authenticate(email=email, password=password)
+        assert authenticated is not None
+        assert identity_repository.update_password_and_revoke_sessions(
+            user_id=identity.user_id,
+            current_password_hash=authenticated.password_hash or "",
+            new_password_hash=hash_password("the replacement secure password"),
+            now=NOW + timedelta(seconds=1),
+        )
+        return authenticated
+
+    monkeypatch.setattr(
+        identities, "authenticate_email", authenticate_then_change_password
+    )
+    try:
+        session = service.login_email(
+            email="race@example.test",
+            password="the original secure password",
+            now=NOW + timedelta(seconds=2),
+        )
+
+        assert session is None
+        count = connection.execute("SELECT COUNT(*) FROM auth_sessions").fetchone()[0]
+        assert count == 0
+    finally:
+        connection.close()
