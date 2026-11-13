@@ -1,6 +1,7 @@
 """Fail-fast validation for deployment-sensitive runtime configuration."""
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 
@@ -11,10 +12,52 @@ _PUBLIC_URL_SETTINGS = (
     "PARTICIPANT_INVITATION_URL",
 )
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+_MAX_RATE_LIMIT = 1_000_000
+_MAX_RATE_WINDOW_SECONDS = 86_400
+
+
+@dataclass(frozen=True)
+class SmtpRateLimitSettings:
+    """Validated shared quotas for outbound email attempts."""
+
+    recipient_limit: int = 3
+    recipient_window_seconds: int = 900
+    requester_limit: int = 5
+    requester_window_seconds: int = 60
+
+
+def load_smtp_rate_limit_settings(
+    environ: Mapping[str, str],
+) -> SmtpRateLimitSettings:
+    """Load positive, bounded SMTP quotas from environment variables."""
+    setting_names = {
+        "recipient_limit": "SMTP_RATE_LIMIT_RECIPIENT_MAX",
+        "recipient_window_seconds": "SMTP_RATE_LIMIT_RECIPIENT_WINDOW_SECONDS",
+        "requester_limit": "SMTP_RATE_LIMIT_REQUESTER_MAX",
+        "requester_window_seconds": "SMTP_RATE_LIMIT_REQUESTER_WINDOW_SECONDS",
+    }
+    defaults = SmtpRateLimitSettings()
+    values: dict[str, int] = {}
+    for field, setting in setting_names.items():
+        default = getattr(defaults, field)
+        try:
+            value = int(environ.get(setting, str(default)))
+        except ValueError as error:
+            raise ValueError(f"{setting} must be a positive integer") from error
+        maximum = (
+            _MAX_RATE_WINDOW_SECONDS
+            if field.endswith("_window_seconds")
+            else _MAX_RATE_LIMIT
+        )
+        if not 1 <= value <= maximum:
+            raise ValueError(f"{setting} must be between 1 and {maximum}")
+        values[field] = value
+    return SmtpRateLimitSettings(**values)
 
 
 def validate_runtime_configuration(environ: Mapping[str, str]) -> None:
     """Reject unsafe or incomplete settings before a production app starts."""
+    load_smtp_rate_limit_settings(environ)
     environment = environ.get("APP_ENV", "development").strip().casefold()
     if environment not in _ALLOWED_ENVIRONMENTS:
         raise ValueError("APP_ENV must be development, test, or production")
