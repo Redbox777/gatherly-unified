@@ -1536,6 +1536,55 @@ def test_event_resource_access_matrix_for_owner_member_and_outsider(
         )
         assert accepted.status_code == 200
 
+        updated_event = owner.patch(
+            f"/events/{event_id}",
+            json={
+                "title": "Access control event updated",
+                "starts_at": "2026-11-20T19:00:00+00:00",
+            },
+        )
+        assert updated_event.status_code == 200
+
+        member_inbox = member.get("/notifications")
+        owner_inbox = owner.get("/notifications")
+        outsider_inbox = outsider.get("/notifications")
+        assert len(member_inbox.json()["items"]) == 1
+        assert owner_inbox.json()["items"] == []
+        assert outsider_inbox.json()["items"] == []
+        notification_id = member_inbox.json()["items"][0]["id"]
+        assert outsider.post(
+            f"/notifications/{notification_id}/read"
+        ).status_code == 404
+        assert owner.post(
+            f"/notifications/{notification_id}/read"
+        ).status_code == 404
+        assert member.post(
+            f"/notifications/{notification_id}/read"
+        ).status_code == 200
+
+        member_preferences = {
+            "email_enabled": False,
+            "event_updates_enabled": False,
+            "participant_added_enabled": False,
+            "reminders_enabled": False,
+        }
+        assert member.put(
+            "/notification-preferences", json=member_preferences
+        ).json() == member_preferences
+        assert owner.get("/notification-preferences").json()["email_enabled"] is True
+        assert outsider.get("/notification-preferences").json()["email_enabled"] is True
+
+        reminder_settings = {"offsets_minutes": [1440, 60]}
+        assert owner.put(
+            f"/events/{event_id}/reminders", json=reminder_settings
+        ).json()["offsets_minutes"] == [1440, 60]
+        assert owner.get(f"/events/{event_id}/reminders").status_code == 200
+        assert member.get(f"/events/{event_id}/reminders").status_code == 404
+        assert member.put(
+            f"/events/{event_id}/reminders", json={"offsets_minutes": [15]}
+        ).status_code == 404
+        assert outsider.get(f"/events/{event_id}/reminders").status_code == 404
+
         owner_shared = owner.post(
             f"/events/{event_id}/notes",
             json={"content": "Owner shared note", "visibility": "shared"},
