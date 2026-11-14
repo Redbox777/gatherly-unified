@@ -108,6 +108,17 @@ class EventExpensesRepository:
             raise ValueError("Payer must be a participant in this event")
 
         with transaction(self._connection):
+            self._connection.execute(
+                """DELETE FROM event_expense_splits
+                   WHERE expense_id = ?
+                     AND EXISTS (
+                         SELECT 1 FROM event_expenses
+                         WHERE id = ? AND (
+                             amount_minor_units != ? OR currency != ?
+                         )
+                     )""",
+                (expense_id, expense_id, amount_minor_units, currency),
+            )
             cursor = self._connection.execute(
                 """UPDATE event_expenses
                    SET title = ?, description = ?, amount_minor_units = ?,
