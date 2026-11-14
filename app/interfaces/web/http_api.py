@@ -8,6 +8,7 @@ from typing import cast
 import hashlib
 import logging
 import os
+import re
 from pathlib import Path
 import sqlite3
 from typing import Annotated
@@ -41,6 +42,7 @@ from app.infrastructure.database.auth_sessions_repository import AuthSessionsRep
 from app.infrastructure.database.connection import connect, migrate, transaction
 from app.infrastructure.database.events_repository import EventsRepository
 from app.infrastructure.database.event_tasks_repository import EventTasksRepository
+from app.infrastructure.database.bug_reports_repository import BugReportsRepository
 from app.infrastructure.database.event_expenses_repository import EventExpensesRepository
 from app.infrastructure.database.event_expense_splits_repository import (
     EventExpenseSplitsRepository,
@@ -314,6 +316,18 @@ def _serialize_settlement(settlement: dict[str, object]) -> dict[str, object]:
     return _serialize_minor_amount(settlement, "amount_minor_units")
 
 
+
+class BugReportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    consent: bool
+    app_version: str = Field(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9._+-]+$")
+    browser: str = Field(pattern=r"^(Chrome|Firefox|Safari|Edge|Other)$")
+    operating_system: str = Field(pattern=r"^(Windows|macOS|Linux|Android|iOS|Other)$")
+    module: str = Field(pattern=r"^(frontend|manual)$")
+    error_code: str = Field(pattern=r"^(window_error|unhandled_rejection|user_reported_issue)$")
+    stack: str = Field(default="", max_length=1000)
+
+
 class Dependencies:
     """Construct request-scoped services around a database connection and mail adapter."""
 
@@ -484,6 +498,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         "/auth/verify-email",
         "/auth/verification/request",
         "/participant-invitations/accept",
+        "/diagnostics/bug-reports",
     }
 
     @app.middleware("http")
@@ -2154,6 +2169,31 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         ):
             raise HTTPException(status_code=404, detail="Note not found")
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+    @app.post("/diagnostics/bug-reports", status_code=status.HTTP_201_CREATED)
+    def create_bug_report(payload: BugReportRequest, request: Request) -> dict[str, str]:
+        if not payload.consent:
+            raise HTTPException(status_code=422, detail="Explicit consent is required")
+        safe_frames = [
+            line.strip()
+            for line in payload.stack.splitlines()
+            if re.fullmatch(r"at line [0-9]{1,7}, column [0-9]{1,7}", line.strip())
+        ][:8]
+        connection = connect(request.app.state.database_path)
+        try:
+            report_id = BugReportsRepository(connection).create(
+                created_at=datetime.now(UTC),
+                app_version=payload.app_version,
+                browser=payload.browser,
+                operating_system=payload.operating_system,
+                module=payload.module,
+                error_code=payload.error_code,
+                stack="\n".join(safe_frames),
+            )
+        finally:
+            connection.close()
+        return {"report_id": report_id, "status": "received"}
 
     static_directory = Path(__file__).resolve().parent / "static"
     app.mount(
