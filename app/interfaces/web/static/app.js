@@ -149,6 +149,7 @@
   };
   const openDetail = async event => {
     activeEvent = event;
+    resetTaskForm();
     form.hidden = true;
     detail.hidden = false;
     document.getElementById("detail-title").textContent = event.title;
