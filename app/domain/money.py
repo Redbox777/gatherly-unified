@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import (
+    Decimal,
+    InvalidOperation,
+    ROUND_DOWN,
+    ROUND_HALF_EVEN,
+    ROUND_HALF_UP,
+    ROUND_UP,
+)
+from enum import Enum
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,9 +36,26 @@ _CURRENCIES: dict[str, Currency] = {
 }
 
 
+class RoundingMode(str, Enum):
+    """Explicit policies for converting decimal input to minor units."""
+
+    HALF_UP = "half_up"
+    HALF_EVEN = "half_even"
+    DOWN = "down"
+    UP = "up"
+
+
+_ROUNDING_MODES: dict[RoundingMode, str] = {
+    RoundingMode.HALF_UP: ROUND_HALF_UP,
+    RoundingMode.HALF_EVEN: ROUND_HALF_EVEN,
+    RoundingMode.DOWN: ROUND_DOWN,
+    RoundingMode.UP: ROUND_UP,
+}
+
+
 def get_currency(code: str) -> Currency:
     """Return supported currency metadata; reject unknown or non-canonical codes."""
-    if code != code.upper():
+    if not isinstance(code, str) or code != code.upper():
         raise ValueError("Currency code must be uppercase ISO 4217")
     try:
         return _CURRENCIES[code]
@@ -51,8 +76,17 @@ class Money:
         get_currency(self.currency)
 
     @classmethod
-    def from_major(cls, amount: str | Decimal, currency: str) -> Money:
-        """Create money from a decimal string/value without implicit rounding."""
+    def from_major(
+        cls,
+        amount: str | Decimal,
+        currency: str,
+        rounding: RoundingMode | None = None,
+    ) -> Money:
+        """Create money from decimal input.
+
+        Excess precision is rejected unless a rounding policy is explicitly
+        supplied. Float input is never accepted.
+        """
         if isinstance(amount, bool) or not isinstance(amount, (str, Decimal)):
             raise TypeError("amount must be a decimal string or Decimal")
         try:
@@ -63,12 +97,23 @@ class Money:
             raise ValueError("Monetary amount must be finite")
 
         precision = get_currency(currency).minor_unit_digits
-        scaled = value * (10**precision)
-        if scaled != scaled.to_integral_value():
-            raise ValueError(
-                f"{currency} supports at most {precision} decimal places"
-            )
-        return cls(int(scaled), currency)
+        quantum = Decimal(1).scaleb(-precision)
+        if rounding is None:
+            scaled = value.scaleb(precision)
+            if scaled != scaled.to_integral_value():
+                raise ValueError(
+                    f"{currency} supports at most {precision} decimal places"
+                )
+            rounded = value
+        else:
+            if not isinstance(rounding, RoundingMode):
+                raise TypeError("rounding must be a RoundingMode")
+            try:
+                rounded = value.quantize(quantum, rounding=_ROUNDING_MODES[rounding])
+            except InvalidOperation as exc:
+                raise ValueError("Monetary amount is outside the supported range") from exc
+
+        return cls(int(rounded.scaleb(precision)), currency)
 
     @property
     def major_units(self) -> Decimal:
@@ -97,12 +142,14 @@ def allocate_equal_shares(total: Money, participant_ids: Sequence[str]) -> dict[
     """
     if not participant_ids:
         raise ValueError("At least one participant is required")
-    if any(not participant_id.strip() for participant_id in participant_ids):
+
+    normalized_ids = [participant_id.strip() for participant_id in participant_ids]
+    if any(not participant_id for participant_id in normalized_ids):
         raise ValueError("Participant IDs must be non-empty")
-    if len(set(participant_ids)) != len(participant_ids):
+    if len(set(normalized_ids)) != len(normalized_ids):
         raise ValueError("Participant IDs must be unique")
 
-    ordered_ids = sorted(participant_ids)
+    ordered_ids = sorted(normalized_ids)
     sign = -1 if total.minor_units < 0 else 1
     quotient, remainder = divmod(abs(total.minor_units), len(ordered_ids))
 
