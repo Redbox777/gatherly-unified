@@ -82,7 +82,7 @@ or `::/0`).
 
 ## Participant invitation configuration
 
-Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_SENDER` for real email delivery. Set `PARTICIPANT_INVITATION_URL` to the web client's invitation-acceptance page. The example value is a local development placeholder, not a page served by this backend.
+Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_SENDER` for real email delivery. Set `PARTICIPANT_INVITATION_URL` to the served `GET /accept-invitation` page (or to an equivalent page in a separate web client). The `.env.example` value points to the local backend route.
 
 The backend serves a minimal same-origin acceptance page at `GET /accept-invitation`. Invitation links place the bearer token in the URL fragment, which is not sent in the HTTP request; the page removes it from browser history and submits it to `POST /participant-invitations/accept` after sign-in. The API derives the account ID from the session; clients must not submit a user ID. Invitation creation is available at `POST /events/{event_id}/participants/{participant_id}/invitation`; owner revocation is `DELETE /events/{event_id}/participant-invitations/{invitation_id}`.
 
@@ -94,7 +94,11 @@ Install development dependencies and run the quality checks:
 python -m pip install -e ".[dev]"
 ruff check .
 mypy app
-pytest
+pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=85
+node --check app/interfaces/web/static/app.js
+npx --yes eslint@10.15.0 --config eslint.config.mjs app/interfaces/web/static/*.js
+python -m pip freeze --exclude-editable > /tmp/gatherly-audit-requirements.txt
+pip-audit --strict -r /tmp/gatherly-audit-requirements.txt
 ```
 
 See [participant invitation lifecycle](docs/participant-invitations.md) and [architecture decisions](docs/architecture.md) for security and design constraints.

@@ -41,4 +41,4 @@ Application code should log fixed messages and safe metadata only. When handling
 
 ## Scope
 
-This phase adds server-side structured logs and request correlation. User-submitted bug reports and browser-side crash reports are a separate opt-in feature planned for the diagnostics phase. Logs are not a substitute for backups, monitoring, or incident response.
+Server-side structured logs and request correlation are independent of the voluntary browser bug-report feature. Browser errors remain in page memory until a person opens the report dialog, reviews the preview, and explicitly consents to submission. Technical logs may be generated regardless of whether a report is submitted. Logs are not a substitute for backups, monitoring, or incident response.
