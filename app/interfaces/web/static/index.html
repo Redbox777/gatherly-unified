@@ -190,6 +190,33 @@
                 <p class="participant-status" id="expense-status" role="status" aria-live="polite"></p>
               </form>
             </section>
+            <section class="finance-panel" aria-labelledby="finance-heading">
+              <div class="participants-heading"><h3 id="finance-heading">Балансы и взаиморасчёты</h3></div>
+              <p class="participants-help">Положительный баланс — участнику должны; отрицательный — участник должен. Расчёт ведётся отдельно по каждой валюте.</p>
+              <div id="balances-list" class="balances-list" aria-live="polite"><p class="expenses-empty">Загрузка балансов…</p></div>
+              <div id="finance-pending" class="finance-notices"></div>
+              <section class="settlement-history" aria-labelledby="settlements-heading">
+                <div class="participants-heading"><h4 id="settlements-heading">Записанные переводы</h4><span id="settlements-count">0</span></div>
+                <div id="settlements-list" class="settlements-list" aria-live="polite"><p class="expenses-empty">Загрузка…</p></div>
+              </section>
+              <form id="settlement-form" class="settlement-form">
+                <h4>Зафиксировать взаиморасчёт</h4>
+                <label for="settlement-currency">Валюта</label>
+                <select id="settlement-currency" required><option value="">Нет открытых балансов</option></select>
+                <label for="settlement-from">Кто передал деньги</label>
+                <select id="settlement-from" required><option value="">Сначала выберите валюту</option></select>
+                <label for="settlement-to">Кто получил деньги</label>
+                <select id="settlement-to" required><option value="">Сначала выберите валюту</option></select>
+                <div class="expense-fields">
+                  <div><label for="settlement-amount">Сумма</label><input id="settlement-amount" type="number" min="0.01" step="any" required placeholder="0.00"></div>
+                  <div><label for="settlement-date">Дата</label><input id="settlement-date" type="datetime-local" required></div>
+                </div>
+                <label for="settlement-note">Комментарий (необязательно)</label>
+                <input id="settlement-note" maxlength="1000" placeholder="Например, наличными">
+                <div class="expense-form-actions"><button type="submit" class="secondary-button" id="settlement-save">Сохранить перевод</button></div>
+                <p id="settlement-status" class="participant-status" role="status" aria-live="polite"></p>
+              </form>
+            </section>
             <section class="notes-panel" aria-labelledby="notes-heading">
               <div class="participants-heading"><h3 id="notes-heading">Заметки</h3><span id="notes-count">0</span></div>
               <p class="participants-help">Личные записи видны только вам. Общими можно поделиться с участниками, связанными с аккаунтами Gatherly.</p>
