@@ -12,7 +12,11 @@ def _payload(**overrides: object) -> dict[str, object]:
         "operating_system": "Linux",
         "module": "frontend",
         "error_code": "window_error",
-        "stack": "at line 42, column 8\nprivate/path?token=must-not-be-stored\nat line 58, column 3",
+        "stack": (
+            "at line 42, column 8\n"
+            "private/path?token=must-not-be-stored\n"
+            "at line 58, column 3"
+        ),
     }
     payload.update(overrides)
     return payload
