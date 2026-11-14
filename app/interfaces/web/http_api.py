@@ -104,7 +104,8 @@ def _apply_security_headers(response: Response, *, production: bool) -> Response
 
 def _token_fragment_link(base_url: str, token: str) -> str:
     """Build a bearer-token link without placing the token in the HTTP request URL."""
-    return f"{base_url.split('#', maxsplit=1)[0]}#{urlencode({'token': token})}"
+    token_fragment = urlencode({"token": token})
+    return f"{base_url.split('#', maxsplit=1)[0]}#{token_fragment}"
 
 
 def _is_same_origin(candidate: str, request_url: str, *, origin_header: bool) -> bool:
