@@ -6,31 +6,31 @@ Do not copy the live SQLite database file with a plain filesystem copy. The appl
 
 Create an online backup using SQLite's backup API:
 
-\`\`\`bash
-python -m app.infrastructure.database.backup backup \\
+```bash
+python -m app.infrastructure.database.backup backup \
   var/gatherly.sqlite3 backups/gatherly-$(date -u +%F).sqlite3
-\`\`\`
+```
 
-The command writes to a temporary file, uses SQLite's online backup API, runs \`PRAGMA integrity_check\`, applies owner-only file permissions where supported, and atomically replaces the destination. Store backups outside the application host as well, encrypt them at rest, restrict access, and define a retention schedule appropriate to the data held in Gatherly.
+The command writes to a temporary file, uses SQLite's online backup API, runs `PRAGMA integrity_check`, applies owner-only file permissions where supported, and atomically replaces the destination. Store backups outside the application host as well, encrypt them at rest, restrict access, and define a retention schedule appropriate to the data held in Gatherly.
 
 ## Restore
 
 Stop every application process that can open the target database before restoring. Then restore to the configured database path:
 
-\`\`\`bash
-python -m app.infrastructure.database.backup restore \\
-  backups/gatherly-YYYY-MM-DD.sqlite3 var/gatherly.sqlite3 \\
+```bash
+python -m app.infrastructure.database.backup restore \
+  backups/gatherly-YYYY-MM-DD.sqlite3 var/gatherly.sqlite3 \
   --confirm-application-stopped
-\`\`\`
+```
 
-Restore uses the same online backup API and integrity check. The explicit flag is a safety guard, not a process supervisor; the operator remains responsible for stopping all writers. After restore, start the application and verify \`/health/ready\`.
+Restore uses the same online backup API and integrity check. The explicit flag is a safety guard, not a process supervisor; the operator remains responsible for stopping all writers. After restore, start the application and verify `/health/ready`.
 
 A backup is not considered operationally proven until a restore has been exercised in a separate path/environment and the restored data has been checked. Repeat restore drills periodically and record the date, backup age, integrity result, and recovery time.
 
 ## Health checks
 
-- \`GET /health/live\` (and legacy \`GET /health\`) reports only that the HTTP process responds. It does not query SQLite.
-- \`GET /health/ready\` checks a database query and verifies that the latest schema migration is applied. It returns HTTP 503 when the database is unavailable or the schema is behind.
+- `GET /health/live` (and legacy `GET /health`) reports only that the HTTP process responds. It does not query SQLite.
+- `GET /health/ready` checks a database query and verifies that the latest schema migration is applied. It returns HTTP 503 when the database is unavailable or the schema is behind.
 
 Use liveness for process supervision and readiness for traffic routing. Do not use a database-dependent readiness check as a liveness probe.
 
@@ -62,3 +62,7 @@ Current migration history:
 | 18 | Voluntary bug reports |
 
 There is no automatic destructive rollback path. For a faulty migration, stop writes, restore a verified backup when data recovery is required, or add a forward-only corrective migration after assessing data impact.
+
+## Main-branch protection
+
+Before production, protect `main`: require pull requests, require the `quality` workflow on the latest commit, block force-push and branch deletion, and restrict bypass permissions. This repository change documents the desired policy; the actual GitHub branch-protection/ruleset settings must be enabled and verified by a repository administrator.
