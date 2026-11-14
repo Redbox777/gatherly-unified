@@ -29,7 +29,7 @@ from app.application.participant_invitations import (
 )
 from app.application.password_reset_request_service import PasswordResetRequestService
 from app.application.password_reset_service import PasswordResetService
-from app.domain.money import Money, get_currency
+from app.domain.expense_splits import SplitInput, SplitMode, calculate_split\nfrom app.domain.money import Money, get_currency
 from app.infrastructure.database.auth_email_tokens_repository import (
     AuthEmailTokensRepository,
 )
@@ -38,7 +38,7 @@ from app.infrastructure.database.auth_sessions_repository import AuthSessionsRep
 from app.infrastructure.database.connection import connect, migrate, transaction
 from app.infrastructure.database.events_repository import EventsRepository
 from app.infrastructure.database.event_tasks_repository import EventTasksRepository
-from app.infrastructure.database.event_expenses_repository import EventExpensesRepository
+from app.infrastructure.database.event_expenses_repository import EventExpensesRepository\nfrom app.infrastructure.database.event_expense_splits_repository import (\n    EventExpenseSplitsRepository,\n)
 from app.infrastructure.database.event_venues_repository import EventVenuesRepository
 from app.infrastructure.database.http_rate_limits_repository import (
     HttpRateLimitsRepository,
@@ -186,6 +186,17 @@ class EventExpenseRequest(BaseModel):
     incurred_at: datetime | None = None
 
 
+class ExpenseSplitAllocationRequest(BaseModel):
+    participant_id: UUID
+    amount: str | None = Field(default=None, min_length=1, max_length=32)
+    weight: int | None = Field(default=None, ge=1, le=1000000)
+
+
+class ExpenseSplitRequest(BaseModel):
+    mode: str = Field(pattern="^(equal|fixed|weighted)$")
+    allocations: list[ExpenseSplitAllocationRequest] = Field(min_length=1, max_length=200)
+
+
 class EventTaskRequest(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     description: str = Field(default="", max_length=2000)
@@ -293,7 +304,7 @@ class Dependencies:
         self.notes = NotesRepository(connection)
         self.event_tasks = EventTasksRepository(connection)
         self.event_venues = EventVenuesRepository(connection)
-        self.event_expenses = EventExpensesRepository(connection)
+        self.event_expenses = EventExpensesRepository(connection)\n        self.event_expense_splits = EventExpenseSplitsRepository(connection)
         self.reset_requests = PasswordResetRequestService(
             identities=self.identities,
             resets=self.resets,
@@ -1759,6 +1770,91 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         if expense is None:
             raise HTTPException(status_code=404, detail="Expense not found")
         return _serialize_event_expense(expense)
+
+    @app.get("/events/{event_id}/expenses/{expense_id}/split")
+    def get_event_expense_split(
+        event_id: UUID, expense_id: UUID, request: Request, deps: ServiceDependency
+    ) -> dict[str, object]:
+        owner_id = deps.authentication.resolve_session(
+            raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        split = deps.event_expense_splits.get_for_owner(
+            event_id=str(event_id), expense_id=str(expense_id), owner_id=owner_id
+        )
+        if split is None:
+            raise HTTPException(status_code=404, detail="Expense not found")
+        currency = split["currency"]
+        if not isinstance(currency, str):
+            raise TypeError("Expense currency must be a string")
+        precision = get_currency(currency).minor_unit_digits
+        allocations = []
+        for allocation in split["allocations"]:
+            minor_units = allocation["amount_minor_units"]
+            if isinstance(minor_units, bool) or not isinstance(minor_units, int):
+                raise TypeError("Allocation amount must be integer minor units")
+            money = Money(minor_units, currency)
+            allocations.append({
+                **allocation,
+                "amount": f"{money.major_units:.{precision}f}",
+            })
+        return {**split, "allocations": allocations}
+
+    @app.put("/events/{event_id}/expenses/{expense_id}/split")
+    def replace_event_expense_split(
+        event_id: UUID, expense_id: UUID, payload: ExpenseSplitRequest,
+        request: Request, deps: ServiceDependency
+    ) -> dict[str, object]:
+        owner_id = deps.authentication.resolve_session(
+            raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        try:
+            mode = SplitMode(payload.mode)
+            split = deps.event_expense_splits.get_for_owner(
+                event_id=str(event_id), expense_id=str(expense_id), owner_id=owner_id
+            )
+            if split is None:
+                raise HTTPException(status_code=404, detail="Expense not found")
+            currency = split["currency"]
+            if not isinstance(currency, str):
+                raise TypeError("Expense currency must be a string")
+            inputs = []
+            for allocation in payload.allocations:
+                amount_minor_units = None
+                if allocation.amount is not None:
+                    amount_minor_units = Money.from_major(
+                        allocation.amount, currency
+                    ).minor_units
+                inputs.append(SplitInput(
+                    participant_id=str(allocation.participant_id),
+                    amount_minor_units=amount_minor_units,
+                    weight=allocation.weight,
+                ))
+            shares = calculate_split(
+                Money(int(split["amount_minor_units"]), currency), mode, inputs
+            )
+            saved = deps.event_expense_splits.replace_for_owner(
+                event_id=str(event_id), expense_id=str(expense_id),
+                owner_id=owner_id, mode=mode, shares=shares,
+            )
+        except HTTPException:
+            raise
+        except (TypeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail="Invalid expense split") from error
+        if saved is None:
+            raise HTTPException(status_code=404, detail="Expense not found")
+        precision = get_currency(currency).minor_unit_digits
+        result_allocations = []
+        for allocation in saved["allocations"]:
+            money = Money(int(allocation["amount_minor_units"]), currency)
+            result_allocations.append({
+                **allocation,
+                "amount": f"{money.major_units:.{precision}f}",
+            })
+        return {**saved, "allocations": result_allocations}
 
     @app.delete(
         "/events/{event_id}/expenses/{expense_id}",
