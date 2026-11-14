@@ -67,6 +67,7 @@ from app.infrastructure.observability import (
     reset_request_id,
     safe_exception_frames,
 )
+from app.interfaces.web.dependencies import Dependencies
 from app.interfaces.web.schemas import (
     AcceptParticipantInvitationRequest,
     AddParticipantRequest,
@@ -176,58 +177,6 @@ GENERIC_RESET_RESPONSE = {
 }
 
 
-class Dependencies:
-    """Construct request-scoped services around a database connection and mail adapter."""
-
-    def __init__(
-        self,
-        connection: sqlite3.Connection,
-        smtp_rate_limit_settings: SmtpRateLimitSettings,
-    ) -> None:
-        self.connection = connection
-        self.smtp_rate_limits = SmtpRateLimitsRepository(
-            connection,
-            recipient_limit=smtp_rate_limit_settings.recipient_limit,
-            recipient_window_seconds=smtp_rate_limit_settings.recipient_window_seconds,
-            requester_limit=smtp_rate_limit_settings.requester_limit,
-            requester_window_seconds=smtp_rate_limit_settings.requester_window_seconds,
-        )
-        identity_repository = AuthIdentitiesRepository(connection)
-        token_repository = AuthEmailTokensRepository(connection)
-        session_repository = AuthSessionsRepository(connection)
-        self.identities = AuthIdentitiesService(identity_repository)
-        self.verification = EmailVerificationService(token_repository)
-        self.resets = PasswordResetService(token_repository)
-        self.sessions = AuthSessionsService(session_repository)
-        self.authentication = AuthenticationService(self.identities, self.sessions)
-        self.events = EventsService(EventsRepository(connection))
-        participant_repository = ParticipantsRepository(connection)
-        self.participants = ParticipantsService(self.events, participant_repository)
-        self.participant_invitations_repository = ParticipantInvitationsRepository(
-            connection
-        )
-        self.participant_invitations = ParticipantInvitationsService(
-            events=self.events,
-            participants=participant_repository,
-            invitations=self.participant_invitations_repository,
-        )
-        self.email_sender = _email_sender()
-        self.notifications = NotificationsRepository(connection)
-        self.notes = NotesRepository(connection)
-        self.event_tasks = EventTasksRepository(connection)
-        self.event_venues = EventVenuesRepository(connection)
-        self.event_expenses = EventExpensesRepository(connection)
-        self.event_expense_splits = EventExpenseSplitsRepository(connection)
-        self.event_finance = EventFinanceRepository(connection)
-        self.reset_requests = PasswordResetRequestService(
-            identities=self.identities,
-            resets=self.resets,
-            email_sender=self.email_sender,
-            reset_url=os.environ.get(
-                "PASSWORD_RESET_URL", "http://localhost:8000/reset-password"
-            ),
-        )
-
 
 def _requester_ip(request: Request) -> str:
     """Return the client IP, trusting forwarding headers only from configured proxies."""
@@ -273,17 +222,7 @@ def _enforce_email_send_rate_limit(
         )
 
 
-def _email_sender() -> SmtpEmailSender:
-    """Build the SMTP adapter from environment configuration."""
-    return SmtpEmailSender(
-        host=os.environ.get("SMTP_HOST", "localhost"),
-        port=int(os.environ.get("SMTP_PORT", "587")),
-        username=os.environ.get("SMTP_USERNAME", ""),
-        password=os.environ.get("SMTP_PASSWORD", ""),
-        sender=os.environ.get("SMTP_SENDER", "no-reply@gatherly.local"),
-        use_starttls=os.environ.get("SMTP_STARTTLS", "true").casefold() == "true",
-        timeout=float(os.environ.get("SMTP_TIMEOUT", "10")),
-    )
+
 
 
 def _send_verification_email(
