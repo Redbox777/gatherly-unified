@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
+from app.application.events import EventNotFoundError
 from app.interfaces.web.constants import SESSION_COOKIE
 from app.interfaces.web.dependencies import Dependencies
 from app.interfaces.web.schemas import (
