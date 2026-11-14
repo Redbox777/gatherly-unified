@@ -44,6 +44,7 @@ from app.infrastructure.database.event_expenses_repository import EventExpensesR
 from app.infrastructure.database.event_expense_splits_repository import (
     EventExpenseSplitsRepository,
 )
+from app.infrastructure.database.event_finance_repository import EventFinanceRepository
 from app.infrastructure.database.event_venues_repository import EventVenuesRepository
 from app.infrastructure.database.http_rate_limits_repository import (
     HttpRateLimitsRepository,
@@ -289,7 +290,11 @@ def _serialize_minor_amount(
         raise TypeError("Finance amount must be integer minor units")
     precision = get_currency(currency).minor_unit_digits
     money = Money(amount_minor_units, currency)
-    return {**item, field.replace("_minor_units", ""), "amount": f"{money.major_units:.{precision}f}"}
+    return {
+        **item,
+        field.replace("_minor_units", ""): f"{money.major_units:.{precision}f}",
+        "amount": f"{money.major_units:.{precision}f}",
+    }
 
 
 def _serialize_settlement(settlement: dict[str, object]) -> dict[str, object]:
