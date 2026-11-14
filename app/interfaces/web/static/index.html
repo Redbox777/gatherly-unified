@@ -166,6 +166,30 @@
                 <p class="participant-status" id="task-status" role="status" aria-live="polite"></p>
               </form>
             </section>
+            <section class="expenses-panel" aria-labelledby="expenses-heading">
+              <div class="participants-heading"><h3 id="expenses-heading">Расходы встречи</h3><span id="expenses-count">0</span></div>
+              <p class="participants-help">Записывайте общие расходы и указывайте, кто оплатил. Распределение между участниками появится в следующем этапе.</p>
+              <div id="expenses-list" class="expenses-list" aria-live="polite"><p class="expenses-empty">Загрузка расходов…</p></div>
+              <form id="expense-form" class="expense-form">
+                <label for="expense-title">Что оплатили</label>
+                <input id="expense-title" maxlength="160" required placeholder="Например, продукты для ужина">
+                <label for="expense-description">Комментарий (необязательно)</label>
+                <textarea id="expense-description" maxlength="1000" rows="2" placeholder="Подробности"></textarea>
+                <div class="expense-fields">
+                  <div><label for="expense-amount">Сумма</label><input id="expense-amount" type="number" min="0.01" step="any" required placeholder="0.00"></div>
+                  <div><label for="expense-currency">Валюта</label><select id="expense-currency"><option>EUR</option><option>RUB</option><option>USD</option><option>GBP</option><option>CHF</option><option>PLN</option><option>JPY</option><option>KWD</option></select></div>
+                </div>
+                <label for="expense-payer">Кто оплатил</label>
+                <select id="expense-payer" required><option value="">Сначала добавьте участника</option></select>
+                <label for="expense-date">Дата расхода</label>
+                <input id="expense-date" type="datetime-local" required>
+                <div class="expense-form-actions">
+                  <button type="button" class="secondary-button" id="expense-cancel" hidden>Отмена</button>
+                  <button type="submit" class="secondary-button" id="expense-save">Добавить расход</button>
+                </div>
+                <p class="participant-status" id="expense-status" role="status" aria-live="polite"></p>
+              </form>
+            </section>
             <section class="notes-panel" aria-labelledby="notes-heading">
               <div class="participants-heading"><h3 id="notes-heading">Заметки</h3><span id="notes-count">0</span></div>
               <p class="participants-help">Личные записи видны только вам. Общими можно поделиться с участниками, связанными с аккаунтами Gatherly.</p>
