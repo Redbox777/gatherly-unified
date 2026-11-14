@@ -119,6 +119,22 @@
           <section class="event-detail" id="event-detail" hidden>
             <div class="dialog-heading"><div><p class="eyebrow">ВАША ВСТРЕЧА</p><h2 id="detail-title">Встреча</h2></div><button class="dialog-close" id="detail-close" type="button" aria-label="Закрыть">×</button></div>
             <p class="detail-date" id="detail-date"></p><p class="detail-created" id="detail-created"></p>
+            <section class="venue-panel" aria-labelledby="venue-heading">
+              <div class="participants-heading"><h3 id="venue-heading">Место встречи</h3><span>Необязательно</span></div>
+              <div id="venue-display" class="venue-display"><p class="venue-empty">Место пока не указано.</p></div>
+              <form id="venue-form" class="venue-form">
+                <label for="venue-name">Название места</label>
+                <input id="venue-name" maxlength="160" required placeholder="Например, Центральный парк">
+                <label for="venue-address">Адрес</label>
+                <input id="venue-address" maxlength="500" required placeholder="Город, улица, дом">
+                <div class="venue-coordinate-grid">
+                  <div><label for="venue-latitude">Широта (необязательно)</label><input id="venue-latitude" type="number" min="-90" max="90" step="any" placeholder="50.1234"></div>
+                  <div><label for="venue-longitude">Долгота (необязательно)</label><input id="venue-longitude" type="number" min="-180" max="180" step="any" placeholder="6.1234"></div>
+                </div>
+                <div class="venue-actions"><button type="button" id="venue-delete" class="text-button venue-delete" hidden>Удалить место</button><button type="submit" id="venue-save" class="secondary-button">Сохранить место</button></div>
+                <p id="venue-status" class="participant-status" role="status" aria-live="polite"></p>
+              </form>
+            </section>
             <section class="reminder-panel" aria-labelledby="reminder-heading">
               <div class="participants-heading"><h3 id="reminder-heading">Напоминания о встрече</h3></div>
               <p class="participants-help">Выберите, за сколько времени отправить напоминание по электронной почте.</p>
