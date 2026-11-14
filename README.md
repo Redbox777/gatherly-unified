@@ -14,6 +14,9 @@ A modular backend foundation for Gatherly with shared application logic and web/
 
 - Event creation and owner-scoped event management.
 - Event-scoped participant records that remain stable when linked to an account.
+- Owner-managed event tasks and optional venue details.
+- Private and shared event notes with membership- and author-scoped access.
+- Exact event expenses, equal/fixed/weighted splits, per-currency balances, and records of completed settlements.
 - Email registration, verification, login, server-managed sessions, password reset/change, and Telegram login.
 - Participant invitation lifecycle: owner-only creation/revocation, one-time token hashes, verified-email acceptance, and atomic participant linking.
 - Invitation email delivery through the SMTP adapter; failed delivery revokes the newly issued invitation before returning an error.
