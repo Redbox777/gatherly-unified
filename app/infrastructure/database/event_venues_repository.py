@@ -1,4 +1,4 @@
-"""Owner-scoped persistence for a single venue attached to an event."""
+"""Persistence and membership access for a single event venue."""
 
 import sqlite3
 
@@ -6,7 +6,7 @@ from app.infrastructure.database.connection import transaction
 
 
 class EventVenuesRepository:
-    """Store optional venue details; only the event owner can access them."""
+    """Store venue details; linked event members may read, owners may write."""
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
