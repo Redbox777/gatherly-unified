@@ -143,5 +143,8 @@ def test_worker_main_configures_logging_and_reports_counts(
     worker.main()
 
     assert configured == [True]
-    assert "Notification worker completed" in caplog.text
-    assert "notifications_created" in caplog.text
+    record = next(
+        item for item in caplog.records if item.message == "Notification worker completed"
+    )
+    assert record.notifications_created == 3
+    assert record.emails_sent == 2
