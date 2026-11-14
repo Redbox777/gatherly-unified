@@ -31,6 +31,9 @@ def test_unhandled_exception_returns_safe_response_and_logs_request_id(
     def unhandled(_request: Request) -> None:
         raise RuntimeError("private-payload-must-never-appear-in-logs")
 
+    route = app.router.routes.pop()
+    app.router.routes.insert(-1, route)
+
     caplog.set_level(logging.INFO)
     with TestClient(app, raise_server_exceptions=False) as client:
         response = client.post(
