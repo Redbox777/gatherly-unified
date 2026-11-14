@@ -112,11 +112,12 @@ def validate_runtime_configuration(environ: Mapping[str, str]) -> None:
     if environment != "production":
         return
 
+    public_hostname = urlsplit(public_origin).hostname if public_origin else None
     if (
         not public_origin
         or urlsplit(public_origin).scheme.casefold() != "https"
-        or urlsplit(public_origin).hostname is None
-        or urlsplit(public_origin).hostname.casefold() in _LOCAL_HOSTS
+        or public_hostname is None
+        or public_hostname.casefold() in _LOCAL_HOSTS
     ):
         raise ValueError("PUBLIC_ORIGIN must be a configured public HTTPS origin")
 
