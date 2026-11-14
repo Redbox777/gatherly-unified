@@ -366,6 +366,85 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON event_expense_allocations(participant_id);
         """,
     ),
+    (
+        17,
+        """
+        ALTER TABLE event_expenses
+        ADD COLUMN paid_by_participant_name TEXT NULL;
+        UPDATE event_expenses
+        SET paid_by_participant_name = (
+            SELECT display_name FROM event_participants
+            WHERE event_participants.id = event_expenses.paid_by_participant_id
+        )
+        WHERE paid_by_participant_id IS NOT NULL;
+
+        CREATE TABLE event_settlements (
+            id TEXT PRIMARY KEY,
+            event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            from_participant_id TEXT NULL
+                REFERENCES event_participants(id) ON DELETE SET NULL,
+            from_participant_name TEXT NOT NULL
+                CHECK (length(trim(from_participant_name)) BETWEEN 1 AND 120),
+            to_participant_id TEXT NULL
+                REFERENCES event_participants(id) ON DELETE SET NULL,
+            to_participant_name TEXT NOT NULL
+                CHECK (length(trim(to_participant_name)) BETWEEN 1 AND 120),
+            amount_minor_units INTEGER NOT NULL CHECK (amount_minor_units > 0),
+            currency TEXT NOT NULL CHECK (length(currency) = 3),
+            settled_at TEXT NOT NULL,
+            note TEXT NOT NULL DEFAULT '' CHECK (length(note) <= 1000),
+            created_at TEXT NOT NULL,
+            CHECK (
+                from_participant_id IS NULL OR to_participant_id IS NULL
+                OR from_participant_id != to_participant_id
+            )
+        );
+        CREATE INDEX idx_event_settlements_event_currency_date
+            ON event_settlements(event_id, currency, settled_at, id);
+        CREATE INDEX idx_event_settlements_from_participant
+            ON event_settlements(from_participant_id);
+        CREATE INDEX idx_event_settlements_to_participant
+            ON event_settlements(to_participant_id);
+
+        CREATE TRIGGER snapshot_event_expense_payer_after_insert
+        AFTER INSERT ON event_expenses
+        WHEN NEW.paid_by_participant_id IS NOT NULL
+        BEGIN
+            UPDATE event_expenses
+            SET paid_by_participant_name = (
+                SELECT display_name FROM event_participants
+                WHERE id = NEW.paid_by_participant_id
+            )
+            WHERE id = NEW.id;
+        END;
+
+        CREATE TRIGGER snapshot_event_expense_payer_after_update
+        AFTER UPDATE OF paid_by_participant_id ON event_expenses
+        WHEN NEW.paid_by_participant_id IS NOT NULL
+        BEGIN
+            UPDATE event_expenses
+            SET paid_by_participant_name = (
+                SELECT display_name FROM event_participants
+                WHERE id = NEW.paid_by_participant_id
+            )
+            WHERE id = NEW.id;
+        END;
+
+        CREATE TRIGGER preserve_participant_finance_names_before_delete
+        BEFORE DELETE ON event_participants
+        BEGIN
+            UPDATE event_expenses
+            SET paid_by_participant_name = OLD.display_name
+            WHERE paid_by_participant_id = OLD.id;
+            UPDATE event_settlements
+            SET from_participant_name = OLD.display_name
+            WHERE from_participant_id = OLD.id;
+            UPDATE event_settlements
+            SET to_participant_name = OLD.display_name
+            WHERE to_participant_id = OLD.id;
+        END;
+        """,
+    ),
 )
 
  
