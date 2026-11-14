@@ -36,6 +36,7 @@ from app.infrastructure.database.auth_identities_repository import AuthIdentitie
 from app.infrastructure.database.auth_sessions_repository import AuthSessionsRepository
 from app.infrastructure.database.connection import connect, migrate, transaction
 from app.infrastructure.database.events_repository import EventsRepository
+from app.infrastructure.database.event_tasks_repository import EventTasksRepository
 from app.infrastructure.database.http_rate_limits_repository import (
     HttpRateLimitsRepository,
 )
@@ -166,6 +167,17 @@ class EventReminderRequest(BaseModel):
     offsets_minutes: list[int] = Field(default_factory=list, max_length=3)
 
 
+class EventTaskRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    description: str = Field(default="", max_length=2000)
+    due_at: datetime | None = None
+    assignee_participant_id: UUID | None = None
+
+
+class EventTaskCompletionRequest(BaseModel):
+    completed: bool
+
+
 class CreateNoteRequest(BaseModel):
     content: str = Field(min_length=1, max_length=5000)
     visibility: str = Field(default="private", pattern="^(private|shared)$")
@@ -244,6 +256,7 @@ class Dependencies:
         self.email_sender = _email_sender()
         self.notifications = NotificationsRepository(connection)
         self.notes = NotesRepository(connection)
+        self.event_tasks = EventTasksRepository(connection)
         self.reset_requests = PasswordResetRequestService(
             identities=self.identities,
             resets=self.resets,
@@ -1457,6 +1470,132 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="Invalid or expired reset token")
         return {"message": "Password updated"}
 
+
+    @app.get("/events/{event_id}/tasks")
+    def list_event_tasks(
+        event_id: UUID, request: Request, deps: ServiceDependency
+    ) -> list[dict[str, object]]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        owner_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        tasks = deps.event_tasks.list_for_owner(
+            event_id=str(event_id), owner_id=owner_id
+        )
+        if tasks is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        return tasks
+
+    @app.post(
+        "/events/{event_id}/tasks", status_code=status.HTTP_201_CREATED
+    )
+    def create_event_task(
+        event_id: UUID, payload: EventTaskRequest,
+        request: Request, deps: ServiceDependency
+    ) -> dict[str, object]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        owner_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        if payload.due_at is not None and (
+            payload.due_at.tzinfo is None or payload.due_at.utcoffset() is None
+        ):
+            raise HTTPException(status_code=422, detail="Task due date must include a timezone")
+        try:
+            task = deps.event_tasks.create(
+                event_id=str(event_id), owner_id=owner_id,
+                title=payload.title, description=payload.description,
+                due_at=payload.due_at.isoformat() if payload.due_at else None,
+                assignee_participant_id=(
+                    str(payload.assignee_participant_id)
+                    if payload.assignee_participant_id else None
+                ),
+                now=datetime.now(UTC),
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail="Invalid task data") from error
+        if task is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        return task
+
+    @app.put("/events/{event_id}/tasks/{task_id}")
+    def update_event_task(
+        event_id: UUID, task_id: UUID, payload: EventTaskRequest,
+        request: Request, deps: ServiceDependency
+    ) -> dict[str, object]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        owner_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        if payload.due_at is not None and (
+            payload.due_at.tzinfo is None or payload.due_at.utcoffset() is None
+        ):
+            raise HTTPException(status_code=422, detail="Task due date must include a timezone")
+        existing = deps.event_tasks.get_for_owner(
+            task_id=str(task_id), event_id=str(event_id), owner_id=owner_id
+        )
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        try:
+            task = deps.event_tasks.update(
+                task_id=str(task_id), event_id=str(event_id), owner_id=owner_id,
+                title=payload.title, description=payload.description,
+                due_at=payload.due_at.isoformat() if payload.due_at else None,
+                assignee_participant_id=(
+                    str(payload.assignee_participant_id)
+                    if payload.assignee_participant_id else None
+                ),
+                completed=bool(existing["completed"]),
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail="Invalid task data") from error
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return task
+
+    @app.patch("/events/{event_id}/tasks/{task_id}/completion")
+    def set_event_task_completion(
+        event_id: UUID, task_id: UUID, payload: EventTaskCompletionRequest,
+        request: Request, deps: ServiceDependency
+    ) -> dict[str, object]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        owner_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        task = deps.event_tasks.set_completed(
+            task_id=str(task_id), event_id=str(event_id),
+            owner_id=owner_id, completed=payload.completed,
+        )
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return task
+
+    @app.delete(
+        "/events/{event_id}/tasks/{task_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    def delete_event_task(
+        event_id: UUID, task_id: UUID, request: Request, deps: ServiceDependency
+    ) -> Response:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        owner_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        if not deps.event_tasks.delete(
+            task_id=str(task_id), event_id=str(event_id), owner_id=owner_id
+        ):
+            raise HTTPException(status_code=404, detail="Task not found")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.get("/events/{event_id}/notes")
     def list_event_notes(
