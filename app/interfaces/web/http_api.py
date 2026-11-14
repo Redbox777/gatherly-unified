@@ -82,7 +82,6 @@ from app.interfaces.web.schemas import (
     EventTaskCompletionRequest,
     EventTaskRequest,
     EventVenueRequest,
-    ExpenseSplitAllocationRequest,
     ExpenseSplitRequest,
     LoginRequest,
     NotificationPreferencesRequest,
