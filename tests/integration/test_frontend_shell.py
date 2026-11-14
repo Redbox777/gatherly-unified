@@ -36,6 +36,9 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     assert "GatherlyFinanceUI" in finance.text
     assert "GatherlyNotificationsUI" in notifications.text
     assert "aria-expanded" in script.text
+    assert "const requestedEventId = event.id;" in script.text
+    assert "activeEvent?.id !== requestedEventId" in script.text
+    assert "activeEvent?.id !== eventId" in script.text
     assert "loadEventFinance" in finance.text
     assert "settlements" in finance.text
     assert "renderExpenseSplitEditor" in finance.text
