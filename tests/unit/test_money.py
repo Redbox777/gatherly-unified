@@ -2,7 +2,12 @@ from decimal import Decimal
 
 import pytest
 
-from app.domain.money import Money, allocate_equal_shares, get_currency
+from app.domain.money import (
+    Money,
+    RoundingMode,
+    allocate_equal_shares,
+    get_currency,
+)
 
 
 def test_money_uses_currency_minor_unit_precision() -> None:
@@ -17,6 +22,22 @@ def test_money_rejects_implicit_rounding_and_floats() -> None:
         Money.from_major("1.001", "EUR")
     with pytest.raises(TypeError):
         Money.from_major(1.25, "EUR")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("mode", "amount", "expected"),
+    [
+        (RoundingMode.HALF_UP, "1.225", 123),
+        (RoundingMode.HALF_EVEN, "1.225", 122),
+        (RoundingMode.DOWN, "1.229", 122),
+        (RoundingMode.UP, "1.221", 123),
+        (RoundingMode.HALF_UP, "-1.225", -123),
+    ],
+)
+def test_money_supports_explicit_rounding_policies(
+    mode: RoundingMode, amount: str, expected: int
+) -> None:
+    assert Money.from_major(amount, "EUR", rounding=mode).minor_units == expected
 
 
 def test_money_rejects_invalid_currency_and_non_finite_values() -> None:
@@ -57,7 +78,7 @@ def test_equal_split_supports_negative_adjustments() -> None:
     assert shares == {"a": Money(-3, "EUR"), "b": Money(-2, "EUR")}
 
 
-@pytest.mark.parametrize("participant_ids", [[], [""], ["a", "a"]])
+@pytest.mark.parametrize("participant_ids", [[], [""], ["a", "a"], [" a ", "a"]])
 def test_equal_split_rejects_invalid_participants(participant_ids: list[str]) -> None:
     with pytest.raises(ValueError):
         allocate_equal_shares(Money(100, "EUR"), participant_ids)
