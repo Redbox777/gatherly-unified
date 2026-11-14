@@ -2,6 +2,7 @@ import sqlite3
 
 import pytest
 
+from app.infrastructure.database import connection as database_connection
 from app.infrastructure.database.connection import MIGRATIONS, connect, migrate, transaction
 
 
@@ -339,3 +340,78 @@ def test_concurrent_migration_runners_apply_each_version_once(tmp_path) -> None:
 
     expected = [version for version, _ in MIGRATIONS]
     assert results == [expected, expected]
+
+
+def test_finance_migration_17_backfills_and_preserves_legacy_payer_name(
+    tmp_path, monkeypatch
+) -> None:
+    connection = connect(tmp_path / "finance-migration-upgrade.sqlite3")
+    all_migrations = database_connection.MIGRATIONS
+    try:
+        monkeypatch.setattr(database_connection, "MIGRATIONS", all_migrations[:16])
+        migrate(connection)
+        connection.execute(
+            """
+            INSERT INTO events(id, owner_id, title, starts_at, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("legacy-event", "owner-1", "Legacy event", None, "2026-11-01T00:00:00Z"),
+        )
+        connection.execute(
+            """
+            INSERT INTO event_participants(id, event_id, display_name, added_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            ("legacy-payer", "legacy-event", "Original payer", "2026-11-01T00:00:00Z"),
+        )
+        connection.execute(
+            """
+            INSERT INTO event_expenses(
+                id, event_id, title, description, amount_minor_units, currency,
+                paid_by_participant_id, incurred_at, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "legacy-expense", "legacy-event", "Legacy purchase", "",
+                2500, "EUR", "legacy-payer",
+                "2026-11-01T00:00:00Z", "2026-11-01T00:00:00Z",
+                "2026-11-01T00:00:00Z",
+            ),
+        )
+        connection.commit()
+
+        monkeypatch.setattr(database_connection, "MIGRATIONS", all_migrations)
+        migrate(connection)
+
+        migrated = connection.execute(
+            """
+            SELECT paid_by_participant_id, paid_by_participant_name
+            FROM event_expenses WHERE id = ?
+            """,
+            ("legacy-expense",),
+        ).fetchone()
+        assert migrated["paid_by_participant_id"] == "legacy-payer"
+        assert migrated["paid_by_participant_name"] == "Original payer"
+
+        connection.execute(
+            "DELETE FROM event_participants WHERE id = ?", ("legacy-payer",)
+        )
+        preserved = connection.execute(
+            """
+            SELECT paid_by_participant_id, paid_by_participant_name
+            FROM event_expenses WHERE id = ?
+            """,
+            ("legacy-expense",),
+        ).fetchone()
+        assert preserved["paid_by_participant_id"] is None
+        assert preserved["paid_by_participant_name"] == "Original payer"
+
+        applied_versions = [
+            row["version"]
+            for row in connection.execute(
+                "SELECT version FROM schema_migrations ORDER BY version"
+            ).fetchall()
+        ]
+        assert applied_versions == list(range(1, 18))
+    finally:
+        connection.close()
