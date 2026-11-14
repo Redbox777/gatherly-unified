@@ -20,9 +20,10 @@ jobs:
       - run: node --check app/interfaces/web/static/date-utils.js
       - run: node --check app/interfaces/web/static/participants-ui.js
       - run: node --check app/interfaces/web/static/notes-ui.js
+      - run: node --check app/interfaces/web/static/tasks-ui.js
       - run: node --check app/interfaces/web/static/app.js
       - run: node --check app/interfaces/web/static/auth.js
       - run: node --check app/interfaces/web/static/diagnostics.js
-      - run: npx --yes eslint@10.15.0 --config eslint.config.mjs app/interfaces/web/static/api-client.js app/interfaces/web/static/date-utils.js app/interfaces/web/static/participants-ui.js app/interfaces/web/static/notes-ui.js app/interfaces/web/static/app.js app/interfaces/web/static/auth.js app/interfaces/web/static/diagnostics.js
+      - run: npx --yes eslint@10.15.0 --config eslint.config.mjs app/interfaces/web/static/api-client.js app/interfaces/web/static/date-utils.js app/interfaces/web/static/participants-ui.js app/interfaces/web/static/notes-ui.js app/interfaces/web/static/tasks-ui.js app/interfaces/web/static/app.js app/interfaces/web/static/auth.js app/interfaces/web/static/diagnostics.js
       - run: python -m pip freeze --exclude-editable > /tmp/gatherly-audit-requirements.txt
       - run: pip-audit --strict -r /tmp/gatherly-audit-requirements.txt
