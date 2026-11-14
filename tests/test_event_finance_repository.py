@@ -173,7 +173,7 @@ def test_payer_and_settlement_names_survive_participant_deletion(finance) -> Non
     )
     repository.create_settlement_for_owner(
         event_id="event-1", owner_id="owner",
-        from_participant_id="b", to_participant_id="a",
+        from_participant_id="a", to_participant_id="b",
         amount_minor_units=500, currency="EUR",
         settled_at=datetime.now(UTC), note="", now=datetime.now(UTC),
     )
@@ -190,5 +190,5 @@ def test_payer_and_settlement_names_survive_participant_deletion(finance) -> Non
         event_id="event-1", owner_id="owner"
     )
     assert stored_settlements is not None
-    assert stored_settlements[0]["from_participant_id"] is None
-    assert stored_settlements[0]["from_participant_name"] == "Boris"
+    assert stored_settlements[0]["to_participant_id"] is None
+    assert stored_settlements[0]["to_participant_name"] == "Boris"
