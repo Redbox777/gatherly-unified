@@ -1362,5 +1362,12 @@ def test_event_expense_api_requires_authentication(tmp_path) -> None:
     app = create_app(tmp_path / "event-expenses-auth.sqlite3")
     with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         event_id = "00000000-0000-0000-0000-000000000001"
+        payload = {
+            "title": "Groceries",
+            "amount": "12.34",
+            "currency": "EUR",
+            "paid_by_participant_id": "00000000-0000-0000-0000-000000000002",
+            "incurred_at": "2026-11-14T18:30:00+00:00",
+        }
         assert client.get(f"/events/{event_id}/expenses").status_code == 401
-        assert client.post(f"/events/{event_id}/expenses", json={}).status_code == 401
+        assert client.post(f"/events/{event_id}/expenses", json=payload).status_code == 401
