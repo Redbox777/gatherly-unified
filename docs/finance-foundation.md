@@ -44,7 +44,7 @@ to the original amount. Negative totals use the same rule for adjustments.
 ## Next stages
 
 - PR33: event expense creation, editing, listing, and deletion.
-- PR34: configurable expense split modes and per-participant allocations.
+- PR34: configurable expense split modes and per-participant allocations (implemented).
 - PR35: balances and settlement recording.
 
 Expense records must reference event participant IDs, not user IDs, so named guests
