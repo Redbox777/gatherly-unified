@@ -12,7 +12,7 @@ from decimal import (
     ROUND_HALF_UP,
     ROUND_UP,
 )
-from enum import Enum
+from enum import StrEnum
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +36,7 @@ _CURRENCIES: dict[str, Currency] = {
 }
 
 
-class RoundingMode(str, Enum):
+class RoundingMode(StrEnum):
     """Explicit policies for converting decimal input to minor units."""
 
     HALF_UP = "half_up"
