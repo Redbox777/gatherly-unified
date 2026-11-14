@@ -17,7 +17,6 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from app.application.events import EventNotFoundError
 from app.application.participants import DuplicateParticipantError
 from app.application.participant_invitations import ParticipantAlreadyLinkedError
 from app.infrastructure.database.connection import (
