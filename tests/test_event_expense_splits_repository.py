@@ -103,3 +103,44 @@ def test_changing_expense_total_clears_old_split(repositories) -> None:
     assert splits.get_for_owner(
         event_id="event-1", expense_id=expense_id, owner_id="owner"
     )["mode"] is None
+
+
+
+def test_description_update_preserves_existing_split(repositories) -> None:
+    _, splits, expenses, expense_id = repositories
+    shares = calculate_split(
+        Money(1000, "EUR"), SplitMode.EQUAL, [SplitInput("p1"), SplitInput("p2")]
+    )
+    splits.replace_for_owner(
+        event_id="event-1", expense_id=expense_id, owner_id="owner",
+        mode=SplitMode.EQUAL, shares=shares,
+    )
+    updated = expenses.update(
+        expense_id=expense_id, event_id="event-1", owner_id="owner",
+        title="Dinner", description="Updated notes", amount_minor_units=1000,
+        currency="EUR", paid_by_participant_id="p1",
+        incurred_at=datetime.now(UTC), now=datetime.now(UTC),
+    )
+    assert updated is not None
+    assert splits.get_for_owner(
+        event_id="event-1", expense_id=expense_id, owner_id="owner"
+    )["mode"] == "equal"
+
+
+def test_removing_participant_preserves_allocation_snapshot(repositories) -> None:
+    connection, splits, _, expense_id = repositories
+    shares = calculate_split(
+        Money(1000, "EUR"), SplitMode.EQUAL, [SplitInput("p1"), SplitInput("p2")]
+    )
+    splits.replace_for_owner(
+        event_id="event-1", expense_id=expense_id, owner_id="owner",
+        mode=SplitMode.EQUAL, shares=shares,
+    )
+    connection.execute("DELETE FROM event_participants WHERE id = ?", ("p2",))
+    result = splits.get_for_owner(
+        event_id="event-1", expense_id=expense_id, owner_id="owner"
+    )
+    assert result is not None
+    removed = next(row for row in result["allocations"] if row["participant_name"] == "Sam")
+    assert removed["participant_id"] is None
+    assert removed["amount_minor_units"] == 500
