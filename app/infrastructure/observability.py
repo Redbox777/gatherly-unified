@@ -23,6 +23,8 @@ _SAFE_EXTRA_FIELDS = (
     "exception_type",
     "exception_frames",
     "component",
+    "notifications_created",
+    "emails_sent",
 )
 
 
