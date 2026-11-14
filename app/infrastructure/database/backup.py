@@ -11,7 +11,9 @@ import sqlite3
 import tempfile
 
 
-def _copy_database(source: Path, destination: Path) -> None:
+def _copy_database(
+    source: Path, destination: Path, *, clear_destination_sidecars: bool = False
+) -> None:
     source_path = source.expanduser().resolve()
     destination_path = destination.expanduser().resolve()
     if source_path == destination_path:
@@ -30,10 +32,7 @@ def _copy_database(source: Path, destination: Path) -> None:
     source_connection: sqlite3.Connection | None = None
     destination_connection: sqlite3.Connection | None = None
     try:
-        source_connection = sqlite3.connect(
-            source_path.as_uri() + "?mode=ro",
-            uri=True,
-        )
+        source_connection = sqlite3.connect(source_path)
         destination_connection = sqlite3.connect(temporary_path)
         source_connection.backup(destination_connection)
         integrity = destination_connection.execute(
@@ -46,6 +45,9 @@ def _copy_database(source: Path, destination: Path) -> None:
         source_connection.close()
         source_connection = None
         os.chmod(temporary_path, 0o600)
+        if clear_destination_sidecars:
+            Path(str(destination_path) + "-wal").unlink(missing_ok=True)
+            Path(str(destination_path) + "-shm").unlink(missing_ok=True)
         os.replace(temporary_path, destination_path)
     finally:
         if destination_connection is not None:
@@ -69,7 +71,7 @@ def restore_database(
     """Restore atomically; caller must stop every app process first."""
     if not confirm_application_stopped:
         raise ValueError("Stop the application and pass explicit restore confirmation")
-    _copy_database(backup, destination)
+    _copy_database(backup, destination, clear_destination_sidecars=True)
 
 
 def main() -> None:
