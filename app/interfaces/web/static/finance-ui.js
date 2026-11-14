@@ -1,6 +1,7 @@
 (() => {
   const create = ({ api, formatDate, localInputValue, toIsoValue, dialog, getActiveEvent }) => {
     const expensesList = document.getElementById("expenses-list");
+    const expensesCount = document.getElementById("expenses-count");
     const expenseForm = document.getElementById("expense-form");
     const expenseTitle = document.getElementById("expense-title");
     const expenseDescription = document.getElementById("expense-description");
