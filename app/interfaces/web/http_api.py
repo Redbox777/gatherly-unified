@@ -17,7 +17,6 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.domain.money import Money, get_currency
 from app.application.auth_identities_service import AuthIdentitiesService
 from app.application.auth_sessions_service import AuthSessionsService
 from app.application.authentication_service import AuthenticationService
@@ -30,6 +29,7 @@ from app.application.participant_invitations import (
 )
 from app.application.password_reset_request_service import PasswordResetRequestService
 from app.application.password_reset_service import PasswordResetService
+from app.domain.money import Money, get_currency
 from app.infrastructure.database.auth_email_tokens_repository import (
     AuthEmailTokensRepository,
 )
