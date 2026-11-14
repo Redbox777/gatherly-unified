@@ -25,9 +25,10 @@ class EventFinanceRepository:
     def get_balances_for_owner(
         self, *, event_id: str, owner_id: str
     ) -> dict[str, object] | None:
-        if not self._event_exists(event_id=event_id, owner_id=owner_id):
-            return None
-        snapshot = self._calculate_snapshot(event_id)
+        with transaction(self._connection):
+            if not self._event_exists(event_id=event_id, owner_id=owner_id):
+                return None
+            snapshot = self._calculate_snapshot(event_id)
         return {
             "event_id": event_id,
             "balances": [
@@ -98,6 +99,8 @@ class EventFinanceRepository:
             or amount_minor_units <= 0
         ):
             raise ValueError("Settlement amount must be positive integer minor units")
+        if settled_at.tzinfo is None or settled_at.utcoffset() is None:
+            raise ValueError("Settlement date must include a timezone")
         normalized_note = note.strip()
         if len(normalized_note) > 1000:
             raise ValueError("Settlement note is too long")
