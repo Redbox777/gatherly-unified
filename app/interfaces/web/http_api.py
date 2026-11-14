@@ -42,7 +42,6 @@ from app.interfaces.web.operations import router as operations_router
 from app.interfaces.web.schemas import (
     AcceptParticipantInvitationRequest,
     AddParticipantRequest,
-    BugReportRequest,
     ChangePasswordRequest,
     CreateEventRequest,
     CreateNoteRequest,
