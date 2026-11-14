@@ -57,12 +57,13 @@ Use a hybrid model for event participants:
 - An event participant may be a named guest without a Gatherly account.
 - A participant may optionally be linked to an internal Gatherly user ID after that identity is verified and the user accepts or otherwise authorizes the link.
 - Keep the event-scoped participant record distinct from the user account. A display name is not proof of identity and must never be used to auto-link accounts.
-- Invitations and invitation acceptance are a separate future workflow; do not imply that adding a guest grants that person account access.
-- Expense records should reference the event participant record, so named guests and registered users can both take part in a split. Linking a participant to a user must preserve the participant's existing event and expense history.
-- Define uniqueness, permissions, invitation expiry/revocation, and account-linking behavior before implementing invitations or expenses.
+- Participant invitations and verified-email acceptance are implemented as a separate workflow. Adding a guest alone does not grant account access.
+- Expense records reference the event participant record, so named guests and registered users can both take part in a split. Linking a participant to a user preserves the participant's existing event and expense history.
+- Invitation uniqueness, owner permissions, expiry, revocation, and one-time acceptance are enforced in the repository and covered by tests.
 
 ## 7. Decisions still open
 
 - Deployment target and production database: start with SQLite for the initial single-instance foundation; reassess if concurrent multi-user deployment requires PostgreSQL.
 - SQLite is currently a single-instance deployment choice. Keep the database on a local persistent disk, provide tested backups, and avoid sharing the SQLite file across multiple application hosts. Reassess PostgreSQL before horizontal scaling or sustained write concurrency; `busy_timeout` only reduces transient lock errors and is not a scaling strategy.
-- Expense split modes, rounding rules, and invitation lifecycle must be specified before those modules are implemented.
+- Cross-provider email/Telegram account linking remains unimplemented; current login providers can create separate internal accounts.
+- Production identity hardening, deployment origin/proxy configuration, tested backups, and readiness monitoring remain release gates.
