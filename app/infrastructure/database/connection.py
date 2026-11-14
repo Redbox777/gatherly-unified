@@ -452,10 +452,16 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             id TEXT PRIMARY KEY,
             created_at TEXT NOT NULL,
             app_version TEXT NOT NULL CHECK (length(app_version) BETWEEN 1 AND 32),
-            browser TEXT NOT NULL CHECK (browser IN ('Chrome', 'Firefox', 'Safari', 'Edge', 'Other')),
-            operating_system TEXT NOT NULL CHECK (operating_system IN ('Windows', 'macOS', 'Linux', 'Android', 'iOS', 'Other')),
+            browser TEXT NOT NULL CHECK (
+                browser IN ('Chrome', 'Firefox', 'Safari', 'Edge', 'Other')
+            ),
+            operating_system TEXT NOT NULL CHECK (
+                operating_system IN ('Windows', 'macOS', 'Linux', 'Android', 'iOS', 'Other')
+            ),
             module TEXT NOT NULL CHECK (module IN ('frontend', 'manual')),
-            error_code TEXT NOT NULL CHECK (error_code IN ('window_error', 'unhandled_rejection', 'user_reported_issue')),
+            error_code TEXT NOT NULL CHECK (
+                error_code IN ('window_error', 'unhandled_rejection', 'user_reported_issue')
+            ),
             stack TEXT NOT NULL DEFAULT '' CHECK (length(stack) <= 1000)
         );
         CREATE INDEX idx_bug_reports_created_at ON bug_reports(created_at DESC);
