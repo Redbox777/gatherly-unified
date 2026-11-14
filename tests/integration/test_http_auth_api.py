@@ -1670,3 +1670,23 @@ def test_event_resource_access_matrix_for_owner_member_and_outsider(
 
         assert owner.get(f"/events/{event_id}/tasks").status_code == 200
         assert owner.get(f"/events/{event_id}/venue").json()["venue_name"] == "Community Hall"
+
+
+def test_public_origin_supports_csrf_checks_behind_tls_terminating_proxy(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setenv("PUBLIC_ORIGIN", "https://gatherly.example")
+    app = create_app(tmp_path / "public-origin-proxy.sqlite3")
+
+    # Simulate Uvicorn receiving plain HTTP from an internal TLS-terminating proxy.
+    with TestClient(app, base_url="http://internal-gatherly") as client:
+        same_public_origin = client.post(
+            "/auth/logout", headers={"Origin": "https://gatherly.example"}
+        )
+        foreign_origin = client.post(
+            "/auth/logout", headers={"Origin": "https://attacker.example"}
+        )
+
+    assert same_public_origin.status_code == 200
+    assert foreign_origin.status_code == 403
