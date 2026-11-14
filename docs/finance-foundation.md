@@ -1,8 +1,10 @@
 # Finance foundation
 
-PR32 introduces reusable domain primitives only. Expense entry, event-level expense
-persistence, participant split configuration, balances, settlements, currency
-conversion, and payment processing are deliberately deferred to later stages.
+The finance foundation now includes exact money primitives, event expense records,
+configurable participant splits, per-currency balances, and recording of completed
+settlements. Currency conversion and payment-provider integrations remain out of
+scope. Settlement records describe transfers that have already happened; they do not
+initiate payments.
 
 ## Money representation
 
@@ -41,11 +43,22 @@ assigned one at a time to participants ordered by their normalized, stable parti
 ID. The result is deterministic regardless of input order and always sums exactly
 to the original amount. Negative totals use the same rule for adjustments.
 
-## Next stages
+## Implemented finance capabilities
 
-- PR33: event expense creation, editing, listing, and deletion.
-- PR34: configurable expense split modes and per-participant allocations (implemented).
-- PR35: balances and settlement recording (implemented).
+- Event expense creation, editing, listing, and deletion.
+- Equal, fixed, and weighted split modes with exact integer-minor-unit allocations.
+- Per-currency participant balances, pending unsplit expenses, and unresolved historical
+  records when a participant is removed.
+- Settlement recording with debtor/creditor and outstanding-balance validation.
+- Historical participant-name snapshots for expenses and settlements.
+
+## Remaining finance boundaries
+
+- No foreign-exchange conversion or cross-currency netting.
+- No payment initiation, payment-provider integration, or proof that a recorded
+  settlement was independently verified.
+- Expense edits and deletions remain corrections to the event ledger; previously
+  recorded transfers remain historical facts and continue to affect the net balance.
 
 Expense records must reference event participant IDs, not user IDs, so named guests
 and linked accounts retain the same event-level expense history.
