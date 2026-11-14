@@ -99,3 +99,26 @@ def test_note_validation_and_edit_persistence(notes_db) -> None:
     )
     assert updated is not None
     assert updated["content"] == "Final"
+
+
+def test_note_membership_checks_are_inside_the_database_transaction(notes_db) -> None:
+    repository = NotesRepository(notes_db)
+    original_check = repository._is_member
+    checked_in_transaction: list[bool] = []
+
+    def tracked_check(*, event_id: str, user_id: str) -> bool:
+        checked_in_transaction.append(notes_db.in_transaction)
+        return original_check(event_id=event_id, user_id=user_id)
+
+    repository._is_member = tracked_check  # type: ignore[method-assign]
+
+    assert repository.list_for_event(event_id="event-1", user_id="member") == []
+    created = repository.create(
+        event_id="event-1",
+        author_id="member",
+        content="Created under membership lock",
+        visibility="private",
+        now=datetime(2026, 11, 13, 12, 0, tzinfo=UTC),
+    )
+    assert created is not None
+    assert checked_in_transaction == [True, True]
