@@ -1113,6 +1113,7 @@
       });
     }
 
+    settlementDate.value = localInputValue(new Date());
     const currencies = [...new Set(currentFinanceBalances
       .filter(item => item.balance_minor_units !== 0)
       .map(item => item.currency))].sort();
@@ -1178,9 +1179,9 @@
         settlementAmount.removeAttribute("max");
       }
     };
-    settlementCurrency.addEventListener("change", updateSettlementParties, {once:true});
-    settlementFrom.addEventListener("change", updateSettlementMaximum, {once:true});
-    settlementTo.addEventListener("change", updateSettlementMaximum, {once:true});
+    settlementCurrency.onchange = updateSettlementParties;
+    settlementFrom.onchange = updateSettlementMaximum;
+    settlementTo.onchange = updateSettlementMaximum;
     updateSettlementParties();
   };
 
