@@ -85,9 +85,9 @@ def configure_application_logging() -> None:
     if _configured:
         return
 
-    root = logging.getLogger()
-    if root.level > logging.INFO:
-        root.setLevel(logging.INFO)
+    application_logger = logging.getLogger("app")
+    if application_logger.level == logging.NOTSET or application_logger.level > logging.INFO:
+        application_logger.setLevel(logging.INFO)
 
     formatter = _JsonFormatter()
     context_filter = _RequestContextFilter()
@@ -117,16 +117,20 @@ def configure_application_logging() -> None:
         # Keep the application available if persistent log storage is unavailable.
         pass
 
-    handlers.append(logging.StreamHandler())
+    if not handlers:
+        handlers.append(logging.StreamHandler())
     for handler in handlers:
         handler.setLevel(logging.INFO)
         handler.setFormatter(formatter)
         handler.addFilter(context_filter)
-        root.addHandler(handler)
+        application_logger.addHandler(handler)
 
+    # Keep application records visible to host logging and test capture, but do
+    # not install a root handler that would ingest unrelated library logs.
+    application_logger.propagate = True
     _configured = True
-    if len(handlers) == 1:
-        root.warning(
+    if len(handlers) == 1 and isinstance(handlers[0], logging.StreamHandler):
+        application_logger.warning(
             "Persistent log file unavailable; using standard error",
             extra={"event": "logging.file_unavailable", "component": "observability"},
         )
