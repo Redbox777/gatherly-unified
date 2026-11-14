@@ -111,3 +111,13 @@ python -m app.infrastructure.notifications_worker
 ## Event notes
 
 Event notes support private entries and shared entries. Private notes are visible only to their author; shared notes are visible to the event owner and linked Gatherly participants. Notes are scoped to event membership, and edits are limited to the author. Event owners can remove shared notes for moderation. Unlinked guest records cannot access the application or notes.
+
+
+## Operations and production readiness
+
+- Structured server logs and request correlation: [observability](docs/observability.md).
+- Consent-based diagnostic reports and privacy/retention boundaries: [bug reports and diagnostics](docs/bug-reports-and-diagnostics.md).
+- SQLite online backups, restore drills, health probes, and immutable migration policy: [database operations](docs/database-operations.md).
+- Production configuration and release gates: [production readiness checklist](docs/production-readiness.md).
+
+Gatherly currently targets a single-host SQLite deployment. Do not run multiple application hosts against one SQLite file. Production launch still requires an exercised restore drill, correct public-origin/reverse-proxy configuration, a reviewed privacy notice and retention schedule, and verified repository branch protection.
