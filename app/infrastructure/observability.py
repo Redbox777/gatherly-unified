@@ -129,7 +129,7 @@ def configure_application_logging() -> None:
     # not install a root handler that would ingest unrelated library logs.
     application_logger.propagate = True
     _configured = True
-    if len(handlers) == 1 and isinstance(handlers[0], logging.StreamHandler):
+    if len(handlers) == 1 and not isinstance(handlers[0], logging.FileHandler):
         application_logger.warning(
             "Persistent log file unavailable; using standard error",
             extra={"event": "logging.file_unavailable", "component": "observability"},
