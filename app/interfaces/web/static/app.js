@@ -187,7 +187,7 @@
     loadParticipants: eventId => loadParticipants(eventId),
     formatDate,
     getParticipantsBusy: () => participantsBusy,
-    setParticipantsBusy: value => { participantsBusy = value; },
+    setParticipantsBusy: value => { participantsBusy = value; }
   });
 
 
