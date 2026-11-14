@@ -415,3 +415,31 @@ def test_finance_migration_17_backfills_and_preserves_legacy_payer_name(
         assert applied_versions == list(range(1, 18))
     finally:
         connection.close()
+
+
+def test_failed_migration_rolls_back_partial_schema_and_version_record(
+    tmp_path, monkeypatch
+) -> None:
+    connection = connect(tmp_path / "failed-migration.sqlite3")
+    monkeypatch.setattr(
+        database_connection,
+        "MIGRATIONS",
+        ((1, "CREATE TABLE partial_migration_table(id TEXT); SELECT * FROM missing_table;"),),
+    )
+    try:
+        with pytest.raises(sqlite3.OperationalError, match="missing_table"):
+            migrate(connection)
+
+        partial_table = connection.execute(
+            """
+            SELECT 1 FROM sqlite_master
+            WHERE type = 'table' AND name = 'partial_migration_table'
+            """
+        ).fetchone()
+        applied = connection.execute(
+            "SELECT 1 FROM schema_migrations WHERE version = 1"
+        ).fetchone()
+        assert partial_table is None
+        assert applied is None
+    finally:
+        connection.close()
