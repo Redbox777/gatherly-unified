@@ -239,8 +239,13 @@ class PasswordResetConfirmRequest(BaseModel):
 
 def _serialize_event_expense(expense: dict[str, object]) -> dict[str, object]:
     """Expose an exact decimal string alongside the canonical minor-unit amount."""
-    currency = str(expense["currency"])
-    money = Money(int(expense["amount_minor_units"]), currency)
+    currency = expense["currency"]
+    amount_minor_units = expense["amount_minor_units"]
+    if not isinstance(currency, str):
+        raise TypeError("Expense currency must be a string")
+    if isinstance(amount_minor_units, bool) or not isinstance(amount_minor_units, int):
+        raise TypeError("Expense minor-unit amount must be an integer")
+    money = Money(amount_minor_units, currency)
     precision = get_currency(currency).minor_unit_digits
     return {
         **expense,
