@@ -341,3 +341,16 @@ button:disabled{opacity:.55;cursor:wait}
 .settlement-form input,.settlement-form select{box-sizing:border-box;width:100%;min-height:39px;padding:9px 10px;border:1px solid #dce9e5;border-radius:9px;background:#fff;color:#173941;font:inherit;font-size:11px}
 .settlement-form h4{margin-bottom:3px}
 @media(max-width:420px){.balance-row{align-items:flex-start;flex-direction:column;gap:5px}.balance-value{text-align:left}.finance-panel{padding:13px}}
+
+
+.bug-report-dialog{width:min(92vw,560px);max-height:85vh;padding:0;border:1px solid #dce9e5;border-radius:18px;background:#fff;color:#173941;box-shadow:0 24px 80px #082d3740}
+.bug-report-dialog::backdrop{background:#082d3780;backdrop-filter:blur(3px)}
+.bug-report-form{display:grid;gap:13px;padding:22px}
+.bug-report-form h2{margin:0}
+.bug-report-form>p{margin:0;color:#71888b;font-size:12px;line-height:1.6}
+.bug-report-preview{max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;border-radius:10px;background:#f4faf7;color:#31575b;font:11px/1.6 ui-monospace,monospace}
+.bug-report-consent{display:flex;align-items:flex-start;gap:9px;color:#426267;font-size:11px;line-height:1.5}
+.bug-report-consent input{margin-top:2px;accent-color:#079da4}
+.bug-report-actions{display:flex;justify-content:flex-end;gap:9px}
+.bug-report-actions button{min-height:38px;padding:8px 13px;font-size:11px;cursor:pointer}
+@media(max-width:480px){.bug-report-form{padding:17px}.bug-report-actions{flex-direction:column-reverse}.bug-report-actions button{width:100%}}

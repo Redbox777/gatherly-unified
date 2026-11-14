@@ -8,6 +8,7 @@
   <title>Gatherly — встречи, люди, вместе</title>
   <link rel="stylesheet" href="./styles.css">
   <script src="./app.js" defer></script>
+  <script src="./diagnostics.js" defer></script>
 </head>
 <body>
   <svg class="svg-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -263,10 +264,21 @@
             <div class="summary-line"><span></span></div>
           </article>
         </section>
-        <footer class="page-footer"><span>Gatherly</span><span>Создано для встреч и людей</span></footer>
+        <footer class="page-footer"><span>Gatherly</span><span>Создано для встреч и людей</span><button class="text-button" id="bug-report-open" type="button">Сообщить об ошибке</button></footer>
       </div>
     </main>
   </div>
+
+  <dialog class="bug-report-dialog" id="bug-report-dialog" aria-labelledby="bug-report-heading">
+    <form id="bug-report-form" class="bug-report-form">
+      <h2 id="bug-report-heading">Отчёт об ошибке</h2>
+      <p>Отчёт не отправляется автоматически. Проверьте состав сведений ниже. В нём нет текста переписок, расходов, паролей, токенов, контактов или файлов.</p>
+      <pre id="bug-report-preview" class="bug-report-preview"></pre>
+      <label class="bug-report-consent"><input id="bug-report-consent" type="checkbox" required> Я ознакомился с данными и согласен отправить этот технический отчёт.</label>
+      <div class="bug-report-actions"><button class="secondary-button" id="bug-report-cancel" type="button">Отмена</button><button class="primary-button" id="bug-report-submit" type="submit">Отправить отчёт</button></div>
+      <p id="bug-report-status" class="participant-status" role="status" aria-live="polite"></p>
+    </form>
+  </dialog>
   <div class="mobile-scrim" id="mobile-scrim" hidden></div>
 </body>
 </html>
