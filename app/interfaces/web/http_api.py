@@ -30,7 +30,7 @@ from app.application.participant_invitations import (
 )
 from app.application.password_reset_request_service import PasswordResetRequestService
 from app.application.password_reset_service import PasswordResetService
-from app.domain.event_balances import BalanceSnapshot\nfrom app.domain.expense_splits import SplitInput, SplitMode, calculate_split
+from app.domain.expense_splits import SplitInput, SplitMode, calculate_split
 from app.domain.money import Money, get_currency
 from app.infrastructure.database.auth_email_tokens_repository import (
     AuthEmailTokensRepository,
@@ -337,7 +337,8 @@ class Dependencies:
         self.event_tasks = EventTasksRepository(connection)
         self.event_venues = EventVenuesRepository(connection)
         self.event_expenses = EventExpensesRepository(connection)
-        self.event_expense_splits = EventExpenseSplitsRepository(connection)\n        self.event_finance = EventFinanceRepository(connection)
+        self.event_expense_splits = EventExpenseSplitsRepository(connection)
+        self.event_finance = EventFinanceRepository(connection)
         self.reset_requests = PasswordResetRequestService(
             identities=self.identities,
             resets=self.resets,
