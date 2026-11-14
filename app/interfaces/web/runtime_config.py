@@ -94,9 +94,11 @@ def validate_runtime_configuration(environ: Mapping[str, str]) -> None:
     if public_origin:
         parsed_origin = urlsplit(public_origin)
         try:
-            parsed_origin.port
+            public_port = parsed_origin.port
         except ValueError as error:
             raise ValueError("PUBLIC_ORIGIN must contain a valid port") from error
+        if public_port is not None and not 1 <= public_port <= 65535:
+            raise ValueError("PUBLIC_ORIGIN port must be between 1 and 65535")
         if (
             parsed_origin.scheme.casefold() not in {"http", "https"}
             or not parsed_origin.hostname
