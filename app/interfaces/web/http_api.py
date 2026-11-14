@@ -279,21 +279,27 @@ def _serialize_event_expense(expense: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _serialize_minor_amount(
-    item: dict[str, object], field: str
-) -> dict[str, object]:
-    currency = item.get("currency")
-    amount_minor_units = item.get(field)
+def _format_finance_amount(amount_minor_units: object, currency: object) -> str:
     if not isinstance(currency, str):
         raise TypeError("Finance currency must be a string")
-    if isinstance(amount_minor_units, bool) or not isinstance(amount_minor_units, int):
+    if (
+        isinstance(amount_minor_units, bool)
+        or not isinstance(amount_minor_units, int)
+    ):
         raise TypeError("Finance amount must be integer minor units")
     precision = get_currency(currency).minor_unit_digits
     money = Money(amount_minor_units, currency)
+    return f"{money.major_units:.{precision}f}"
+
+
+def _serialize_minor_amount(
+    item: dict[str, object], field: str
+) -> dict[str, object]:
+    amount = _format_finance_amount(item.get(field), item.get("currency"))
     return {
         **item,
-        field.replace("_minor_units", ""): f"{money.major_units:.{precision}f}",
-        "amount": f"{money.major_units:.{precision}f}",
+        field.replace("_minor_units", ""): amount,
+        "amount": amount,
     }
 
 
@@ -1933,18 +1939,17 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             "unresolved": [
                 {
                     **item,
-                    "missing_payer": _serialize_minor_amount(
-                        {"currency": item["currency"], "missing_payer_minor_units": item["missing_payer_minor_units"]},
-                        "missing_payer_minor_units",
-                    )["amount"],
-                    "removed_participant_allocations": _serialize_minor_amount(
-                        {"currency": item["currency"], "removed_participant_allocations_minor_units": item["removed_participant_allocations_minor_units"]},
-                        "removed_participant_allocations_minor_units",
-                    )["amount"],
-                    "settlements_with_removed_participant": _serialize_minor_amount(
-                        {"currency": item["currency"], "settlements_with_removed_participant_minor_units": item["settlements_with_removed_participant_minor_units"]},
-                        "settlements_with_removed_participant_minor_units",
-                    )["amount"],
+                    "missing_payer": _format_finance_amount(
+                        item["missing_payer_minor_units"], item["currency"]
+                    ),
+                    "removed_participant_allocations": _format_finance_amount(
+                        item["removed_participant_allocations_minor_units"],
+                        item["currency"],
+                    ),
+                    "settlements_with_removed_participant": _format_finance_amount(
+                        item["settlements_with_removed_participant_minor_units"],
+                        item["currency"],
+                    ),
                 }
                 for item in unresolved
             ],
