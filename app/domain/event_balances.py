@@ -107,6 +107,10 @@ def calculate_event_balances(
             bucket[0] += 1
             bucket[1] += expense.amount_minor_units
             continue
+        for allocation in expense.allocations:
+            amount = allocation.amount_minor_units
+            if isinstance(amount, bool) or not isinstance(amount, int) or amount < 0:
+                raise ValueError("Allocation must be non-negative integer minor units")
         if sum(item.amount_minor_units for item in expense.allocations) != (
             expense.amount_minor_units
         ):
@@ -123,8 +127,6 @@ def calculate_event_balances(
 
         for allocation in expense.allocations:
             amount = allocation.amount_minor_units
-            if isinstance(amount, bool) or not isinstance(amount, int) or amount < 0:
-                raise ValueError("Allocation must be non-negative integer minor units")
             if allocation.participant_id in participant_names:
                 key = (allocation.participant_id, expense.currency)
                 totals[key] = totals.get(key, 0) - amount
@@ -136,15 +138,18 @@ def calculate_event_balances(
         amount = settlement.amount_minor_units
         if isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0:
             raise ValueError("Settlement amount must be positive integer minor units")
+        missing_party = False
         if settlement.from_participant_id in participant_names:
             key = (settlement.from_participant_id, settlement.currency)
             totals[key] = totals.get(key, 0) + amount
         else:
-            issue_bucket(settlement.currency)[2] += amount
+            missing_party = True
         if settlement.to_participant_id in participant_names:
             key = (settlement.to_participant_id, settlement.currency)
             totals[key] = totals.get(key, 0) - amount
         else:
+            missing_party = True
+        if missing_party:
             issue_bucket(settlement.currency)[2] += amount
 
     currencies = sorted(
@@ -160,7 +165,10 @@ def calculate_event_balances(
             balance_minor_units=totals.get((participant.participant_id, currency), 0),
         )
         for currency in currencies
-        for participant in sorted(participants, key=lambda item: (item.display_name.casefold(), item.participant_id))
+        for participant in sorted(
+            participants,
+            key=lambda item: (item.display_name.casefold(), item.participant_id),
+        )
     )
     return BalanceSnapshot(
         balances=balances,
