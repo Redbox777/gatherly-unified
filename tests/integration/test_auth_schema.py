@@ -34,6 +34,7 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             "smtp_rate_limit_events",
             "http_rate_limit_events",
             "event_tasks",
+            "event_venues",
         } <= tables
 
         token_columns = {
@@ -63,7 +64,7 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             row["version"]
             for row in connection.execute("SELECT version FROM schema_migrations").fetchall()
         }
-        assert versions == {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}
+        assert versions == {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}
     finally:
         connection.close()
 

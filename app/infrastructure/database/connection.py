@@ -305,6 +305,20 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON event_tasks(assignee_participant_id);
         """,
     ),
+    (
+        14,
+        """
+        CREATE TABLE event_venues (
+            event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+            venue_name TEXT NOT NULL CHECK (length(trim(venue_name)) BETWEEN 1 AND 160),
+            address TEXT NOT NULL CHECK (length(trim(address)) BETWEEN 1 AND 500),
+            latitude REAL NULL CHECK (latitude IS NULL OR latitude BETWEEN -90 AND 90),
+            longitude REAL NULL CHECK (longitude IS NULL OR longitude BETWEEN -180 AND 180),
+            CHECK ((latitude IS NULL) = (longitude IS NULL))
+        );
+        CREATE INDEX idx_event_venues_coordinates ON event_venues(latitude, longitude);
+        """,
+    ),
 )
 
  

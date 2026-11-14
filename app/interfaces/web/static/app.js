@@ -42,6 +42,15 @@
   const taskStatus = document.getElementById("task-status");
   const taskSave = document.getElementById("task-save");
   const taskCancel = document.getElementById("task-cancel");
+  const venueForm = document.getElementById("venue-form");
+  const venueDisplay = document.getElementById("venue-display");
+  const venueName = document.getElementById("venue-name");
+  const venueAddress = document.getElementById("venue-address");
+  const venueLatitude = document.getElementById("venue-latitude");
+  const venueLongitude = document.getElementById("venue-longitude");
+  const venueStatus = document.getElementById("venue-status");
+  const venueSave = document.getElementById("venue-save");
+  const venueDelete = document.getElementById("venue-delete");
   let participantsBusy = false;
   let events = [];
   let activeEvent = null;
@@ -170,6 +179,7 @@
     loadEventReminders(event.id);
     loadNotes(event.id);
     loadTasks(event.id);
+    loadVenue(event.id);
     try {
       const fresh = await api("/events/" + encodeURIComponent(event.id));
       activeEvent = fresh;
@@ -429,6 +439,92 @@
     taskCancel.hidden = true;
     taskStatus.textContent = "";
   };
+  const renderVenue = venue => {
+    venueDisplay.replaceChildren();
+    venueDelete.hidden = !venue;
+    if (!venue) {
+      const empty = document.createElement("p");
+      empty.className = "venue-empty";
+      empty.textContent = "Место пока не указано.";
+      venueDisplay.append(empty);
+      venueForm.reset();
+      return;
+    }
+    venueName.value = venue.venue_name;
+    venueAddress.value = venue.address;
+    venueLatitude.value = venue.latitude ?? "";
+    venueLongitude.value = venue.longitude ?? "";
+    const summary = document.createElement("div");
+    summary.className = "venue-summary";
+    const title = document.createElement("strong");
+    title.textContent = venue.venue_name;
+    const address = document.createElement("p");
+    address.textContent = venue.address;
+    const link = document.createElement("a");
+    const query = venue.latitude != null && venue.longitude != null
+      ? venue.latitude + "," + venue.longitude
+      : venue.address;
+    link.href = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(query);
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "Посмотреть на карте ↗";
+    summary.append(title, address, link);
+    venueDisplay.append(summary);
+  };
+  const loadVenue = async eventId => {
+    venueStatus.textContent = "";
+    try {
+      const venue = await api("/events/" + encodeURIComponent(eventId) + "/venue");
+      if (!dialog.open || activeEvent?.id !== eventId) return;
+      renderVenue(venue);
+    } catch (error) {
+      if (dialog.open && activeEvent?.id === eventId) venueStatus.textContent = error.message;
+    }
+  };
+  venueForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!activeEvent) return;
+    const latitudeText = venueLatitude.value.trim();
+    const longitudeText = venueLongitude.value.trim();
+    if (Boolean(latitudeText) !== Boolean(longitudeText)) {
+      venueStatus.textContent = "Укажите обе координаты или оставьте оба поля пустыми.";
+      return;
+    }
+    venueSave.disabled = true;
+    venueStatus.textContent = "Сохраняем место…";
+    try {
+      const venue = await api("/events/" + encodeURIComponent(activeEvent.id) + "/venue", {
+        method: "PUT",
+        body: JSON.stringify({
+          venue_name: venueName.value.trim(),
+          address: venueAddress.value.trim(),
+          latitude: latitudeText ? Number(latitudeText) : null,
+          longitude: longitudeText ? Number(longitudeText) : null
+        })
+      });
+      renderVenue(venue);
+      venueStatus.textContent = "Место сохранено.";
+    } catch (error) {
+      venueStatus.textContent = error.message;
+    } finally {
+      venueSave.disabled = false;
+    }
+  });
+  venueDelete.addEventListener("click", async () => {
+    if (!activeEvent || venueDelete.hidden) return;
+    if (!window.confirm("Удалить место проведения этой встречи?")) return;
+    venueDelete.disabled = true;
+    try {
+      await api("/events/" + encodeURIComponent(activeEvent.id) + "/venue", {method:"DELETE"});
+      renderVenue(null);
+      venueStatus.textContent = "Место удалено.";
+    } catch (error) {
+      venueStatus.textContent = error.message;
+    } finally {
+      venueDelete.disabled = false;
+    }
+  });
+
   const loadTasks = async eventId => {
     tasksList.replaceChildren();
     const loading = document.createElement("p");
