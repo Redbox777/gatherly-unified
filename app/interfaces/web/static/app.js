@@ -42,6 +42,18 @@
   const taskStatus = document.getElementById("task-status");
   const taskSave = document.getElementById("task-save");
   const taskCancel = document.getElementById("task-cancel");
+  const expensesList = document.getElementById("expenses-list");
+  const expensesCount = document.getElementById("expenses-count");
+  const expenseForm = document.getElementById("expense-form");
+  const expenseTitle = document.getElementById("expense-title");
+  const expenseDescription = document.getElementById("expense-description");
+  const expenseAmount = document.getElementById("expense-amount");
+  const expenseCurrency = document.getElementById("expense-currency");
+  const expensePayer = document.getElementById("expense-payer");
+  const expenseDate = document.getElementById("expense-date");
+  const expenseStatus = document.getElementById("expense-status");
+  const expenseSave = document.getElementById("expense-save");
+  const expenseCancel = document.getElementById("expense-cancel");
   const venueForm = document.getElementById("venue-form");
   const venueDisplay = document.getElementById("venue-display");
   const venueName = document.getElementById("venue-name");
@@ -159,6 +171,7 @@
   const openDetail = async event => {
     activeEvent = event;
     resetTaskForm();
+    resetExpenseForm();
     form.hidden = true;
     detail.hidden = false;
     document.getElementById("detail-title").textContent = event.title;
@@ -179,6 +192,7 @@
     loadEventReminders(event.id);
     loadNotes(event.id);
     loadTasks(event.id);
+    loadExpenses(event.id);
     loadVenue(event.id);
     try {
       const fresh = await api("/events/" + encodeURIComponent(event.id));
@@ -222,6 +236,21 @@
         taskAssignee.append(option);
       });
       taskAssignee.value = selected;
+    }
+    if (expensePayer) {
+      const selectedPayer = expensePayer.value;
+      expensePayer.replaceChildren();
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = list.length ? "Выберите плательщика" : "Сначала добавьте участника";
+      expensePayer.append(placeholder);
+      list.forEach(participant => {
+        const option = document.createElement("option");
+        option.value = participant.id;
+        option.textContent = participant.display_name;
+        expensePayer.append(option);
+      });
+      expensePayer.value = selectedPayer;
     }
     participantsList.replaceChildren();
     if (!list.length) {
@@ -660,6 +689,142 @@
       taskStatus.textContent = error.message;
     } finally {
       taskSave.disabled = false;
+    }
+  });
+
+  const resetExpenseForm = () => {
+    expenseForm.reset();
+    delete expenseForm.dataset.editingExpense;
+    expenseCurrency.value = "EUR";
+    expenseDate.value = localInputValue(new Date());
+    expenseSave.textContent = "Добавить расход";
+    expenseCancel.hidden = true;
+  };
+  const loadExpenses = async eventId => {
+    expensesList.replaceChildren();
+    const loading = document.createElement("p");
+    loading.className = "expenses-empty";
+    loading.textContent = "Загружаем расходы…";
+    expensesList.append(loading);
+    try {
+      const expenses = await api("/events/" + encodeURIComponent(eventId) + "/expenses");
+      if (!dialog.open || activeEvent?.id !== eventId) return;
+      renderExpenses(expenses, eventId);
+    } catch (error) {
+      if (!dialog.open || activeEvent?.id !== eventId) return;
+      expensesList.replaceChildren();
+      const message = document.createElement("p");
+      message.className = "expenses-empty";
+      message.textContent = error.message;
+      expensesList.append(message);
+    }
+  };
+  const renderExpenses = (expenses, eventId) => {
+    expensesCount.textContent = String(expenses.length);
+    expensesList.replaceChildren();
+    if (!expenses.length) {
+      const empty = document.createElement("p");
+      empty.className = "expenses-empty";
+      empty.textContent = "Пока нет расходов. Добавьте первую запись.";
+      expensesList.append(empty);
+      return;
+    }
+    expenses.forEach(expense => {
+      const card = document.createElement("article");
+      card.className = "expense-card";
+      const main = document.createElement("div");
+      main.className = "expense-main";
+      const title = document.createElement("strong");
+      title.className = "expense-title";
+      title.textContent = expense.title;
+      const amount = document.createElement("strong");
+      amount.className = "expense-amount";
+      amount.textContent = expense.amount + " " + expense.currency;
+      const details = document.createElement("p");
+      details.className = "expense-meta";
+      details.textContent = (expense.paid_by_name || "Плательщик не указан") +
+        " · " + (formatDate(expense.incurred_at) || "");
+      main.append(title, amount, details);
+      if (expense.description) {
+        const description = document.createElement("p");
+        description.className = "expense-description";
+        description.textContent = expense.description;
+        main.append(description);
+      }
+      const actions = document.createElement("div");
+      actions.className = "expense-actions";
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.textContent = "Изменить";
+      edit.addEventListener("click", () => {
+        expenseForm.dataset.editingExpense = expense.id;
+        expenseTitle.value = expense.title;
+        expenseDescription.value = expense.description || "";
+        expenseAmount.value = expense.amount;
+        expenseCurrency.value = expense.currency;
+        expensePayer.value = expense.paid_by_participant_id || "";
+        expenseDate.value = localInputValue(new Date(expense.incurred_at));
+        expenseSave.textContent = "Сохранить изменения";
+        expenseCancel.hidden = false;
+        expenseStatus.textContent = "";
+        expenseTitle.focus();
+      });
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "expense-delete";
+      remove.textContent = "Удалить";
+      remove.addEventListener("click", async () => {
+        if (!window.confirm("Удалить этот расход?")) return;
+        remove.disabled = true;
+        try {
+          await api("/events/" + encodeURIComponent(eventId) + "/expenses/" + encodeURIComponent(expense.id), {method:"DELETE"});
+          await loadExpenses(eventId);
+        } catch (error) {
+          expenseStatus.textContent = error.message;
+          remove.disabled = false;
+        }
+      });
+      actions.append(edit, remove);
+      card.append(main, actions);
+      expensesList.append(card);
+    });
+  };
+  expenseCancel.addEventListener("click", () => {
+    resetExpenseForm();
+    expenseStatus.textContent = "";
+  });
+  expenseForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!activeEvent || !expensePayer.value) {
+      expenseStatus.textContent = "Выберите участника, который оплатил расход.";
+      return;
+    }
+    const expenseId = expenseForm.dataset.editingExpense;
+    expenseSave.disabled = true;
+    expenseStatus.textContent = expenseId ? "Сохраняем изменения…" : "Добавляем расход…";
+    try {
+      await api(
+        "/events/" + encodeURIComponent(activeEvent.id) + "/expenses" +
+          (expenseId ? "/" + encodeURIComponent(expenseId) : ""),
+        {
+          method: expenseId ? "PUT" : "POST",
+          body: JSON.stringify({
+            title: expenseTitle.value,
+            description: expenseDescription.value,
+            amount: expenseAmount.value,
+            currency: expenseCurrency.value,
+            paid_by_participant_id: expensePayer.value,
+            incurred_at: toIsoValue(expenseDate.value)
+          })
+        }
+      );
+      resetExpenseForm();
+      expenseStatus.textContent = "Расход сохранён.";
+      await loadExpenses(activeEvent.id);
+    } catch (error) {
+      expenseStatus.textContent = error.message;
+    } finally {
+      expenseSave.disabled = false;
     }
   });
 

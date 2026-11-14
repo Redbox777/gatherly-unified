@@ -281,3 +281,25 @@ button:disabled{opacity:.55;cursor:wait}
 .venue-actions button{min-height:35px;padding:8px 11px;font-size:10px;cursor:pointer}
 .venue-delete{color:#a85d53}
 @media(max-width:420px){.venue-panel{padding:13px}.venue-coordinate-grid{grid-template-columns:1fr}}
+
+/* PR33: event expense tracking */
+.expenses-panel{margin-top:20px;padding:17px;border:1px solid #e5efec;border-radius:13px;background:#fbfdfc}
+.expenses-list{display:grid;gap:8px}
+.expenses-empty{margin:0;padding:9px 0;color:#8ba0a0;font-size:11px;line-height:1.5}
+.expense-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:11px;border:1px solid #e5efec;border-radius:10px;background:#fff}
+.expense-main{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px;align-items:baseline}
+.expense-title{color:#31575b;font-size:12px;overflow-wrap:anywhere}
+.expense-amount{color:#078f91;font-size:12px;white-space:nowrap}
+.expense-meta,.expense-description{grid-column:1/-1;margin:0;color:#82999a;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+.expense-description{color:#668087}
+.expense-actions{display:flex;align-items:center;gap:9px}
+.expense-actions button{border:0;background:transparent;padding:2px 0;color:#078f91;font-size:10px;font-weight:700;cursor:pointer}
+.expense-actions .expense-delete{color:#a85d53}
+.expense-form{display:grid;gap:7px;margin-top:14px;padding-top:13px;border-top:1px solid #e8f0ed}
+.expense-form label{margin-top:4px;color:#426267;font-size:10px;font-weight:700}
+.expense-form input,.expense-form textarea,.expense-form select{box-sizing:border-box;width:100%;min-height:39px;padding:9px 10px;border:1px solid #dce9e5;border-radius:9px;background:#fff;color:#173941;font:inherit;font-size:11px}
+.expense-form textarea{resize:vertical}
+.expense-fields{display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:9px}
+.expense-form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:5px}
+.expense-form-actions button{min-height:37px;padding:8px 12px;font-size:10px;cursor:pointer}
+@media(max-width:420px){.expenses-panel{padding:13px}.expense-card{grid-template-columns:1fr}.expense-actions{justify-content:flex-end}.expense-fields{grid-template-columns:minmax(0,1fr) 95px}}

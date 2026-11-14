@@ -319,6 +319,28 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
         CREATE INDEX idx_event_venues_coordinates ON event_venues(latitude, longitude);
         """,
     ),
+    (
+        15,
+        """
+        CREATE TABLE event_expenses (
+            id TEXT PRIMARY KEY,
+            event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            title TEXT NOT NULL CHECK (length(trim(title)) BETWEEN 1 AND 160),
+            description TEXT NOT NULL DEFAULT '' CHECK (length(description) <= 1000),
+            amount_minor_units INTEGER NOT NULL CHECK (amount_minor_units > 0),
+            currency TEXT NOT NULL CHECK (length(currency) = 3),
+            paid_by_participant_id TEXT NULL
+                REFERENCES event_participants(id) ON DELETE SET NULL,
+            incurred_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_event_expenses_event_incurred
+            ON event_expenses(event_id, incurred_at DESC, created_at DESC);
+        CREATE INDEX idx_event_expenses_payer
+            ON event_expenses(paid_by_participant_id);
+        """,
+    ),
 )
 
  

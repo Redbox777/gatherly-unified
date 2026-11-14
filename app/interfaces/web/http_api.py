@@ -29,6 +29,7 @@ from app.application.participant_invitations import (
 )
 from app.application.password_reset_request_service import PasswordResetRequestService
 from app.application.password_reset_service import PasswordResetService
+from app.domain.money import Money, get_currency
 from app.infrastructure.database.auth_email_tokens_repository import (
     AuthEmailTokensRepository,
 )
@@ -37,6 +38,7 @@ from app.infrastructure.database.auth_sessions_repository import AuthSessionsRep
 from app.infrastructure.database.connection import connect, migrate, transaction
 from app.infrastructure.database.events_repository import EventsRepository
 from app.infrastructure.database.event_tasks_repository import EventTasksRepository
+from app.infrastructure.database.event_expenses_repository import EventExpensesRepository
 from app.infrastructure.database.event_venues_repository import EventVenuesRepository
 from app.infrastructure.database.http_rate_limits_repository import (
     HttpRateLimitsRepository,
@@ -175,6 +177,15 @@ class EventVenueRequest(BaseModel):
     longitude: float | None = Field(default=None, ge=-180, le=180)
 
 
+class EventExpenseRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    description: str = Field(default="", max_length=1000)
+    amount: str = Field(min_length=1, max_length=32)
+    currency: str = Field(pattern="^[A-Z]{3}$")
+    paid_by_participant_id: UUID
+    incurred_at: datetime | None = None
+
+
 class EventTaskRequest(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     description: str = Field(default="", max_length=2000)
@@ -226,6 +237,22 @@ class PasswordResetConfirmRequest(BaseModel):
     new_password: str = Field(min_length=12, max_length=1024)
 
 
+def _serialize_event_expense(expense: dict[str, object]) -> dict[str, object]:
+    """Expose an exact decimal string alongside the canonical minor-unit amount."""
+    currency = expense["currency"]
+    amount_minor_units = expense["amount_minor_units"]
+    if not isinstance(currency, str):
+        raise TypeError("Expense currency must be a string")
+    if isinstance(amount_minor_units, bool) or not isinstance(amount_minor_units, int):
+        raise TypeError("Expense minor-unit amount must be an integer")
+    money = Money(amount_minor_units, currency)
+    precision = get_currency(currency).minor_unit_digits
+    return {
+        **expense,
+        "amount": f"{money.major_units:.{precision}f}",
+    }
+
+
 class Dependencies:
     """Construct request-scoped services around a database connection and mail adapter."""
 
@@ -266,6 +293,7 @@ class Dependencies:
         self.notes = NotesRepository(connection)
         self.event_tasks = EventTasksRepository(connection)
         self.event_venues = EventVenuesRepository(connection)
+        self.event_expenses = EventExpensesRepository(connection)
         self.reset_requests = PasswordResetRequestService(
             identities=self.identities,
             resets=self.resets,
@@ -1654,6 +1682,100 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             task_id=str(task_id), event_id=str(event_id), owner_id=owner_id
         ):
             raise HTTPException(status_code=404, detail="Task not found")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.get("/events/{event_id}/expenses")
+    def list_event_expenses(
+        event_id: UUID, request: Request, deps: ServiceDependency
+    ) -> list[dict[str, object]]:
+        owner_id = deps.authentication.resolve_session(
+            raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        expenses = deps.event_expenses.list_for_owner(
+            event_id=str(event_id), owner_id=owner_id
+        )
+        if expenses is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        return [_serialize_event_expense(expense) for expense in expenses]
+
+    @app.post(
+        "/events/{event_id}/expenses", status_code=status.HTTP_201_CREATED
+    )
+    def create_event_expense(
+        event_id: UUID, payload: EventExpenseRequest,
+        request: Request, deps: ServiceDependency
+    ) -> dict[str, object]:
+        owner_id = deps.authentication.resolve_session(
+            raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        now = datetime.now(UTC)
+        incurred_at = payload.incurred_at or now
+        if incurred_at.tzinfo is None or incurred_at.utcoffset() is None:
+            raise HTTPException(status_code=422, detail="Expense date must include a timezone")
+        try:
+            money = Money.from_major(payload.amount, payload.currency)
+            expense = deps.event_expenses.create(
+                event_id=str(event_id), owner_id=owner_id,
+                title=payload.title, description=payload.description,
+                amount_minor_units=money.minor_units, currency=money.currency,
+                paid_by_participant_id=str(payload.paid_by_participant_id),
+                incurred_at=incurred_at, now=now,
+            )
+        except (TypeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail="Invalid expense data") from error
+        if expense is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        return _serialize_event_expense(expense)
+
+    @app.put("/events/{event_id}/expenses/{expense_id}")
+    def update_event_expense(
+        event_id: UUID, expense_id: UUID, payload: EventExpenseRequest,
+        request: Request, deps: ServiceDependency
+    ) -> dict[str, object]:
+        owner_id = deps.authentication.resolve_session(
+            raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        now = datetime.now(UTC)
+        incurred_at = payload.incurred_at or now
+        if incurred_at.tzinfo is None or incurred_at.utcoffset() is None:
+            raise HTTPException(status_code=422, detail="Expense date must include a timezone")
+        try:
+            money = Money.from_major(payload.amount, payload.currency)
+            expense = deps.event_expenses.update(
+                expense_id=str(expense_id), event_id=str(event_id), owner_id=owner_id,
+                title=payload.title, description=payload.description,
+                amount_minor_units=money.minor_units, currency=money.currency,
+                paid_by_participant_id=str(payload.paid_by_participant_id),
+                incurred_at=incurred_at, now=now,
+            )
+        except (TypeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail="Invalid expense data") from error
+        if expense is None:
+            raise HTTPException(status_code=404, detail="Expense not found")
+        return _serialize_event_expense(expense)
+
+    @app.delete(
+        "/events/{event_id}/expenses/{expense_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    def delete_event_expense(
+        event_id: UUID, expense_id: UUID, request: Request, deps: ServiceDependency
+    ) -> Response:
+        owner_id = deps.authentication.resolve_session(
+            raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        if not deps.event_expenses.delete(
+            expense_id=str(expense_id), event_id=str(event_id), owner_id=owner_id
+        ):
+            raise HTTPException(status_code=404, detail="Expense not found")
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.get("/events/{event_id}/notes")
