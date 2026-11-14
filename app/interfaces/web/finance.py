@@ -1,15 +1,21 @@
 """Event expense, split, balance, and settlement HTTP routes."""
 
 from collections.abc import Callable, Iterator
-from typing import cast
+from datetime import UTC, datetime
+from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.domain.expense_splits import SplitInput, SplitMode, calculate_split
 from app.domain.money import Money, get_currency
+from app.interfaces.web.constants import SESSION_COOKIE
 from app.interfaces.web.dependencies import Dependencies
-from app.interfaces.web.schemas import EventExpenseRequest, EventSettlementRequest, ExpenseSplitRequest
+from app.interfaces.web.schemas import (
+    EventExpenseRequest,
+    EventSettlementRequest,
+    ExpenseSplitRequest,
+)
 from app.interfaces.web.serializers import (
     _format_finance_amount,
     _serialize_event_expense,
@@ -23,10 +29,11 @@ def create_finance_router(
 ) -> APIRouter:
     """Build finance endpoints with the app's request-scoped service dependency."""
     router = APIRouter()
+    ServiceDependency = Annotated[Dependencies, Depends(services)]
 
     @router.get("/events/{event_id}/expenses")
     def list_event_expenses(
-        event_id: UUID, request: Request, deps: Dependencies = Depends(services)
+        event_id: UUID, request: Request, deps: ServiceDependency
     ) -> list[dict[str, object]]:
         owner_id = deps.authentication.resolve_session(
             raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
@@ -45,7 +52,7 @@ def create_finance_router(
     )
     def create_event_expense(
         event_id: UUID, payload: EventExpenseRequest,
-        request: Request, deps: Dependencies = Depends(services)
+        request: Request, deps: ServiceDependency
     ) -> dict[str, object]:
         owner_id = deps.authentication.resolve_session(
             raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
@@ -74,7 +81,7 @@ def create_finance_router(
     @router.put("/events/{event_id}/expenses/{expense_id}")
     def update_event_expense(
         event_id: UUID, expense_id: UUID, payload: EventExpenseRequest,
-        request: Request, deps: Dependencies = Depends(services)
+        request: Request, deps: ServiceDependency
     ) -> dict[str, object]:
         owner_id = deps.authentication.resolve_session(
             raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
@@ -102,7 +109,7 @@ def create_finance_router(
 
     @router.get("/events/{event_id}/expenses/{expense_id}/split")
     def get_event_expense_split(
-        event_id: UUID, expense_id: UUID, request: Request, deps: Dependencies = Depends(services)
+        event_id: UUID, expense_id: UUID, request: Request, deps: ServiceDependency
     ) -> dict[str, object]:
         owner_id = deps.authentication.resolve_session(
             raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
@@ -133,7 +140,7 @@ def create_finance_router(
     @router.put("/events/{event_id}/expenses/{expense_id}/split")
     def replace_event_expense_split(
         event_id: UUID, expense_id: UUID, payload: ExpenseSplitRequest,
-        request: Request, deps: Dependencies = Depends(services)
+        request: Request, deps: ServiceDependency
     ) -> dict[str, object]:
         owner_id = deps.authentication.resolve_session(
             raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
@@ -195,7 +202,7 @@ def create_finance_router(
 
     @router.get("/events/{event_id}/balances")
     def get_event_balances(
-        event_id: UUID, request: Request, deps: Dependencies = Depends(services)
+        event_id: UUID, request: Request, deps: ServiceDependency
     ) -> dict[str, object]:
         owner_id = deps.authentication.resolve_session(
             raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
@@ -241,7 +248,7 @@ def create_finance_router(
 
     @router.get("/events/{event_id}/settlements")
     def list_event_settlements(
-        event_id: UUID, request: Request, deps: Dependencies = Depends(services)
+        event_id: UUID, request: Request, deps: ServiceDependency
     ) -> list[dict[str, object]]:
         owner_id = deps.authentication.resolve_session(
             raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
@@ -258,7 +265,7 @@ def create_finance_router(
     @router.post("/events/{event_id}/settlements", status_code=status.HTTP_201_CREATED)
     def create_event_settlement(
         event_id: UUID, payload: EventSettlementRequest,
-        request: Request, deps: Dependencies = Depends(services)
+        request: Request, deps: ServiceDependency
     ) -> dict[str, object]:
         owner_id = deps.authentication.resolve_session(
             raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
@@ -289,7 +296,7 @@ def create_finance_router(
         status_code=status.HTTP_204_NO_CONTENT,
     )
     def delete_event_expense(
-        event_id: UUID, expense_id: UUID, request: Request, deps: Dependencies = Depends(services)
+        event_id: UUID, expense_id: UUID, request: Request, deps: ServiceDependency
     ) -> Response:
         owner_id = deps.authentication.resolve_session(
             raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
