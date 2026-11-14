@@ -47,8 +47,6 @@
   const venueSave = document.getElementById("venue-save");
   const venueDelete = document.getElementById("venue-delete");
   let participantsBusy = false;
-  let eventParticipants = [];
-  let events = [];
   let activeEvent = null;
   let busy = false;
 
@@ -190,7 +188,6 @@
     formatDate,
     getParticipantsBusy: () => participantsBusy,
     setParticipantsBusy: value => { participantsBusy = value; },
-    setEventParticipants: list => { eventParticipants = list; }
   });
 
 
@@ -336,7 +333,6 @@
     getActiveEvent: () => activeEvent
   });
   const renderEvents = list => {
-    events = list;
     grid.replaceChildren();
     count.textContent = list.length ? list.length + " событий" : "Пока пусто";
     summaryCount.textContent = String(list.length);
