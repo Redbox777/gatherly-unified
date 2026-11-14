@@ -149,15 +149,19 @@
     financeUI.loadExpenses(event.id);
     financeUI.loadEventFinance(event.id);
     loadVenue(event.id);
+    const requestedEventId = event.id;
     try {
-      const fresh = await api("/events/" + encodeURIComponent(event.id));
+      const fresh = await api("/events/" + encodeURIComponent(requestedEventId));
+      if (!dialog.open || activeEvent?.id !== requestedEventId) return;
       activeEvent = fresh;
       document.getElementById("detail-title").textContent = fresh.title;
       document.getElementById("detail-date").textContent = fresh.starts_at
         ? (formatDate(fresh.starts_at) + " · " + formatTime(fresh.starts_at))
         : "Дата и время пока не назначены";
     } catch (error) {
-      if (dialog.open) document.getElementById("detail-created").textContent = error.message;
+      if (dialog.open && activeEvent?.id === requestedEventId) {
+        document.getElementById("detail-created").textContent = error.message;
+      }
     }
   };
   const loadParticipants = async eventId => {
@@ -267,6 +271,7 @@
   venueForm.addEventListener("submit", async event => {
     event.preventDefault();
     if (!activeEvent) return;
+    const eventId = activeEvent.id;
     const latitudeText = venueLatitude.value.trim();
     const longitudeText = venueLongitude.value.trim();
     if (Boolean(latitudeText) !== Boolean(longitudeText)) {
@@ -276,7 +281,7 @@
     venueSave.disabled = true;
     venueStatus.textContent = "Сохраняем место…";
     try {
-      const venue = await api("/events/" + encodeURIComponent(activeEvent.id) + "/venue", {
+      const venue = await api("/events/" + encodeURIComponent(eventId) + "/venue", {
         method: "PUT",
         body: JSON.stringify({
           venue_name: venueName.value.trim(),
@@ -285,24 +290,27 @@
           longitude: longitudeText ? Number(longitudeText) : null
         })
       });
+      if (!dialog.open || activeEvent?.id !== eventId) return;
       renderVenue(venue);
       venueStatus.textContent = "Место сохранено.";
     } catch (error) {
-      venueStatus.textContent = error.message;
+      if (dialog.open && activeEvent?.id === eventId) venueStatus.textContent = error.message;
     } finally {
       venueSave.disabled = false;
     }
   });
   venueDelete.addEventListener("click", async () => {
     if (!activeEvent || venueDelete.hidden) return;
+    const eventId = activeEvent.id;
     if (!window.confirm("Удалить место проведения этой встречи?")) return;
     venueDelete.disabled = true;
     try {
-      await api("/events/" + encodeURIComponent(activeEvent.id) + "/venue", {method:"DELETE"});
+      await api("/events/" + encodeURIComponent(eventId) + "/venue", {method:"DELETE"});
+      if (!dialog.open || activeEvent?.id !== eventId) return;
       renderVenue(null);
       venueStatus.textContent = "Место удалено.";
     } catch (error) {
-      venueStatus.textContent = error.message;
+      if (dialog.open && activeEvent?.id === eventId) venueStatus.textContent = error.message;
     } finally {
       venueDelete.disabled = false;
     }
