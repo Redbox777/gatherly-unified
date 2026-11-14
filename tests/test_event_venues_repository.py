@@ -17,9 +17,20 @@ def repository(tmp_path):
         "INSERT INTO users(id, created_at) VALUES (?, ?)", ("owner", now)
     )
     connection.execute(
+        "INSERT INTO users(id, created_at) VALUES (?, ?)", ("member", now)
+    )
+    connection.execute(
+        "INSERT INTO users(id, created_at) VALUES (?, ?)", ("outsider", now)
+    )
+    connection.execute(
         "INSERT INTO events(id, owner_id, title, starts_at, created_at) "
         "VALUES (?, ?, ?, ?, ?)",
         ("event-1", "owner", "Planning", None, now),
+    )
+    connection.execute(
+        "INSERT INTO event_participants(id, event_id, display_name, added_at, linked_user_id) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("participant-1", "event-1", "Member", now, "member"),
     )
     connection.commit()
     yield EventVenuesRepository(connection)
@@ -44,6 +55,44 @@ def test_owner_can_save_read_update_and_delete_venue(repository):
     assert updated["latitude"] is None
     assert repository.delete_for_owner(event_id="event-1", owner_id="owner")
     assert repository.get_for_owner(event_id="event-1", owner_id="owner") is None
+
+
+
+def test_linked_member_can_read_venue_but_cannot_change_it(repository):
+    repository.save_for_owner(
+        event_id="event-1", owner_id="owner", venue_name="City Park",
+        address="Main Street 1", latitude=50.1, longitude=6.1,
+    )
+    assert repository.is_member(event_id="event-1", user_id="member")
+    assert repository.get_for_member(event_id="event-1", user_id="member") == {
+        "venue_name": "City Park",
+        "address": "Main Street 1",
+        "latitude": 50.1,
+        "longitude": 6.1,
+    }
+    assert repository.save_for_owner(
+        event_id="event-1", owner_id="member", venue_name="Changed",
+        address="Other Street", latitude=None, longitude=None,
+    ) is None
+    assert not repository.delete_for_owner(event_id="event-1", owner_id="member")
+
+
+def test_unlinked_user_cannot_read_event_venue(repository):
+    repository.save_for_owner(
+        event_id="event-1", owner_id="owner", venue_name="City Park",
+        address="Main Street 1", latitude=None, longitude=None,
+    )
+    assert not repository.is_member(event_id="event-1", user_id="outsider")
+    assert repository.get_for_member(event_id="event-1", user_id="outsider") is None
+
+
+def test_event_owner_can_read_venue_through_member_access(repository):
+    repository.save_for_owner(
+        event_id="event-1", owner_id="owner", venue_name="City Park",
+        address="Main Street 1", latitude=None, longitude=None,
+    )
+    assert repository.is_member(event_id="event-1", user_id="owner")
+    assert repository.get_for_member(event_id="event-1", user_id="owner") is not None
 
 
 def test_non_owner_cannot_read_write_or_delete_venue(repository):
