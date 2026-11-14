@@ -19,15 +19,17 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from app.application.events import EventNotFoundError, EventsService
-from app.application.participants import DuplicateParticipantError, ParticipantsService
-from app.application.participant_invitations import (
-    ParticipantAlreadyLinkedError,
-    ParticipantInvitationsService,
-)
+from app.application.events import EventNotFoundError
+from app.application.participants import DuplicateParticipantError
+from app.application.participant_invitations import ParticipantAlreadyLinkedError
 from app.domain.expense_splits import SplitInput, SplitMode, calculate_split
 from app.domain.money import Money, get_currency
-from app.infrastructure.database.connection import MIGRATIONS, connect, migrate, transaction
+from app.infrastructure.database.connection import (
+    MIGRATIONS,
+    connect,
+    migrate,
+    transaction,
+)
 from app.infrastructure.database.bug_reports_repository import BugReportsRepository
 from app.infrastructure.database.http_rate_limits_repository import (
     HttpRateLimitsRepository,
