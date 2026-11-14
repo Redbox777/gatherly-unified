@@ -38,7 +38,7 @@ from app.infrastructure.database.auth_email_tokens_repository import (
 )
 from app.infrastructure.database.auth_identities_repository import AuthIdentitiesRepository
 from app.infrastructure.database.auth_sessions_repository import AuthSessionsRepository
-from app.infrastructure.database.connection import connect, migrate, transaction
+from app.infrastructure.database.connection import MIGRATIONS, connect, migrate, transaction
 from app.infrastructure.database.events_repository import EventsRepository
 from app.infrastructure.database.event_tasks_repository import EventTasksRepository
 from app.infrastructure.database.bug_reports_repository import BugReportsRepository
@@ -640,8 +640,42 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         )
 
     @app.get("/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok"}
+    @app.get("/health/live")
+    def health_live() -> dict[str, str]:
+        """Liveness only: report that the web process can answer requests."""
+        return {"status": "alive"}
+
+    @app.get("/health/ready")
+    def health_ready(request: Request) -> dict[str, str]:
+        """Readiness: verify SQLite responds and the latest schema is applied."""
+        connection: sqlite3.Connection | None = None
+        try:
+            connection = connect(request.app.state.database_path)
+            connection.execute("SELECT 1").fetchone()
+            row = connection.execute(
+                "SELECT MAX(version) AS version FROM schema_migrations"
+            ).fetchone()
+            if row is None or row["version"] != MIGRATIONS[-1][0]:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Service not ready",
+                )
+        except (sqlite3.Error, OSError) as error:
+            logger.warning(
+                "Database readiness check failed",
+                extra={
+                    "event": "health.readiness.failed",
+                    "exception_type": type(error).__name__,
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Service not ready",
+            ) from None
+        finally:
+            if connection is not None:
+                connection.close()
+        return {"status": "ready"}
 
     @app.post("/auth/register", status_code=status.HTTP_202_ACCEPTED)
     def register(
