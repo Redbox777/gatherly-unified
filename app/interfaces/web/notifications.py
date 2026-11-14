@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.application.events import EventNotFoundError
 from app.interfaces.web.constants import SESSION_COOKIE
