@@ -10,7 +10,6 @@
     formatDate,
     getParticipantsBusy,
     setParticipantsBusy,
-    setEventParticipants
   }) => {
     const renderParticipants = (list, eventId) => {
     participantsCount.textContent = String(list.length);
