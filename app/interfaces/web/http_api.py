@@ -19,48 +19,19 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from app.application.auth_identities_service import AuthIdentitiesService
-from app.application.auth_sessions_service import AuthSessionsService
-from app.application.authentication_service import AuthenticationService
-from app.application.email_verification_service import EmailVerificationService
 from app.application.events import EventNotFoundError, EventsService
 from app.application.participants import DuplicateParticipantError, ParticipantsService
 from app.application.participant_invitations import (
     ParticipantAlreadyLinkedError,
     ParticipantInvitationsService,
 )
-from app.application.password_reset_request_service import PasswordResetRequestService
-from app.application.password_reset_service import PasswordResetService
 from app.domain.expense_splits import SplitInput, SplitMode, calculate_split
 from app.domain.money import Money, get_currency
-from app.infrastructure.database.auth_email_tokens_repository import (
-    AuthEmailTokensRepository,
-)
-from app.infrastructure.database.auth_identities_repository import AuthIdentitiesRepository
-from app.infrastructure.database.auth_sessions_repository import AuthSessionsRepository
 from app.infrastructure.database.connection import MIGRATIONS, connect, migrate, transaction
-from app.infrastructure.database.events_repository import EventsRepository
-from app.infrastructure.database.event_tasks_repository import EventTasksRepository
 from app.infrastructure.database.bug_reports_repository import BugReportsRepository
-from app.infrastructure.database.event_expenses_repository import EventExpensesRepository
-from app.infrastructure.database.event_expense_splits_repository import (
-    EventExpenseSplitsRepository,
-)
-from app.infrastructure.database.event_finance_repository import EventFinanceRepository
-from app.infrastructure.database.event_venues_repository import EventVenuesRepository
 from app.infrastructure.database.http_rate_limits_repository import (
     HttpRateLimitsRepository,
 )
-from app.infrastructure.database.participants_repository import ParticipantsRepository
-from app.infrastructure.database.notifications_repository import NotificationsRepository
-from app.infrastructure.database.notes_repository import NotesRepository
-from app.infrastructure.database.participant_invitations_repository import (
-    ParticipantInvitationsRepository,
-)
-from app.infrastructure.database.smtp_rate_limits_repository import (
-    SmtpRateLimitsRepository,
-)
-from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
 from app.infrastructure.observability import (
     bind_request_id,
     configure_application_logging,
@@ -106,7 +77,6 @@ from app.interfaces.web.client_ip import (
     resolve_client_ip,
 )
 from app.interfaces.web.runtime_config import (
-    SmtpRateLimitSettings,
     load_smtp_rate_limit_settings,
     validate_runtime_configuration,
 )
