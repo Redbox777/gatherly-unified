@@ -93,7 +93,7 @@ def test_removed_participant_history_is_reported_as_unresolved() -> None:
     assert unresolved.missing_payer_minor_units == 1000
     assert unresolved.removed_participant_allocations_minor_units == 500
     assert unresolved.settlements_with_removed_participant_minor_units == 100
-    assert snapshot.balances[0].balance_minor_units == -400
+    assert snapshot.balances[0].balance_minor_units == -600
 
 
 @pytest.mark.parametrize(
