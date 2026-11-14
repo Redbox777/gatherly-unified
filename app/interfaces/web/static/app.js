@@ -36,7 +36,6 @@
   const taskStatus = document.getElementById("task-status");
   const taskSave = document.getElementById("task-save");
   const taskCancel = document.getElementById("task-cancel");
-  const expensesCount = document.getElementById("expenses-count");
   const expensePayer = document.getElementById("expense-payer");
   const venueForm = document.getElementById("venue-form");
   const venueDisplay = document.getElementById("venue-display");
