@@ -30,7 +30,7 @@ from app.application.participant_invitations import (
 )
 from app.application.password_reset_request_service import PasswordResetRequestService
 from app.application.password_reset_service import PasswordResetService
-from app.domain.expense_splits import SplitInput, SplitMode, calculate_split
+from app.domain.event_balances import BalanceSnapshot\nfrom app.domain.expense_splits import SplitInput, SplitMode, calculate_split
 from app.domain.money import Money, get_currency
 from app.infrastructure.database.auth_email_tokens_repository import (
     AuthEmailTokensRepository,
@@ -202,6 +202,15 @@ class ExpenseSplitRequest(BaseModel):
     allocations: list[ExpenseSplitAllocationRequest] = Field(min_length=1, max_length=200)
 
 
+class EventSettlementRequest(BaseModel):
+    from_participant_id: UUID
+    to_participant_id: UUID
+    amount: str = Field(min_length=1, max_length=32)
+    currency: str = Field(pattern="^[A-Z]{3}$")
+    settled_at: datetime | None = None
+    note: str = Field(default="", max_length=1000)
+
+
 class EventTaskRequest(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     description: str = Field(default="", max_length=2000)
@@ -269,6 +278,24 @@ def _serialize_event_expense(expense: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _serialize_minor_amount(
+    item: dict[str, object], field: str
+) -> dict[str, object]:
+    currency = item.get("currency")
+    amount_minor_units = item.get(field)
+    if not isinstance(currency, str):
+        raise TypeError("Finance currency must be a string")
+    if isinstance(amount_minor_units, bool) or not isinstance(amount_minor_units, int):
+        raise TypeError("Finance amount must be integer minor units")
+    precision = get_currency(currency).minor_unit_digits
+    money = Money(amount_minor_units, currency)
+    return {**item, field.replace("_minor_units", ""), "amount": f"{money.major_units:.{precision}f}"}
+
+
+def _serialize_settlement(settlement: dict[str, object]) -> dict[str, object]:
+    return _serialize_minor_amount(settlement, "amount_minor_units")
+
+
 class Dependencies:
     """Construct request-scoped services around a database connection and mail adapter."""
 
@@ -310,7 +337,7 @@ class Dependencies:
         self.event_tasks = EventTasksRepository(connection)
         self.event_venues = EventVenuesRepository(connection)
         self.event_expenses = EventExpensesRepository(connection)
-        self.event_expense_splits = EventExpenseSplitsRepository(connection)
+        self.event_expense_splits = EventExpenseSplitsRepository(connection)\n        self.event_finance = EventFinanceRepository(connection)
         self.reset_requests = PasswordResetRequestService(
             identities=self.identities,
             resets=self.resets,
@@ -1869,6 +1896,98 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                 "amount": f"{money.major_units:.{precision}f}",
             })
         return {**saved, "allocations": result_allocations}
+
+    @app.get("/events/{event_id}/balances")
+    def get_event_balances(
+        event_id: UUID, request: Request, deps: ServiceDependency
+    ) -> dict[str, object]:
+        owner_id = deps.authentication.resolve_session(
+            raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        result = deps.event_finance.get_balances_for_owner(
+            event_id=str(event_id), owner_id=owner_id
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        balances = cast(list[dict[str, object]], result["balances"])
+        pending = cast(list[dict[str, object]], result["pending_expenses"])
+        unresolved = cast(list[dict[str, object]], result["unresolved"])
+        return {
+            **result,
+            "balances": [
+                _serialize_minor_amount(item, "balance_minor_units")
+                for item in balances
+            ],
+            "pending_expenses": [
+                _serialize_minor_amount(item, "amount_minor_units")
+                for item in pending
+            ],
+            "unresolved": [
+                {
+                    **item,
+                    "missing_payer": _serialize_minor_amount(
+                        {"currency": item["currency"], "missing_payer_minor_units": item["missing_payer_minor_units"]},
+                        "missing_payer_minor_units",
+                    )["amount"],
+                    "removed_participant_allocations": _serialize_minor_amount(
+                        {"currency": item["currency"], "removed_participant_allocations_minor_units": item["removed_participant_allocations_minor_units"]},
+                        "removed_participant_allocations_minor_units",
+                    )["amount"],
+                    "settlements_with_removed_participant": _serialize_minor_amount(
+                        {"currency": item["currency"], "settlements_with_removed_participant_minor_units": item["settlements_with_removed_participant_minor_units"]},
+                        "settlements_with_removed_participant_minor_units",
+                    )["amount"],
+                }
+                for item in unresolved
+            ],
+        }
+
+    @app.get("/events/{event_id}/settlements")
+    def list_event_settlements(
+        event_id: UUID, request: Request, deps: ServiceDependency
+    ) -> list[dict[str, object]]:
+        owner_id = deps.authentication.resolve_session(
+            raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        settlements = deps.event_finance.list_settlements_for_owner(
+            event_id=str(event_id), owner_id=owner_id
+        )
+        if settlements is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        return [_serialize_settlement(item) for item in settlements]
+
+    @app.post("/events/{event_id}/settlements", status_code=status.HTTP_201_CREATED)
+    def create_event_settlement(
+        event_id: UUID, payload: EventSettlementRequest,
+        request: Request, deps: ServiceDependency
+    ) -> dict[str, object]:
+        owner_id = deps.authentication.resolve_session(
+            raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        now = datetime.now(UTC)
+        settled_at = payload.settled_at or now
+        if settled_at.tzinfo is None or settled_at.utcoffset() is None:
+            raise HTTPException(status_code=422, detail="Settlement date must include a timezone")
+        try:
+            money = Money.from_major(payload.amount, payload.currency)
+            settlement = deps.event_finance.create_settlement_for_owner(
+                event_id=str(event_id), owner_id=owner_id,
+                from_participant_id=str(payload.from_participant_id),
+                to_participant_id=str(payload.to_participant_id),
+                amount_minor_units=money.minor_units, currency=money.currency,
+                settled_at=settled_at, note=payload.note, now=now,
+            )
+        except (TypeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail="Invalid settlement") from error
+        if settlement is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        return _serialize_settlement(settlement)
 
     @app.delete(
         "/events/{event_id}/expenses/{expense_id}",
