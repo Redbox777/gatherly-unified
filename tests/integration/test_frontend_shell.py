@@ -24,6 +24,7 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
         stylesheet = client.get("/styles.css")
         script = client.get("/app.js")
         notifications = client.get("/notifications-ui.js")
+        finance = client.get("/finance-ui.js")
         mark = client.get("/magpie.svg")
 
     assert stylesheet.status_code == 200
@@ -31,13 +32,15 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     assert ".finance-panel" in stylesheet.text
     assert script.status_code == 200
     assert notifications.status_code == 200
+    assert finance.status_code == 200
+    assert "GatherlyFinanceUI" in finance.text
     assert "GatherlyNotificationsUI" in notifications.text
     assert "aria-expanded" in script.text
-    assert "loadEventFinance" in script.text
-    assert "settlements" in script.text
-    assert "renderExpenseSplitEditor" in script.text
-    assert "Распределить" in script.text
-    assert "weighted" in script.text
+    assert "loadEventFinance" in finance.text
+    assert "settlements" in finance.text
+    assert "renderExpenseSplitEditor" in finance.text
+    assert "Распределить" in finance.text
+    assert "weighted" in finance.text
     assert ".split-participant" in stylesheet.text
     assert mark.status_code == 200
     assert "<svg" in mark.text
