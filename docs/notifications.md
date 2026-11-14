@@ -24,9 +24,11 @@ python -m app.infrastructure.notifications_worker
 
 It uses `GATHERLY_DATABASE_PATH` (default `var/gatherly.sqlite3`) and the existing
 SMTP settings: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
-`SMTP_SENDER`, and optional `SMTP_STARTTLS` / `SMTP_TIMEOUT`. If SMTP host or
-sender is not configured, inbox reminders are still created and email delivery
-remains queued.
+`SMTP_SENDER`, and optional `SMTP_STARTTLS` / `SMTP_TIMEOUT`. In development,
+if SMTP host or sender is not configured, inbox reminders are still created and
+email delivery remains queued. In production, the worker validates the same
+runtime security configuration as the web application before opening the database;
+HTTPS origin, secure cookies, a real SMTP host/sender, and STARTTLS are required.
 
 The worker applies the shared SMTP recipient/requester quotas. Failed delivery
 attempts are recorded by exception type only and retried on a later worker run,
@@ -49,3 +51,8 @@ Event changes and newly added participant records notify already-linked members
 who have that notification type enabled. Guest participants without an account
 continue to receive the existing invitation email flow. Telegram chat linking and
 Web Push subscription management are separate follow-up stages.
+
+
+## Production worker configuration
+
+The worker is a separate process and does not inherit FastAPI startup validation. It therefore validates production settings itself before opening SQLite or attempting delivery. Configure the same production environment variables for both the web process and the worker. A correctly configured web process does not compensate for a worker launched with a different or incomplete environment.
