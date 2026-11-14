@@ -13,7 +13,6 @@
     setEventParticipants
   }) => {
     const renderParticipants = (list, eventId) => {
-    setEventParticipants(list);
     participantsCount.textContent = String(list.length);
     if (taskAssignee) {
       const selected = taskAssignee.value;
