@@ -3,6 +3,7 @@
 from collections.abc import Awaitable, Callable, Iterator
 from datetime import UTC, datetime
 from uuid import UUID
+from typing import cast
 import hashlib
 import logging
 import os
@@ -1790,7 +1791,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             raise TypeError("Expense currency must be a string")
         precision = get_currency(currency).minor_unit_digits
         allocations = []
-        for allocation in split["allocations"]:
+        for allocation in cast(list[dict[str, object]], split["allocations"]):
             minor_units = allocation["amount_minor_units"]
             if isinstance(minor_units, bool) or not isinstance(minor_units, int):
                 raise TypeError("Allocation amount must be integer minor units")
@@ -1848,7 +1849,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Expense not found")
         precision = get_currency(currency).minor_unit_digits
         result_allocations = []
-        for allocation in saved["allocations"]:
+        for allocation in cast(list[dict[str, object]], saved["allocations"]):
             money = Money(int(allocation["amount_minor_units"]), currency)
             result_allocations.append({
                 **allocation,
