@@ -1,5 +1,3 @@
-import sqlite3
-
 import pytest
 
 from app.infrastructure.database.backup import backup_database, restore_database
