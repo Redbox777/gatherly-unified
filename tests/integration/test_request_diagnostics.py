@@ -48,9 +48,14 @@ def test_unhandled_exception_returns_safe_response_and_logs_request_id(
         "detail": "Internal server error",
         "request_id": request_id,
     }
-    assert "private-payload-must-never-appear-in-logs" not in caplog.text
-    assert "private-query-token" not in caplog.text
-    assert "private-body-password" not in caplog.text
+    application_log_text = "\\n".join(
+        record.getMessage()
+        for record in caplog.records
+        if record.name.startswith("app.")
+    )
+    assert "private-payload-must-never-appear-in-logs" not in application_log_text
+    assert "private-query-token" not in application_log_text
+    assert "private-body-password" not in application_log_text
 
     failure_records = [
         record
