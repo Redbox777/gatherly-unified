@@ -55,7 +55,7 @@ class _RequestContextFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         if not hasattr(record, "request_id"):
-            setattr(record, "request_id", _request_id.get())
+            record.__dict__["request_id"] = _request_id.get()
         return True
 
 
@@ -122,7 +122,6 @@ def configure_application_logging() -> None:
         handler.setLevel(logging.INFO)
         handler.setFormatter(formatter)
         handler.addFilter(context_filter)
-        setattr(handler, "_gatherly_handler", True)
         root.addHandler(handler)
 
     _configured = True
