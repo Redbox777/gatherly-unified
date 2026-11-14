@@ -64,6 +64,7 @@
   const venueSave = document.getElementById("venue-save");
   const venueDelete = document.getElementById("venue-delete");
   let participantsBusy = false;
+  let eventParticipants = [];
   let events = [];
   let activeEvent = null;
   let busy = false;
@@ -221,6 +222,7 @@
     }
   };
   const renderParticipants = (list, eventId) => {
+    eventParticipants = list;
     participantsCount.textContent = String(list.length);
     if (taskAssignee) {
       const selected = taskAssignee.value;
@@ -719,6 +721,186 @@
       expensesList.append(message);
     }
   };
+  const renderExpenseSplitEditor = async (container, expense, eventId) => {
+    container.replaceChildren();
+    const loading = document.createElement("p");
+    loading.className = "expenses-empty";
+    loading.textContent = "Загружаем распределение…";
+    container.append(loading);
+    try {
+      const current = await api(
+        "/events/" + encodeURIComponent(eventId) + "/expenses/" +
+          encodeURIComponent(expense.id) + "/split"
+      );
+      const participants = await api(
+        "/events/" + encodeURIComponent(eventId) + "/participants"
+      );
+      if (!dialog.open || activeEvent?.id !== eventId || !container.isConnected) return;
+      eventParticipants = participants;
+      container.replaceChildren();
+      if ((current.allocations || []).some(item => !item.participant_id)) {
+        const warning = document.createElement("p");
+        warning.className = "split-help";
+        warning.textContent = "В сохранённом распределении есть доля удалённого участника. Историческая запись сохранена; редактор не заменяет её автоматически, чтобы не потерять историю.";
+        container.append(warning);
+        (current.allocations || []).forEach(item => {
+          const line = document.createElement("p");
+          line.className = "split-summary";
+          line.textContent = item.participant_name + ": " + item.amount + " " + current.currency;
+          container.append(line);
+        });
+        return;
+      }
+      const form = document.createElement("form");
+      form.className = "split-editor-form";
+      const modeLabel = document.createElement("label");
+      modeLabel.textContent = "Способ распределения";
+      const mode = document.createElement("select");
+      mode.innerHTML = '<option value="equal">Поровну</option><option value="fixed">Фиксированные суммы</option><option value="weighted">По весам</option>';
+      mode.value = current.mode || "equal";
+      modeLabel.append(mode);
+      const hint = document.createElement("p");
+      hint.className = "split-help";
+      const rows = document.createElement("div");
+      rows.className = "split-participants";
+      const status = document.createElement("p");
+      status.className = "participant-status";
+      status.setAttribute("role", "status");
+      status.setAttribute("aria-live", "polite");
+      const actions = document.createElement("div");
+      actions.className = "split-actions";
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.className = "text-button";
+      cancel.textContent = "Закрыть";
+      const save = document.createElement("button");
+      save.type = "submit";
+      save.className = "secondary-button";
+      save.textContent = "Сохранить распределение";
+      actions.append(cancel, save);
+      const existing = new Map(
+        (current.allocations || []).map(item => [item.participant_id, item])
+      );
+      const controls = new Map();
+      const help = () => {
+        hint.textContent = mode.value === "equal"
+          ? "Отметьте участников, между которыми сумма делится поровну."
+          : mode.value === "fixed"
+            ? "Укажите сумму для каждого участника. В сумме они должны точно совпасть с расходом (" + expense.amount + " " + expense.currency + ")."
+            : "Укажите положительный целый вес. Итоговая сумма распределится пропорционально.";
+      };
+      participants.forEach(participant => {
+        const row = document.createElement("label");
+        row.className = "split-participant";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = existing.size ? existing.has(participant.id) : true;
+        const name = document.createElement("span");
+        name.textContent = participant.display_name;
+        const value = document.createElement("input");
+        value.type = mode.value === "fixed" ? "number" : "number";
+        value.min = mode.value === "fixed" ? "0.01" : "1";
+        value.step = mode.value === "fixed" ? "any" : "1";
+        value.inputMode = "decimal";
+        value.className = "split-value";
+        value.setAttribute("aria-label", mode.value === "fixed"
+          ? "Сумма для " + participant.display_name
+          : "Вес для " + participant.display_name);
+        const previous = existing.get(participant.id);
+        value.value = mode.value === "fixed"
+          ? (previous?.amount || "")
+          : mode.value === "weighted" ? (previous?.weight || "1") : "";
+        value.hidden = mode.value === "equal";
+        checkbox.addEventListener("change", () => {
+          value.disabled = !checkbox.checked;
+        });
+        value.disabled = !checkbox.checked || mode.value === "equal";
+        controls.set(participant.id, {checkbox, value});
+        row.append(checkbox, name, value);
+        rows.append(row);
+      });
+      const updateMode = () => {
+        help();
+        controls.forEach(({checkbox, value}) => {
+          value.hidden = mode.value === "equal";
+          value.min = mode.value === "fixed" ? "0.01" : "1";
+          value.step = mode.value === "fixed" ? "any" : "1";
+          value.setAttribute("aria-label", mode.value === "fixed" ? "Сумма" : "Вес");
+          if (mode.value === "equal") {
+            value.value = "";
+            value.disabled = true;
+          } else {
+            value.disabled = !checkbox.checked;
+            if (!value.value) value.value = mode.value === "weighted" ? "1" : "";
+          }
+        });
+      };
+      mode.addEventListener("change", updateMode);
+      help();
+      updateMode();
+      form.append(modeLabel, hint, rows, status, actions);
+      container.append(form);
+      cancel.addEventListener("click", () => container.replaceChildren());
+      form.addEventListener("submit", async event => {
+        event.preventDefault();
+        const allocations = [];
+        for (const [participantId, control] of controls) {
+          if (!control.checkbox.checked) continue;
+          const item = {participant_id: participantId};
+          if (mode.value === "fixed") {
+            if (!control.value.value || Number(control.value.value) <= 0) {
+              status.textContent = "Укажите положительную сумму для каждого выбранного участника.";
+              control.value.focus();
+              return;
+            }
+            item.amount = control.value.value;
+          } else if (mode.value === "weighted") {
+            if (!control.value.value || !Number.isInteger(Number(control.value.value)) ||
+                Number(control.value.value) <= 0) {
+              status.textContent = "Вес должен быть положительным целым числом.";
+              control.value.focus();
+              return;
+            }
+            item.weight = Number(control.value.value);
+          }
+          allocations.push(item);
+        }
+        if (!allocations.length) {
+          status.textContent = "Выберите хотя бы одного участника.";
+          return;
+        }
+        save.disabled = true;
+        status.textContent = "Сохраняем распределение…";
+        try {
+          const result = await api(
+            "/events/" + encodeURIComponent(eventId) + "/expenses/" +
+              encodeURIComponent(expense.id) + "/split",
+            {method:"PUT", body:JSON.stringify({mode:mode.value, allocations})}
+          );
+          status.textContent = "Распределение сохранено.";
+          const summary = document.createElement("p");
+          summary.className = "split-summary";
+          summary.textContent = result.allocations.map(item =>
+            (item.participant_name || "Участник") + ": " + item.amount + " " + result.currency
+          ).join(" · ");
+          const old = container.querySelector(".split-summary");
+          old?.remove();
+          form.insertBefore(summary, actions);
+        } catch (error) {
+          status.textContent = error.message;
+        } finally {
+          save.disabled = false;
+        }
+      });
+    } catch (error) {
+      container.replaceChildren();
+      const message = document.createElement("p");
+      message.className = "expenses-empty";
+      message.textContent = error.message;
+      container.append(message);
+    }
+  };
+
   const renderExpenses = (expenses, eventId) => {
     expensesCount.textContent = String(expenses.length);
     expensesList.replaceChildren();
@@ -784,8 +966,21 @@
           remove.disabled = false;
         }
       });
-      actions.append(edit, remove);
-      card.append(main, actions);
+      const split = document.createElement("button");
+      split.type = "button";
+      split.textContent = "Распределить";
+      const splitPanel = document.createElement("div");
+      splitPanel.className = "expense-split-panel";
+      splitPanel.hidden = true;
+      split.addEventListener("click", () => {
+        splitPanel.hidden = !splitPanel.hidden;
+        if (!splitPanel.dataset.loaded) {
+          splitPanel.dataset.loaded = "true";
+          renderExpenseSplitEditor(splitPanel, expense, eventId);
+        }
+      });
+      actions.append(split, edit, remove);
+      card.append(main, actions, splitPanel);
       expensesList.append(card);
     });
   };

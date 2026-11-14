@@ -341,6 +341,31 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON event_expenses(paid_by_participant_id);
         """,
     ),
+    (
+        16,
+        """
+        CREATE TABLE event_expense_splits (
+            expense_id TEXT PRIMARY KEY
+                REFERENCES event_expenses(id) ON DELETE CASCADE,
+            mode TEXT NOT NULL CHECK (mode IN ('equal', 'fixed', 'weighted'))
+        );
+        CREATE TABLE event_expense_allocations (
+            id TEXT PRIMARY KEY,
+            expense_id TEXT NOT NULL
+                REFERENCES event_expenses(id) ON DELETE CASCADE,
+            participant_id TEXT NULL
+                REFERENCES event_participants(id) ON DELETE SET NULL,
+            participant_name TEXT NOT NULL
+                CHECK (length(trim(participant_name)) BETWEEN 1 AND 120),
+            amount_minor_units INTEGER NOT NULL CHECK (amount_minor_units >= 0),
+            weight INTEGER NULL CHECK (weight IS NULL OR weight > 0)
+        );
+        CREATE INDEX idx_event_expense_allocations_expense
+            ON event_expense_allocations(expense_id, participant_name);
+        CREATE INDEX idx_event_expense_allocations_participant
+            ON event_expense_allocations(participant_id);
+        """,
+    ),
 )
 
  

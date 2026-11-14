@@ -1371,3 +1371,109 @@ def test_event_expense_api_requires_authentication(tmp_path) -> None:
         }
         assert client.get(f"/events/{event_id}/expenses").status_code == 401
         assert client.post(f"/events/{event_id}/expenses", json=payload).status_code == 401
+
+
+def test_event_expense_split_api_supports_modes_and_owner_scope(
+    tmp_path, monkeypatch
+) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "event-expense-splits-http.sqlite3")
+
+    with (
+        TestClient(app, headers={"Origin": "http://testserver"}) as owner,
+        TestClient(app, headers={"Origin": "http://testserver"}) as other,
+    ):
+        for client, email, password in (
+            (owner, "split-owner@example.test", "owner password long enough"),
+            (other, "split-other@example.test", "other password long enough"),
+        ):
+            assert client.post(
+                "/auth/register", json={"email": email, "password": password}
+            ).status_code == 202
+            token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+            assert client.post("/auth/verify-email", json={"token": token}).status_code == 200
+            assert client.post(
+                "/auth/login", json={"email": email, "password": password}
+            ).status_code == 200
+
+        event = owner.post("/events", json={"title": "Split dinner"}).json()
+        event_id = event["id"]
+        participant_ids = []
+        for name in ("Alex", "Sam", "Guest"):
+            response = owner.post(
+                f"/events/{event_id}/participants", json={"display_name": name}
+            )
+            assert response.status_code == 201
+            participant_ids.append(response.json()["id"])
+
+        expense = owner.post(
+            f"/events/{event_id}/expenses",
+            json={
+                "title": "Dinner",
+                "amount": "10.00",
+                "currency": "EUR",
+                "paid_by_participant_id": participant_ids[0],
+            },
+        )
+        assert expense.status_code == 201
+        expense_id = expense.json()["id"]
+        split_url = f"/events/{event_id}/expenses/{expense_id}/split"
+
+        equal = owner.put(
+            split_url,
+            json={
+                "mode": "equal",
+                "allocations": [
+                    {"participant_id": participant_id}
+                    for participant_id in participant_ids
+                ],
+            },
+        )
+        assert equal.status_code == 200
+        assert equal.json()["mode"] == "equal"
+        assert sum(
+            item["amount_minor_units"] for item in equal.json()["allocations"]
+        ) == 1000
+        assert other.get(split_url).status_code == 404
+
+        invalid_fixed = owner.put(
+            split_url,
+            json={
+                "mode": "fixed",
+                "allocations": [
+                    {"participant_id": participant_ids[0], "amount": "1.00"},
+                    {"participant_id": participant_ids[1], "amount": "1.00"},
+                ],
+            },
+        )
+        assert invalid_fixed.status_code == 422
+
+        weighted = owner.put(
+            split_url,
+            json={
+                "mode": "weighted",
+                "allocations": [
+                    {"participant_id": participant_ids[0], "weight": 2},
+                    {"participant_id": participant_ids[1], "weight": 1},
+                ],
+            },
+        )
+        assert weighted.status_code == 200
+        assert weighted.json()["mode"] == "weighted"
+        assert sum(
+            item["amount_minor_units"] for item in weighted.json()["allocations"]
+        ) == 1000
+
+        changed = owner.put(
+            f"/events/{event_id}/expenses/{expense_id}",
+            json={
+                "title": "Dinner",
+                "amount": "12.00",
+                "currency": "EUR",
+                "paid_by_participant_id": participant_ids[0],
+            },
+        )
+        assert changed.status_code == 200
+        assert owner.get(split_url).json()["mode"] is None
