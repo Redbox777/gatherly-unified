@@ -23,12 +23,15 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     with TestClient(app) as client:
         stylesheet = client.get("/styles.css")
         script = client.get("/app.js")
+        notifications = client.get("/notifications-ui.js")
         mark = client.get("/magpie.svg")
 
     assert stylesheet.status_code == 200
     assert "grid-template-columns:1fr" in stylesheet.text
     assert ".finance-panel" in stylesheet.text
     assert script.status_code == 200
+    assert notifications.status_code == 200
+    assert "GatherlyNotificationsUI" in notifications.text
     assert "aria-expanded" in script.text
     assert "loadEventFinance" in script.text
     assert "settlements" in script.text
