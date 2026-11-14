@@ -110,8 +110,8 @@ class EventExpenseSplitsRepository:
 
     def _owned_expense(
         self, *, event_id: str, expense_id: str, owner_id: str
-    ) -> sqlite3.Row | None:
-        return self._connection.execute(
+    ) -> dict[str, object] | None:
+        row = self._connection.execute(
             """SELECT expense.amount_minor_units, expense.currency
                FROM event_expenses AS expense
                JOIN events ON events.id = expense.event_id
@@ -119,3 +119,4 @@ class EventExpenseSplitsRepository:
                  AND events.owner_id = ?""",
             (expense_id, event_id, owner_id.strip()),
         ).fetchone()
+        return dict(row) if row is not None else None
