@@ -448,10 +448,7 @@
       });
       dialog.close();
       await loadDashboard();
-      if (!editing && saved?.id) {
-        const created = events.find(item => item.id === saved.id) || saved;
-        openDetail(created);
-      }
+      if (!editing && saved?.id) openDetail(saved);
     } catch (error) {
       formStatus.textContent = error.message;
     } finally {
