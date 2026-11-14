@@ -23,7 +23,9 @@ from app.infrastructure.database.event_finance_repository import EventFinanceRep
 from app.infrastructure.database.event_venues_repository import EventVenuesRepository
 from app.infrastructure.database.notes_repository import NotesRepository
 from app.infrastructure.database.notifications_repository import NotificationsRepository
-from app.infrastructure.database.participant_invitations_repository import ParticipantInvitationsRepository
+from app.infrastructure.database.participant_invitations_repository import (
+    ParticipantInvitationsRepository,
+)
 from app.infrastructure.database.participants_repository import ParticipantsRepository
 from app.infrastructure.database.smtp_rate_limits_repository import SmtpRateLimitsRepository
 from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
