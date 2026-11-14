@@ -9,6 +9,7 @@ from app.infrastructure.database.notifications_repository import NotificationsRe
 from app.infrastructure.database.smtp_rate_limits_repository import SmtpRateLimitsRepository
 from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
 from app.infrastructure.observability import configure_application_logging
+from app.interfaces.web.runtime_config import validate_runtime_configuration
 
 
 logger = logging.getLogger(__name__)
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 def run_once(database_path: str | None = None) -> tuple[int, int]:
     """Materialize due reminders and attempt pending email deliveries."""
+    validate_runtime_configuration(os.environ)
     path = database_path or os.environ.get(
         "GATHERLY_DATABASE_PATH", "var/gatherly.sqlite3"
     )
