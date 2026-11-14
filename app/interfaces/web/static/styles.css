@@ -318,3 +318,26 @@ button:disabled{opacity:.55;cursor:wait}
 .split-actions button{font-size:10px}
 .split-summary{margin:0;padding:9px;border-radius:8px;background:#e8f7f1;color:#32645f;font-size:11px;line-height:1.6}
 @media(max-width:420px){.split-participant{grid-template-columns:18px minmax(0,1fr) minmax(78px,95px);gap:6px}}
+
+
+.finance-panel{margin-top:16px;padding:16px;border:1px solid #e5efec;border-radius:14px;background:#fff}
+.finance-panel h4{margin:0;color:#31575b;font-size:12px}
+.balances-list,.settlements-list{display:grid;gap:7px}
+.balance-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 10px;border:1px solid #e8f0ed;border-radius:9px;background:#fbfdfc;font-size:11px}
+.balance-row strong{color:#31575b}
+.balance-value{font-weight:700;text-align:right}
+.balance-positive{color:#087f70}.balance-negative{color:#b05a50}.balance-zero{color:#83999a}
+.finance-notices{display:grid;gap:6px;margin-top:9px}
+.finance-notice{margin:0;padding:9px 10px;border-radius:8px;background:#fff8e9;color:#806333;font-size:10px;line-height:1.5}
+.settlement-history{display:grid;gap:9px;margin-top:18px;padding-top:14px;border-top:1px solid #e8f0ed}
+.settlement-history .participants-heading{margin:0}
+.settlement-history h4{font-size:12px}
+.settlement-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:9px 10px;border:1px solid #e8f0ed;border-radius:9px}
+.settlement-row strong{color:#31575b;font-size:11px}
+.settlement-row>span{color:#078f91;font-size:11px;font-weight:700}
+.settlement-row p{grid-column:1/-1;margin:0;color:#82999a;font-size:10px}
+.settlement-form{display:grid;gap:7px;margin-top:17px;padding-top:14px;border-top:1px solid #e8f0ed}
+.settlement-form label{margin-top:4px;color:#426267;font-size:10px;font-weight:700}
+.settlement-form input,.settlement-form select{box-sizing:border-box;width:100%;min-height:39px;padding:9px 10px;border:1px solid #dce9e5;border-radius:9px;background:#fff;color:#173941;font:inherit;font-size:11px}
+.settlement-form h4{margin-bottom:3px}
+@media(max-width:420px){.balance-row{align-items:flex-start;flex-direction:column;gap:5px}.balance-value{text-align:left}.finance-panel{padding:13px}}
