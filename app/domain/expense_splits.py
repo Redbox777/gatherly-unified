@@ -52,13 +52,19 @@ def calculate_split(
 
     normalized = sorted(zip(participant_ids, inputs, strict=True), key=lambda pair: pair[0])
     if mode is SplitMode.EQUAL:
-        if any(item.amount_minor_units is not None or item.weight is not None for _, item in normalized):
+        if any(
+            item.amount_minor_units is not None or item.weight is not None
+            for _, item in normalized
+        ):
             raise ValueError("Equal split accepts participant IDs only")
         shares = allocate_equal_shares(total, participant_ids)
         return [SplitShare(pid, shares[pid]) for pid, _ in normalized]
 
     if mode is SplitMode.FIXED:
-        if any(item.weight is not None or item.amount_minor_units is None for _, item in normalized):
+        if any(
+            item.weight is not None or item.amount_minor_units is None
+            for _, item in normalized
+        ):
             raise ValueError("Fixed split requires an amount for every participant")
         amounts: dict[str, int] = {}
         for participant_id, item in normalized:
