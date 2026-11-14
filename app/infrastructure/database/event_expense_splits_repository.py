@@ -4,7 +4,6 @@ import sqlite3
 from uuid import uuid4
 
 from app.domain.expense_splits import SplitMode, SplitShare
-from app.domain.money import Money
 from app.infrastructure.database.connection import transaction
 
 
