@@ -148,3 +148,25 @@ def test_worker_main_configures_logging_and_reports_counts(
     )
     assert record.notifications_created == 3
     assert record.emails_sent == 2
+
+
+def test_worker_rejects_insecure_production_smtp_before_opening_database(
+    worker_fakes: FakeConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("PUBLIC_ORIGIN", "https://gatherly.example")
+    monkeypatch.setenv("COOKIE_SECURE", "true")
+    monkeypatch.setenv("SMTP_HOST", "smtp.example")
+    monkeypatch.setenv("SMTP_SENDER", "no-reply@gatherly.example")
+    monkeypatch.setenv("SMTP_STARTTLS", "false")
+    monkeypatch.setenv("EMAIL_VERIFICATION_URL", "https://gatherly.example/verify-email")
+    monkeypatch.setenv("PASSWORD_RESET_URL", "https://gatherly.example/reset-password")
+    monkeypatch.setenv(
+        "PARTICIPANT_INVITATION_URL",
+        "https://gatherly.example/accept-invitation",
+    )
+
+    with pytest.raises(ValueError, match="SMTP_STARTTLS must be true"):
+        worker.run_once("worker.sqlite3")
+
+    assert not worker_fakes.closed
