@@ -119,7 +119,10 @@ def calculate_event_balances(
             bucket[1] += expense.amount_minor_units
             continue
 
-        if expense.payer_participant_id in participant_names:
+        if (
+            expense.payer_participant_id is not None
+            and expense.payer_participant_id in participant_names
+        ):
             key = (expense.payer_participant_id, expense.currency)
             totals[key] = totals.get(key, 0) + expense.amount_minor_units
         else:
@@ -127,7 +130,10 @@ def calculate_event_balances(
 
         for allocation in expense.allocations:
             amount = allocation.amount_minor_units
-            if allocation.participant_id in participant_names:
+            if (
+                allocation.participant_id is not None
+                and allocation.participant_id in participant_names
+            ):
                 key = (allocation.participant_id, expense.currency)
                 totals[key] = totals.get(key, 0) - amount
             else:
@@ -139,12 +145,18 @@ def calculate_event_balances(
         if isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0:
             raise ValueError("Settlement amount must be positive integer minor units")
         missing_party = False
-        if settlement.from_participant_id in participant_names:
+        if (
+            settlement.from_participant_id is not None
+            and settlement.from_participant_id in participant_names
+        ):
             key = (settlement.from_participant_id, settlement.currency)
             totals[key] = totals.get(key, 0) + amount
         else:
             missing_party = True
-        if settlement.to_participant_id in participant_names:
+        if (
+            settlement.to_participant_id is not None
+            and settlement.to_participant_id in participant_names
+        ):
             key = (settlement.to_participant_id, settlement.currency)
             totals[key] = totals.get(key, 0) - amount
         else:
