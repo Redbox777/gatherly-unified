@@ -109,8 +109,15 @@ class EventExpensesRepository:
 
         with transaction(self._connection):
             self._connection.execute(
-                "DELETE FROM event_expense_allocations WHERE expense_id = ?",
-                (expense_id,),
+                """DELETE FROM event_expense_allocations
+                   WHERE expense_id = ?
+                     AND EXISTS (
+                         SELECT 1 FROM event_expenses
+                         WHERE id = ? AND (
+                             amount_minor_units != ? OR currency != ?
+                         )
+                     )""",
+                (expense_id, expense_id, amount_minor_units, currency),
             )
             self._connection.execute(
                 """DELETE FROM event_expense_splits
