@@ -27,5 +27,9 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     assert "grid-template-columns:1fr" in stylesheet.text
     assert script.status_code == 200
     assert "aria-expanded" in script.text
+    assert "renderExpenseSplitEditor" in script.text
+    assert "Распределить" in script.text
+    assert "weighted" in script.text
+    assert ".split-participant" in stylesheet.text
     assert mark.status_code == 200
     assert "<svg" in mark.text
