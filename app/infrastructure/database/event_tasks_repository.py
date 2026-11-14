@@ -22,7 +22,8 @@ class EventTasksRepository:
             return None
         rows = self._connection.execute(
             """SELECT task.id, task.event_id, task.title, task.description,
-                      task.due_at, task.assignee_participant_id, participant.display_name
+                      task.due_at, task.assignee_participant_id, participant.display_name,
+                      task.completed
                FROM event_tasks AS task
                LEFT JOIN event_participants AS participant
                  ON participant.id = task.assignee_participant_id
