@@ -2,7 +2,7 @@ import sqlite3
 
 from fastapi.testclient import TestClient
 
-from app.interfaces.web import http_api
+from app.interfaces.web import http_api, operations
 
 
 def test_health_liveness_and_readiness_are_separate(tmp_path) -> None:
@@ -29,7 +29,7 @@ def test_readiness_returns_generic_503_when_database_is_unavailable(
         raise sqlite3.OperationalError("private database path must not leak")
 
     with TestClient(app) as client:
-        monkeypatch.setattr(http_api, "connect", unavailable)
+        monkeypatch.setattr(operations, "connect", unavailable)
         response = client.get("/health/ready")
 
     assert response.status_code == 503

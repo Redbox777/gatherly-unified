@@ -8,7 +8,6 @@ from typing import cast
 import hashlib
 import logging
 import os
-import re
 from pathlib import Path
 import sqlite3
 from typing import Annotated
@@ -25,12 +24,10 @@ from app.application.participant_invitations import ParticipantAlreadyLinkedErro
 from app.domain.expense_splits import SplitInput, SplitMode, calculate_split
 from app.domain.money import Money, get_currency
 from app.infrastructure.database.connection import (
-    MIGRATIONS,
     connect,
     migrate,
     transaction,
 )
-from app.infrastructure.database.bug_reports_repository import BugReportsRepository
 from app.infrastructure.database.http_rate_limits_repository import (
     HttpRateLimitsRepository,
 )
@@ -41,10 +38,10 @@ from app.infrastructure.observability import (
     safe_exception_frames,
 )
 from app.interfaces.web.dependencies import Dependencies, _email_sender
+from app.interfaces.web.operations import router as operations_router
 from app.interfaces.web.schemas import (
     AcceptParticipantInvitationRequest,
     AddParticipantRequest,
-    BugReportRequest,
     ChangePasswordRequest,
     CreateEventRequest,
     CreateNoteRequest,
@@ -554,44 +551,6 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                 ),
             },
         )
-
-    @app.get("/health")
-    @app.get("/health/live")
-    def health_live() -> dict[str, str]:
-        """Liveness only: report that the web process can answer requests."""
-        return {"status": "alive"}
-
-    @app.get("/health/ready")
-    def health_ready(request: Request) -> dict[str, str]:
-        """Readiness: verify SQLite responds and the latest schema is applied."""
-        connection: sqlite3.Connection | None = None
-        try:
-            connection = connect(request.app.state.database_path)
-            connection.execute("SELECT 1").fetchone()
-            row = connection.execute(
-                "SELECT MAX(version) AS version FROM schema_migrations"
-            ).fetchone()
-            if row is None or row["version"] != MIGRATIONS[-1][0]:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Service not ready",
-                )
-        except (sqlite3.Error, OSError) as error:
-            logger.warning(
-                "Database readiness check failed",
-                extra={
-                    "event": "health.readiness.failed",
-                    "exception_type": type(error).__name__,
-                },
-            )
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Service not ready",
-            ) from None
-        finally:
-            if connection is not None:
-                connection.close()
-        return {"status": "ready"}
 
     @app.post("/auth/register", status_code=status.HTTP_202_ACCEPTED)
     def register(
@@ -1969,29 +1928,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-    @app.post("/diagnostics/bug-reports", status_code=status.HTTP_201_CREATED)
-    def create_bug_report(payload: BugReportRequest, request: Request) -> dict[str, str]:
-        if not payload.consent:
-            raise HTTPException(status_code=422, detail="Explicit consent is required")
-        safe_frames = [
-            line.strip()
-            for line in payload.stack.splitlines()
-            if re.fullmatch(r"at line [0-9]{1,7}, column [0-9]{1,7}", line.strip())
-        ][:8]
-        connection = connect(request.app.state.database_path)
-        try:
-            report_id = BugReportsRepository(connection).create(
-                created_at=datetime.now(UTC),
-                app_version=payload.app_version,
-                browser=payload.browser,
-                operating_system=payload.operating_system,
-                module=payload.module,
-                error_code=payload.error_code,
-                stack="\n".join(safe_frames),
-            )
-        finally:
-            connection.close()
-        return {"report_id": report_id, "status": "received"}
+    app.include_router(operations_router)
 
     static_directory = Path(__file__).resolve().parent / "static"
     app.mount(
