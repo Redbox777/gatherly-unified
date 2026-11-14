@@ -30,7 +30,8 @@ from app.application.participant_invitations import (
 )
 from app.application.password_reset_request_service import PasswordResetRequestService
 from app.application.password_reset_service import PasswordResetService
-from app.domain.expense_splits import SplitInput, SplitMode, calculate_split\nfrom app.domain.money import Money, get_currency
+from app.domain.expense_splits import SplitInput, SplitMode, calculate_split
+from app.domain.money import Money, get_currency
 from app.infrastructure.database.auth_email_tokens_repository import (
     AuthEmailTokensRepository,
 )
@@ -39,7 +40,10 @@ from app.infrastructure.database.auth_sessions_repository import AuthSessionsRep
 from app.infrastructure.database.connection import connect, migrate, transaction
 from app.infrastructure.database.events_repository import EventsRepository
 from app.infrastructure.database.event_tasks_repository import EventTasksRepository
-from app.infrastructure.database.event_expenses_repository import EventExpensesRepository\nfrom app.infrastructure.database.event_expense_splits_repository import (\n    EventExpenseSplitsRepository,\n)
+from app.infrastructure.database.event_expenses_repository import EventExpensesRepository
+from app.infrastructure.database.event_expense_splits_repository import (
+    EventExpenseSplitsRepository,
+)
 from app.infrastructure.database.event_venues_repository import EventVenuesRepository
 from app.infrastructure.database.http_rate_limits_repository import (
     HttpRateLimitsRepository,
@@ -305,7 +309,8 @@ class Dependencies:
         self.notes = NotesRepository(connection)
         self.event_tasks = EventTasksRepository(connection)
         self.event_venues = EventVenuesRepository(connection)
-        self.event_expenses = EventExpensesRepository(connection)\n        self.event_expense_splits = EventExpenseSplitsRepository(connection)
+        self.event_expenses = EventExpensesRepository(connection)
+        self.event_expense_splits = EventExpenseSplitsRepository(connection)
         self.reset_requests = PasswordResetRequestService(
             identities=self.identities,
             resets=self.resets,
