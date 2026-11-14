@@ -54,6 +54,21 @@
   const expenseStatus = document.getElementById("expense-status");
   const expenseSave = document.getElementById("expense-save");
   const expenseCancel = document.getElementById("expense-cancel");
+  const balancesList = document.getElementById("balances-list");
+  const financePending = document.getElementById("finance-pending");
+  const settlementsList = document.getElementById("settlements-list");
+  const settlementsCount = document.getElementById("settlements-count");
+  const settlementForm = document.getElementById("settlement-form");
+  const settlementCurrency = document.getElementById("settlement-currency");
+  const settlementFrom = document.getElementById("settlement-from");
+  const settlementTo = document.getElementById("settlement-to");
+  const settlementAmount = document.getElementById("settlement-amount");
+  const settlementDate = document.getElementById("settlement-date");
+  const settlementNote = document.getElementById("settlement-note");
+  const settlementStatus = document.getElementById("settlement-status");
+  const settlementSave = document.getElementById("settlement-save");
+  let currentFinanceBalances = [];
+  let currentFinanceEventId = null;
   const venueForm = document.getElementById("venue-form");
   const venueDisplay = document.getElementById("venue-display");
   const venueName = document.getElementById("venue-name");
@@ -194,6 +209,7 @@
     loadNotes(event.id);
     loadTasks(event.id);
     loadExpenses(event.id);
+    loadEventFinance(event.id);
     loadVenue(event.id);
     try {
       const fresh = await api("/events/" + encodeURIComponent(event.id));
@@ -1020,6 +1036,202 @@
       expenseStatus.textContent = error.message;
     } finally {
       expenseSave.disabled = false;
+    }
+  });
+
+  const renderEventFinance = (result, settlements, eventId) => {
+    currentFinanceBalances = result.balances || [];
+    currentFinanceEventId = eventId;
+    balancesList.replaceChildren();
+    if (!currentFinanceBalances.length) {
+      const empty = document.createElement("p");
+      empty.className = "expenses-empty";
+      empty.textContent = "Пока нет распределённых расходов.";
+      balancesList.append(empty);
+    } else {
+      currentFinanceBalances.forEach(item => {
+        const row = document.createElement("div");
+        row.className = "balance-row";
+        const name = document.createElement("strong");
+        name.textContent = item.participant_name;
+        const value = document.createElement("span");
+        value.className = "balance-value " + (
+          item.balance_minor_units > 0 ? "balance-positive" :
+          item.balance_minor_units < 0 ? "balance-negative" : "balance-zero"
+        );
+        const status = item.balance_minor_units > 0 ? "к получению" :
+          item.balance_minor_units < 0 ? "к оплате" : "расчёт закрыт";
+        value.textContent = item.amount + " " + item.currency + " · " + status;
+        row.append(name, value);
+        balancesList.append(row);
+      });
+    }
+
+    financePending.replaceChildren();
+    (result.pending_expenses || []).forEach(item => {
+      const note = document.createElement("p");
+      note.className = "finance-notice";
+      note.textContent = "Не распределено: " + item.count + " расход(а/ов) на " +
+        item.amount + " " + item.currency + ". Эти суммы пока не входят в балансы.";
+      financePending.append(note);
+    });
+    (result.unresolved || []).forEach(item => {
+      const amounts = [
+        ["плательщик удалён", item.missing_payer],
+        ["доли удалённых участников", item.removed_participant_allocations],
+        ["переводы с удалёнными участниками", item.settlements_with_removed_participant]
+      ].filter(pair => Number(pair[1]) !== 0);
+      if (!amounts.length) return;
+      const note = document.createElement("p");
+      note.className = "finance-notice";
+      note.textContent = "Исторические записи " + item.currency + ": " +
+        amounts.map(pair => pair[0] + " — " + pair[1]).join("; ") +
+        ". Они сохранены отдельно и не распределены между текущими участниками.";
+      financePending.append(note);
+    });
+
+    settlementsList.replaceChildren();
+    settlementsCount.textContent = String(settlements.length);
+    if (!settlements.length) {
+      const empty = document.createElement("p");
+      empty.className = "expenses-empty";
+      empty.textContent = "Переводов пока нет.";
+      settlementsList.append(empty);
+    } else {
+      settlements.forEach(item => {
+        const row = document.createElement("article");
+        row.className = "settlement-row";
+        const parties = document.createElement("strong");
+        parties.textContent = item.from_participant_name + " → " + item.to_participant_name;
+        const amount = document.createElement("span");
+        amount.textContent = item.amount + " " + item.currency;
+        const meta = document.createElement("p");
+        meta.textContent = (formatDate(item.settled_at) || "") +
+          (item.note ? " · " + item.note : "");
+        row.append(parties, amount, meta);
+        settlementsList.append(row);
+      });
+    }
+
+    settlementDate.value = localInputValue(new Date());
+    const currencies = [...new Set(currentFinanceBalances
+      .filter(item => item.balance_minor_units !== 0)
+      .map(item => item.currency))].sort();
+    settlementCurrency.replaceChildren();
+    if (!currencies.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "Нет открытых балансов";
+      settlementCurrency.append(option);
+      settlementForm.querySelectorAll("select, input, button").forEach(control => {
+        control.disabled = true;
+      });
+      return;
+    }
+    settlementForm.querySelectorAll("select, input, button").forEach(control => {
+      control.disabled = false;
+    });
+    currencies.forEach(currency => {
+      const option = document.createElement("option");
+      option.value = currency;
+      option.textContent = currency;
+      settlementCurrency.append(option);
+    });
+
+    const updateSettlementParties = () => {
+      const currency = settlementCurrency.value;
+      const rows = currentFinanceBalances.filter(item => item.currency === currency);
+      const debtors = rows.filter(item => item.balance_minor_units < 0);
+      const creditors = rows.filter(item => item.balance_minor_units > 0);
+      const fill = (select, list, placeholder) => {
+        const previous = select.value;
+        select.replaceChildren();
+        const first = document.createElement("option");
+        first.value = "";
+        first.textContent = placeholder;
+        select.append(first);
+        list.forEach(item => {
+          const option = document.createElement("option");
+          option.value = item.participant_id;
+          option.textContent = item.participant_name + " (" + item.amount + " " + currency + ")";
+          select.append(option);
+        });
+        if (list.some(item => item.participant_id === previous)) select.value = previous;
+      };
+      fill(settlementFrom, debtors, "Выберите должника");
+      fill(settlementTo, creditors, "Выберите получателя");
+      updateSettlementMaximum();
+      settlementSave.disabled = !debtors.length || !creditors.length;
+    };
+    const updateSettlementMaximum = () => {
+      const currency = settlementCurrency.value;
+      const from = currentFinanceBalances.find(item =>
+        item.currency === currency && item.participant_id === settlementFrom.value
+      );
+      const to = currentFinanceBalances.find(item =>
+        item.currency === currency && item.participant_id === settlementTo.value
+      );
+      if (from && to) {
+        const maxMinor = Math.min(-from.balance_minor_units, to.balance_minor_units);
+        const precision = currency === "JPY" ? 0 : currency === "KWD" ? 3 : 2;
+        settlementAmount.max = (maxMinor / (10 ** precision)).toFixed(precision);
+      } else {
+        settlementAmount.removeAttribute("max");
+      }
+    };
+    settlementCurrency.onchange = updateSettlementParties;
+    settlementFrom.onchange = updateSettlementMaximum;
+    settlementTo.onchange = updateSettlementMaximum;
+    updateSettlementParties();
+  };
+
+  const loadEventFinance = async eventId => {
+    balancesList.replaceChildren();
+    settlementsList.replaceChildren();
+    try {
+      const [balances, settlements] = await Promise.all([
+        api("/events/" + encodeURIComponent(eventId) + "/balances"),
+        api("/events/" + encodeURIComponent(eventId) + "/settlements")
+      ]);
+      if (!dialog.open || activeEvent?.id !== eventId) return;
+      renderEventFinance(balances, settlements, eventId);
+    } catch (error) {
+      if (!dialog.open || activeEvent?.id !== eventId) return;
+      balancesList.textContent = error.message;
+      settlementsList.replaceChildren();
+    }
+  };
+
+  settlementForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!currentFinanceEventId || !settlementFrom.value || !settlementTo.value) {
+      settlementStatus.textContent = "Выберите должника и получателя.";
+      return;
+    }
+    settlementSave.disabled = true;
+    settlementStatus.textContent = "Сохраняем перевод…";
+    try {
+      await api(
+        "/events/" + encodeURIComponent(currentFinanceEventId) + "/settlements",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            from_participant_id: settlementFrom.value,
+            to_participant_id: settlementTo.value,
+            amount: settlementAmount.value,
+            currency: settlementCurrency.value,
+            settled_at: toIsoValue(settlementDate.value),
+            note: settlementNote.value
+          })
+        }
+      );
+      settlementAmount.value = "";
+      settlementNote.value = "";
+      settlementStatus.textContent = "Перевод записан.";
+      await loadEventFinance(currentFinanceEventId);
+    } catch (error) {
+      settlementStatus.textContent = error.message;
+      settlementSave.disabled = false;
     }
   });
 

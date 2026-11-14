@@ -11,6 +11,8 @@ def test_frontend_homepage_is_served_with_security_headers(tmp_path) -> None:
     assert response.status_code == 200
     assert 'lang="ru"' in response.text
     assert "Рады видеть вас" in response.text
+    assert 'id="balances-list"' in response.text
+    assert 'id="settlement-form"' in response.text
     assert 'id="meeting-grid"' in response.text
     assert response.headers["cache-control"] == "no-store"
     assert "default-src 'self'" in response.headers["content-security-policy"]
@@ -25,8 +27,11 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
 
     assert stylesheet.status_code == 200
     assert "grid-template-columns:1fr" in stylesheet.text
+    assert ".finance-panel" in stylesheet.text
     assert script.status_code == 200
     assert "aria-expanded" in script.text
+    assert "loadEventFinance" in script.text
+    assert "settlements" in script.text
     assert "renderExpenseSplitEditor" in script.text
     assert "Распределить" in script.text
     assert "weighted" in script.text

@@ -23,7 +23,10 @@ class EventExpensesRepository:
             """SELECT expense.id, expense.event_id, expense.title,
                       expense.description, expense.amount_minor_units,
                       expense.currency, expense.paid_by_participant_id,
-                      participant.display_name AS paid_by_name,
+                      COALESCE(
+                          participant.display_name,
+                          expense.paid_by_participant_name
+                      ) AS paid_by_name,
                       expense.incurred_at, expense.created_at, expense.updated_at
                FROM event_expenses AS expense
                LEFT JOIN event_participants AS participant
@@ -171,7 +174,10 @@ class EventExpensesRepository:
             """SELECT expense.id, expense.event_id, expense.title,
                       expense.description, expense.amount_minor_units,
                       expense.currency, expense.paid_by_participant_id,
-                      participant.display_name AS paid_by_name,
+                      COALESCE(
+                          participant.display_name,
+                          expense.paid_by_participant_name
+                      ) AS paid_by_name,
                       expense.incurred_at, expense.created_at, expense.updated_at
                FROM event_expenses AS expense
                JOIN events ON events.id = expense.event_id
