@@ -21,7 +21,7 @@ Web adapter ───────┘              │
 - Web interface must work on desktop and mobile screens.
 - Both interfaces call the same application layer.
 - PWA support is a later enhancement, not a requirement for the first vertical slice.
-- Web authentication decision: support both Telegram sign-in and separate email/password accounts, linked to one internal Gatherly user ID. See [Web authentication and authorization boundary](web-auth-boundary.md).
+- Web authentication supports Telegram sign-in and separate email/password accounts. These providers currently create separate internal Gatherly accounts; cross-provider account linking is not implemented. See [Web authentication and authorization boundary](web-auth-boundary.md).
 
 ## 3. Data
 
