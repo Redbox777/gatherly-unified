@@ -101,12 +101,21 @@ def test_removed_participant_history_is_reported_as_unresolved() -> None:
     [
         BalanceExpense(0, "EUR", "a", "equal", (BalanceAllocation("a", 0),)),
         BalanceExpense(100, "EUR", "a", "equal", (BalanceAllocation("a", -1),)),
-        BalanceExpense(100, "EUR", "a", "equal", (BalanceAllocation("a", 99),)),
     ],
 )
 def test_invalid_expense_ledger_rows_are_rejected(expense: BalanceExpense) -> None:
     with pytest.raises(ValueError):
         calculate_event_balances(participants(), [expense], [])
+
+
+def test_inconsistent_saved_split_is_reported_as_pending() -> None:
+    snapshot = calculate_event_balances(
+        participants(),
+        [BalanceExpense(100, "EUR", "a", "equal", (BalanceAllocation("a", 99),))],
+        [],
+    )
+    assert snapshot.balances == ()
+    assert snapshot.pending_expenses[0].amount_minor_units == 100
 
 
 def test_invalid_settlement_amount_is_rejected() -> None:
