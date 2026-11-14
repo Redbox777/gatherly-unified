@@ -46,6 +46,9 @@ def test_owner_can_create_assign_complete_update_and_delete_task(repository):
     )
     assert completed is not None
     assert completed["completed"] is True
+    listed = repository.list_for_owner(event_id="event-1", owner_id="owner")
+    assert listed is not None
+    assert listed[0]["completed"] is True
     updated = repository.update(
         task_id=str(created["id"]), event_id="event-1", owner_id="owner",
         title="Reserve a room", description="Confirm capacity",
