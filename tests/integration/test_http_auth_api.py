@@ -1281,3 +1281,86 @@ def test_production_responses_include_hsts(tmp_path, monkeypatch) -> None:
         response = client.get("/health")
 
     assert response.headers["Strict-Transport-Security"] == "max-age=31536000"
+
+
+def test_event_owner_can_manage_expenses_and_non_owner_is_denied(
+    tmp_path, monkeypatch
+) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "event-expenses-http.sqlite3")
+
+    with (
+        TestClient(app, headers={"Origin": "http://testserver"}) as owner,
+        TestClient(app, headers={"Origin": "http://testserver"}) as other,
+    ):
+        for client, email, password in (
+            (owner, "expense-owner@example.test", "owner password long enough"),
+            (other, "expense-other@example.test", "other password long enough"),
+        ):
+            assert client.post(
+                "/auth/register", json={"email": email, "password": password}
+            ).status_code == 202
+            token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+            assert client.post("/auth/verify-email", json={"token": token}).status_code == 200
+            assert client.post(
+                "/auth/login", json={"email": email, "password": password}
+            ).status_code == 200
+
+        event = owner.post("/events", json={"title": "Shared dinner"})
+        assert event.status_code == 201
+        event_id = event.json()["id"]
+        participant = owner.post(
+            f"/events/{event_id}/participants", json={"display_name": "Alex"}
+        )
+        assert participant.status_code == 201
+
+        payload = {
+            "title": "Groceries",
+            "description": "Food for the dinner",
+            "amount": "12.34",
+            "currency": "EUR",
+            "paid_by_participant_id": participant.json()["id"],
+            "incurred_at": "2026-11-14T18:30:00+00:00",
+        }
+        created = owner.post(f"/events/{event_id}/expenses", json=payload)
+        assert created.status_code == 201
+        assert created.json()["amount"] == "12.34"
+        assert created.json()["amount_minor_units"] == 1234
+        assert created.json()["paid_by_name"] == "Alex"
+        expense_id = created.json()["id"]
+
+        assert owner.get(f"/events/{event_id}/expenses").json()[0]["id"] == expense_id
+        assert other.get(f"/events/{event_id}/expenses").status_code == 404
+        assert other.put(
+            f"/events/{event_id}/expenses/{expense_id}", json=payload
+        ).status_code == 404
+        assert other.delete(
+            f"/events/{event_id}/expenses/{expense_id}"
+        ).status_code == 404
+
+        invalid_precision = owner.post(
+            f"/events/{event_id}/expenses", json={**payload, "amount": "12.345"}
+        )
+        assert invalid_precision.status_code == 422
+
+        updated = owner.put(
+            f"/events/{event_id}/expenses/{expense_id}",
+            json={**payload, "title": "Updated groceries", "amount": "20.00"},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["title"] == "Updated groceries"
+        assert updated.json()["amount_minor_units"] == 2000
+
+        deleted = owner.delete(f"/events/{event_id}/expenses/{expense_id}")
+        assert deleted.status_code == 204
+        assert owner.get(f"/events/{event_id}/expenses").json() == []
+
+
+def test_event_expense_api_requires_authentication(tmp_path) -> None:
+    app = create_app(tmp_path / "event-expenses-auth.sqlite3")
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
+        event_id = "00000000-0000-0000-0000-000000000001"
+        assert client.get(f"/events/{event_id}/expenses").status_code == 401
+        assert client.post(f"/events/{event_id}/expenses", json={}).status_code == 401
