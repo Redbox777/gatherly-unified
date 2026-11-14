@@ -732,8 +732,25 @@
         "/events/" + encodeURIComponent(eventId) + "/expenses/" +
           encodeURIComponent(expense.id) + "/split"
       );
+      const participants = await api(
+        "/events/" + encodeURIComponent(eventId) + "/participants"
+      );
       if (!dialog.open || activeEvent?.id !== eventId || !container.isConnected) return;
+      eventParticipants = participants;
       container.replaceChildren();
+      if ((current.allocations || []).some(item => !item.participant_id)) {
+        const warning = document.createElement("p");
+        warning.className = "split-help";
+        warning.textContent = "В сохранённом распределении есть доля удалённого участника. Историческая запись сохранена; редактор не заменяет её автоматически, чтобы не потерять историю.";
+        container.append(warning);
+        (current.allocations || []).forEach(item => {
+          const line = document.createElement("p");
+          line.className = "split-summary";
+          line.textContent = item.participant_name + ": " + item.amount + " " + current.currency;
+          container.append(line);
+        });
+        return;
+      }
       const form = document.createElement("form");
       form.className = "split-editor-form";
       const modeLabel = document.createElement("label");
@@ -772,7 +789,7 @@
             ? "Укажите сумму для каждого участника. В сумме они должны точно совпасть с расходом (" + expense.amount + " " + expense.currency + ")."
             : "Укажите положительный целый вес. Итоговая сумма распределится пропорционально.";
       };
-      eventParticipants.forEach(participant => {
+      participants.forEach(participant => {
         const row = document.createElement("label");
         row.className = "split-participant";
         const checkbox = document.createElement("input");
