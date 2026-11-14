@@ -9,6 +9,7 @@ from app.domain.event_balances import (
     BalanceExpense,
     BalanceParticipant,
     BalanceSettlement,
+    BalanceSnapshot,
     calculate_event_balances,
 )
 from app.domain.money import get_currency
@@ -161,7 +162,7 @@ class EventFinanceRepository:
         ).fetchone()
         return dict(row) if row is not None else None
 
-    def _calculate_snapshot(self, event_id: str):
+    def _calculate_snapshot(self, event_id: str) -> BalanceSnapshot:
         participants = [
             BalanceParticipant(row["id"], row["display_name"])
             for row in self._connection.execute(
