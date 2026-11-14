@@ -43,7 +43,7 @@ def safe_exception_frames(error: BaseException) -> list[dict[str, str | int]]:
     return [
         {
             "file": Path(frame.filename).name,
-            "line": frame.lineno,
+            "line": frame.lineno or 0,
             "function": frame.name,
         }
         for frame in traceback.extract_tb(error.__traceback__)[-8:]
