@@ -1839,8 +1839,11 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                     amount_minor_units=amount_minor_units,
                     weight=allocation.weight,
                 ))
+            total_minor_units = split["amount_minor_units"]
+            if isinstance(total_minor_units, bool) or not isinstance(total_minor_units, int):
+                raise TypeError("Expense amount must be integer minor units")
             shares = calculate_split(
-                Money(int(split["amount_minor_units"]), currency), mode, inputs
+                Money(total_minor_units, currency), mode, inputs
             )
             saved = deps.event_expense_splits.replace_for_owner(
                 event_id=str(event_id), expense_id=str(expense_id),
@@ -1854,10 +1857,15 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Expense not found")
         precision = get_currency(currency).minor_unit_digits
         result_allocations = []
-        for allocation in cast(list[dict[str, object]], saved["allocations"]):
-            money = Money(int(allocation["amount_minor_units"]), currency)
+        for saved_allocation in cast(
+            list[dict[str, object]], saved["allocations"]
+        ):
+            saved_minor_units = saved_allocation["amount_minor_units"]
+            if isinstance(saved_minor_units, bool) or not isinstance(saved_minor_units, int):
+                raise TypeError("Allocation amount must be integer minor units")
+            money = Money(saved_minor_units, currency)
             result_allocations.append({
-                **allocation,
+                **saved_allocation,
                 "amount": f"{money.major_units:.{precision}f}",
             })
         return {**saved, "allocations": result_allocations}
