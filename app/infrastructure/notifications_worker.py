@@ -1,12 +1,17 @@
 """One-shot notification worker; schedule this command with cron or a platform scheduler."""
 
 from datetime import UTC, datetime
+import logging
 import os
 
 from app.infrastructure.database.connection import connect, migrate
 from app.infrastructure.database.notifications_repository import NotificationsRepository
 from app.infrastructure.database.smtp_rate_limits_repository import SmtpRateLimitsRepository
 from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
+from app.infrastructure.observability import configure_application_logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def run_once(database_path: str | None = None) -> tuple[int, int]:
@@ -53,6 +58,14 @@ def run_once(database_path: str | None = None) -> tuple[int, int]:
                     notification_id=message["id"],
                     error_name=type(error).__name__,
                 )
+                logger.warning(
+                    "Notification email delivery failed",
+                    extra={
+                        "event": "notification.email.failed",
+                        "exception_type": type(error).__name__,
+                        "component": "notifications_worker",
+                    },
+                )
             else:
                 repository.record_email_sent(
                     notification_id=message["id"], now=datetime.now(UTC)
@@ -64,8 +77,17 @@ def run_once(database_path: str | None = None) -> tuple[int, int]:
 
 
 def main() -> None:
+    configure_application_logging()
     created, sent = run_once()
-    print(f"notifications_created={created} emails_sent={sent}")
+    logger.info(
+        "Notification worker completed",
+        extra={
+            "event": "notification.worker.completed",
+            "component": "notifications_worker",
+            "notifications_created": created,
+            "emails_sent": sent,
+        },
+    )
 
 
 if __name__ == "__main__":
