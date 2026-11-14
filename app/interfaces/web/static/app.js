@@ -696,7 +696,7 @@
     expenseForm.reset();
     delete expenseForm.dataset.editingExpense;
     expenseCurrency.value = "EUR";
-    expenseDate.value = toLocalDateTimeValue(new Date());
+    expenseDate.value = localInputValue(new Date());
     expenseSave.textContent = "Добавить расход";
     expenseCancel.hidden = true;
   };
@@ -763,7 +763,7 @@
         expenseAmount.value = expense.amount;
         expenseCurrency.value = expense.currency;
         expensePayer.value = expense.paid_by_participant_id || "";
-        expenseDate.value = toLocalDateTimeValue(new Date(expense.incurred_at));
+        expenseDate.value = localInputValue(new Date(expense.incurred_at));
         expenseSave.textContent = "Сохранить изменения";
         expenseCancel.hidden = false;
         expenseStatus.textContent = "";
