@@ -2,6 +2,7 @@
 
 import os
 import sqlite3
+from collections.abc import Callable
 
 from app.application.auth_identities_service import AuthIdentitiesService
 from app.application.auth_sessions_service import AuthSessionsService
@@ -52,6 +53,7 @@ class Dependencies:
         self,
         connection: sqlite3.Connection,
         smtp_rate_limit_settings: SmtpRateLimitSettings,
+        email_sender_factory: Callable[[], SmtpEmailSender] | None = None,
     ) -> None:
         self.connection = connection
         self.smtp_rate_limits = SmtpRateLimitsRepository(
@@ -80,7 +82,7 @@ class Dependencies:
             participants=participant_repository,
             invitations=self.participant_invitations_repository,
         )
-        self.email_sender = _email_sender()
+        self.email_sender = (email_sender_factory or _email_sender)()
         self.notifications = NotificationsRepository(connection)
         self.notes = NotesRepository(connection)
         self.event_tasks = EventTasksRepository(connection)
