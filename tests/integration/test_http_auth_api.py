@@ -19,7 +19,7 @@ def test_health_endpoint_uses_temporary_database(tmp_path) -> None:
     with TestClient(app, headers={"Origin": "http://testserver"}) as client:
         response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"status": "alive"}
     assert response.headers["cache-control"] == "no-store"
 
 
