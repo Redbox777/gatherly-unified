@@ -37,6 +37,7 @@ Web adapter ───────┘              │
 - Never log bot tokens, session secrets, authentication codes, or sensitive payloads.
 - SMTP authentication must use STARTTLS; do not disable TLS when credentials are configured.
 - Set `COOKIE_SECURE=true` in production behind HTTPS. The development example also defaults to secure cookies; use `false` only for local plain-HTTP testing.
+- Set `PUBLIC_ORIGIN` to the public HTTPS origin (scheme + host + optional port, no path) in production. CSRF Origin/Referer checks use this explicit value because TLS-terminating proxies may leave the app seeing an internal HTTP URL. Do not derive the public origin from untrusted forwarded headers.
 - Sensitive HTTP POST routes use a SQLite-backed rate limiter shared by processes using the same local database. It is suitable for a single-host deployment only; use an edge/shared network limiter and reassess the database before deploying multiple hosts. Source-address quotas also depend on correct trusted-proxy configuration.
 - Client IP resolution ignores `X-Forwarded-For` unless the direct peer belongs to the explicit `TRUSTED_PROXY_CIDRS` allowlist. Run Uvicorn with `--no-proxy-headers` so `request.client` exposes the raw TCP peer; Gatherly resolves the forwarded chain itself. Configure only actual proxy networks, ensure the app cannot be reached directly around the proxy, and use proxies that append the connecting peer to the forwarded chain. Malformed chains fall back to the direct peer.
 - Use parameterized database queries.
