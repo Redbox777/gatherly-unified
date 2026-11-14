@@ -40,7 +40,7 @@ from app.infrastructure.observability import (
     reset_request_id,
     safe_exception_frames,
 )
-from app.interfaces.web.dependencies import Dependencies
+from app.interfaces.web.dependencies import Dependencies, _email_sender
 from app.interfaces.web.schemas import (
     AcceptParticipantInvitationRequest,
     AddParticipantRequest,
@@ -382,7 +382,11 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         # one request's commit/rollback from affecting another request.
         connection = connect(request.app.state.database_path)
         try:
-            yield Dependencies(connection, smtp_rate_limit_settings)
+            yield Dependencies(
+                connection,
+                smtp_rate_limit_settings,
+                email_sender_factory=_email_sender,
+            )
         finally:
             connection.close()
 
