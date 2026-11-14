@@ -1489,8 +1489,10 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         )
         if owner_id is None:
             raise HTTPException(status_code=401, detail="Authentication required")
-        if deps.events.get_event(event_id=event_id, owner_id=owner_id) is None:
-            raise HTTPException(status_code=404, detail="Event not found")
+        try:
+            deps.events.get_event(event_id=event_id, owner_id=owner_id)
+        except EventNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Event not found") from error
         venue = deps.event_venues.get_for_owner(event_id=str(event_id), owner_id=owner_id)
         return venue
 
