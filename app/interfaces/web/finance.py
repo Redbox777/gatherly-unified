@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.domain.expense_splits import SplitInput, SplitMode, calculate_split
 from app.domain.money import Money, get_currency
-from app.infrastructure.database.connection import transaction
 from app.interfaces.web.dependencies import Dependencies
 from app.interfaces.web.schemas import EventExpenseRequest, EventSettlementRequest, ExpenseSplitRequest
 from app.interfaces.web.serializers import (
