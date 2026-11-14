@@ -50,7 +50,9 @@ def calculate_split(
     if len(set(participant_ids)) != len(participant_ids):
         raise ValueError("Participant IDs must be unique")
 
-    normalized = sorted(zip(participant_ids, inputs, strict=True), key=lambda pair: pair[0])
+    normalized = sorted(
+        zip(participant_ids, inputs, strict=True), key=lambda pair: pair[0]
+    )
     if mode is SplitMode.EQUAL:
         if any(
             item.amount_minor_units is not None or item.weight is not None
@@ -79,7 +81,10 @@ def calculate_split(
             for pid, _ in normalized
         ]
 
-    if any(item.amount_minor_units is not None or item.weight is None for _, item in normalized):
+    if any(
+        item.amount_minor_units is not None or item.weight is None
+        for _, item in normalized
+    ):
         raise ValueError("Weighted split requires a weight for every participant")
     weights: dict[str, int] = {}
     for participant_id, item in normalized:
@@ -95,13 +100,17 @@ def calculate_split(
     remainders: list[tuple[int, str]] = []
     allocated = 0
     for participant_id in sorted(weights):
-        quotient, remainder = divmod(absolute_total * weights[participant_id], total_weight)
+        quotient, remainder = divmod(
+            absolute_total * weights[participant_id], total_weight
+        )
         base[participant_id] = quotient
         allocated += quotient
         remainders.append((remainder, participant_id))
 
     leftover = absolute_total - allocated
-    for _, participant_id in sorted(remainders, key=lambda item: (-item[0], item[1]))[:leftover]:
+    for _, participant_id in sorted(
+        remainders, key=lambda item: (-item[0], item[1])
+    )[:leftover]:
         base[participant_id] += 1
 
     return [
