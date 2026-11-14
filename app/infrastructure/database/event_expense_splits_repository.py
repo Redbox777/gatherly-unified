@@ -58,25 +58,36 @@ class EventExpenseSplitsRepository:
             return None
         if not shares:
             raise ValueError("At least one allocation is required")
-        if any(share.amount.currency != expense["currency"] for share in shares):
-            raise ValueError("Allocation currency must match the expense currency")
-        if sum(share.amount.minor_units for share in shares) != expense["amount_minor_units"]:
-            raise ValueError("Allocations must equal the expense total")
-
         participant_ids = [share.participant_id for share in shares]
         if len(set(participant_ids)) != len(participant_ids):
             raise ValueError("Participant IDs must be unique")
         placeholders = ",".join("?" for _ in participant_ids)
-        rows = self._connection.execute(
-            f"""SELECT id, display_name FROM event_participants
-                WHERE event_id = ? AND id IN ({placeholders})""",
-            (event_id, *participant_ids),
-        ).fetchall()
-        names = {row["id"]: row["display_name"] for row in rows}
-        if len(names) != len(participant_ids):
-            raise ValueError("Every allocation participant must belong to this event")
 
         with transaction(self._connection):
+            current_expense = self._owned_expense(
+                event_id=event_id, expense_id=expense_id, owner_id=owner_id
+            )
+            if current_expense is None:
+                return None
+            if any(
+                share.amount.currency != current_expense["currency"]
+                for share in shares
+            ):
+                raise ValueError("Allocation currency must match the expense currency")
+            if (
+                sum(share.amount.minor_units for share in shares)
+                != current_expense["amount_minor_units"]
+            ):
+                raise ValueError("Allocations must equal the expense total")
+            rows = self._connection.execute(
+                f"""SELECT id, display_name FROM event_participants
+                    WHERE event_id = ? AND id IN ({placeholders})""",
+                (event_id, *participant_ids),
+            ).fetchall()
+            names = {row["id"]: row["display_name"] for row in rows}
+            if len(names) != len(participant_ids):
+                raise ValueError("Every allocation participant must belong to this event")
+
             self._connection.execute(
                 """INSERT INTO event_expense_splits(expense_id, mode)
                    VALUES (?, ?)
