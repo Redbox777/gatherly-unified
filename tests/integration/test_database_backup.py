@@ -11,6 +11,7 @@ def test_online_backup_and_restore_preserve_database_contents(tmp_path) -> None:
 
     connection = connect(source)
     try:
+        connection.execute("PRAGMA journal_mode=WAL")
         migrate(connection)
         connection.execute(
             "INSERT INTO events(id, owner_id, title, starts_at, created_at) "
@@ -18,10 +19,10 @@ def test_online_backup_and_restore_preserve_database_contents(tmp_path) -> None:
             ("event-1", "owner-1", "Backed up event", None, "2026-11-14T00:00:00Z"),
         )
         connection.commit()
+        backup_database(source, backup)
     finally:
         connection.close()
 
-    backup_database(source, backup)
     restore_database(backup, restored, confirm_application_stopped=True)
 
     connection = connect(restored)
