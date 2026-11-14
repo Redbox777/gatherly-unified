@@ -19,54 +19,28 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from app.application.auth_identities_service import AuthIdentitiesService
-from app.application.auth_sessions_service import AuthSessionsService
-from app.application.authentication_service import AuthenticationService
-from app.application.email_verification_service import EmailVerificationService
-from app.application.events import EventNotFoundError, EventsService
-from app.application.participants import DuplicateParticipantError, ParticipantsService
-from app.application.participant_invitations import (
-    ParticipantAlreadyLinkedError,
-    ParticipantInvitationsService,
-)
-from app.application.password_reset_request_service import PasswordResetRequestService
-from app.application.password_reset_service import PasswordResetService
+from app.application.events import EventNotFoundError
+from app.application.participants import DuplicateParticipantError
+from app.application.participant_invitations import ParticipantAlreadyLinkedError
 from app.domain.expense_splits import SplitInput, SplitMode, calculate_split
 from app.domain.money import Money, get_currency
-from app.infrastructure.database.auth_email_tokens_repository import (
-    AuthEmailTokensRepository,
+from app.infrastructure.database.connection import (
+    MIGRATIONS,
+    connect,
+    migrate,
+    transaction,
 )
-from app.infrastructure.database.auth_identities_repository import AuthIdentitiesRepository
-from app.infrastructure.database.auth_sessions_repository import AuthSessionsRepository
-from app.infrastructure.database.connection import MIGRATIONS, connect, migrate, transaction
-from app.infrastructure.database.events_repository import EventsRepository
-from app.infrastructure.database.event_tasks_repository import EventTasksRepository
 from app.infrastructure.database.bug_reports_repository import BugReportsRepository
-from app.infrastructure.database.event_expenses_repository import EventExpensesRepository
-from app.infrastructure.database.event_expense_splits_repository import (
-    EventExpenseSplitsRepository,
-)
-from app.infrastructure.database.event_finance_repository import EventFinanceRepository
-from app.infrastructure.database.event_venues_repository import EventVenuesRepository
 from app.infrastructure.database.http_rate_limits_repository import (
     HttpRateLimitsRepository,
 )
-from app.infrastructure.database.participants_repository import ParticipantsRepository
-from app.infrastructure.database.notifications_repository import NotificationsRepository
-from app.infrastructure.database.notes_repository import NotesRepository
-from app.infrastructure.database.participant_invitations_repository import (
-    ParticipantInvitationsRepository,
-)
-from app.infrastructure.database.smtp_rate_limits_repository import (
-    SmtpRateLimitsRepository,
-)
-from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
 from app.infrastructure.observability import (
     bind_request_id,
     configure_application_logging,
     reset_request_id,
     safe_exception_frames,
 )
+from app.interfaces.web.dependencies import Dependencies, _email_sender
 from app.interfaces.web.schemas import (
     AcceptParticipantInvitationRequest,
     AddParticipantRequest,
@@ -105,7 +79,6 @@ from app.interfaces.web.client_ip import (
     resolve_client_ip,
 )
 from app.interfaces.web.runtime_config import (
-    SmtpRateLimitSettings,
     load_smtp_rate_limit_settings,
     validate_runtime_configuration,
 )
@@ -131,7 +104,8 @@ def _apply_security_headers(response: Response, *, production: bool) -> Response
 
 def _token_fragment_link(base_url: str, token: str) -> str:
     """Build a bearer-token link without placing the token in the HTTP request URL."""
-    return f"{base_url.split('#', maxsplit=1)[0]}#{urlencode({'token': token})}"
+    token_fragment = urlencode({"token": token})
+    return f"{base_url.split('#', maxsplit=1)[0]}#{token_fragment}"
 
 
 def _is_same_origin(candidate: str, request_url: str, *, origin_header: bool) -> bool:
@@ -175,58 +149,6 @@ GENERIC_RESET_RESPONSE = {
     )
 }
 
-
-class Dependencies:
-    """Construct request-scoped services around a database connection and mail adapter."""
-
-    def __init__(
-        self,
-        connection: sqlite3.Connection,
-        smtp_rate_limit_settings: SmtpRateLimitSettings,
-    ) -> None:
-        self.connection = connection
-        self.smtp_rate_limits = SmtpRateLimitsRepository(
-            connection,
-            recipient_limit=smtp_rate_limit_settings.recipient_limit,
-            recipient_window_seconds=smtp_rate_limit_settings.recipient_window_seconds,
-            requester_limit=smtp_rate_limit_settings.requester_limit,
-            requester_window_seconds=smtp_rate_limit_settings.requester_window_seconds,
-        )
-        identity_repository = AuthIdentitiesRepository(connection)
-        token_repository = AuthEmailTokensRepository(connection)
-        session_repository = AuthSessionsRepository(connection)
-        self.identities = AuthIdentitiesService(identity_repository)
-        self.verification = EmailVerificationService(token_repository)
-        self.resets = PasswordResetService(token_repository)
-        self.sessions = AuthSessionsService(session_repository)
-        self.authentication = AuthenticationService(self.identities, self.sessions)
-        self.events = EventsService(EventsRepository(connection))
-        participant_repository = ParticipantsRepository(connection)
-        self.participants = ParticipantsService(self.events, participant_repository)
-        self.participant_invitations_repository = ParticipantInvitationsRepository(
-            connection
-        )
-        self.participant_invitations = ParticipantInvitationsService(
-            events=self.events,
-            participants=participant_repository,
-            invitations=self.participant_invitations_repository,
-        )
-        self.email_sender = _email_sender()
-        self.notifications = NotificationsRepository(connection)
-        self.notes = NotesRepository(connection)
-        self.event_tasks = EventTasksRepository(connection)
-        self.event_venues = EventVenuesRepository(connection)
-        self.event_expenses = EventExpensesRepository(connection)
-        self.event_expense_splits = EventExpenseSplitsRepository(connection)
-        self.event_finance = EventFinanceRepository(connection)
-        self.reset_requests = PasswordResetRequestService(
-            identities=self.identities,
-            resets=self.resets,
-            email_sender=self.email_sender,
-            reset_url=os.environ.get(
-                "PASSWORD_RESET_URL", "http://localhost:8000/reset-password"
-            ),
-        )
 
 
 def _requester_ip(request: Request) -> str:
@@ -273,17 +195,7 @@ def _enforce_email_send_rate_limit(
         )
 
 
-def _email_sender() -> SmtpEmailSender:
-    """Build the SMTP adapter from environment configuration."""
-    return SmtpEmailSender(
-        host=os.environ.get("SMTP_HOST", "localhost"),
-        port=int(os.environ.get("SMTP_PORT", "587")),
-        username=os.environ.get("SMTP_USERNAME", ""),
-        password=os.environ.get("SMTP_PASSWORD", ""),
-        sender=os.environ.get("SMTP_SENDER", "no-reply@gatherly.local"),
-        use_starttls=os.environ.get("SMTP_STARTTLS", "true").casefold() == "true",
-        timeout=float(os.environ.get("SMTP_TIMEOUT", "10")),
-    )
+
 
 
 def _send_verification_email(
@@ -470,7 +382,11 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         # one request's commit/rollback from affecting another request.
         connection = connect(request.app.state.database_path)
         try:
-            yield Dependencies(connection, smtp_rate_limit_settings)
+            yield Dependencies(
+                connection,
+                smtp_rate_limit_settings,
+                email_sender_factory=_email_sender,
+            )
         finally:
             connection.close()
 
