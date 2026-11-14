@@ -164,11 +164,7 @@ def calculate_event_balances(
         if missing_party:
             issue_bucket(settlement.currency)[2] += amount
 
-    currencies = sorted(
-        {currency for _, currency in totals}
-        | set(pending)
-        | set(unresolved)
-    )
+    balance_currencies = sorted({currency for _, currency in totals})
     balances = tuple(
         ParticipantBalance(
             participant_id=participant.participant_id,
@@ -176,7 +172,7 @@ def calculate_event_balances(
             currency=currency,
             balance_minor_units=totals.get((participant.participant_id, currency), 0),
         )
-        for currency in currencies
+        for currency in balance_currencies
         for participant in sorted(
             participants,
             key=lambda item: (item.display_name.casefold(), item.participant_id),
