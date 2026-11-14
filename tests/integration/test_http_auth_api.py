@@ -1262,6 +1262,7 @@ def test_responses_include_baseline_security_headers(tmp_path) -> None:
 
 def test_production_responses_include_hsts(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("PUBLIC_ORIGIN", "https://app.example.com")
     monkeypatch.setenv("COOKIE_SECURE", "true")
     monkeypatch.setenv("SMTP_STARTTLS", "true")
     monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
