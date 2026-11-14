@@ -37,6 +37,7 @@ from app.infrastructure.database.auth_sessions_repository import AuthSessionsRep
 from app.infrastructure.database.connection import connect, migrate, transaction
 from app.infrastructure.database.events_repository import EventsRepository
 from app.infrastructure.database.event_tasks_repository import EventTasksRepository
+from app.infrastructure.database.event_venues_repository import EventVenuesRepository
 from app.infrastructure.database.http_rate_limits_repository import (
     HttpRateLimitsRepository,
 )
@@ -167,6 +168,13 @@ class EventReminderRequest(BaseModel):
     offsets_minutes: list[int] = Field(default_factory=list, max_length=3)
 
 
+class EventVenueRequest(BaseModel):
+    venue_name: str = Field(min_length=1, max_length=160)
+    address: str = Field(min_length=1, max_length=500)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+
+
 class EventTaskRequest(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     description: str = Field(default="", max_length=2000)
@@ -257,6 +265,7 @@ class Dependencies:
         self.notifications = NotificationsRepository(connection)
         self.notes = NotesRepository(connection)
         self.event_tasks = EventTasksRepository(connection)
+        self.event_venues = EventVenuesRepository(connection)
         self.reset_requests = PasswordResetRequestService(
             identities=self.identities,
             resets=self.resets,
@@ -1470,6 +1479,54 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="Invalid or expired reset token")
         return {"message": "Password updated"}
 
+
+    @app.get("/events/{event_id}/venue")
+    def get_event_venue(
+        event_id: UUID, request: Request, deps: ServiceDependency
+    ) -> dict[str, object] | None:
+        owner_id = deps.authentication.resolve_session(
+            raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        if deps.events.get_event(event_id=event_id, owner_id=owner_id) is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        venue = deps.event_venues.get_for_owner(event_id=str(event_id), owner_id=owner_id)
+        return venue
+
+    @app.put("/events/{event_id}/venue")
+    def save_event_venue(
+        event_id: UUID, payload: EventVenueRequest, request: Request, deps: ServiceDependency
+    ) -> dict[str, object]:
+        owner_id = deps.authentication.resolve_session(
+            raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        try:
+            venue = deps.event_venues.save_for_owner(
+                event_id=str(event_id), owner_id=owner_id,
+                venue_name=payload.venue_name, address=payload.address,
+                latitude=payload.latitude, longitude=payload.longitude,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail="Invalid venue data") from error
+        if venue is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        return venue
+
+    @app.delete("/events/{event_id}/venue", status_code=status.HTTP_204_NO_CONTENT)
+    def delete_event_venue(
+        event_id: UUID, request: Request, deps: ServiceDependency
+    ) -> Response:
+        owner_id = deps.authentication.resolve_session(
+            raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
+        )
+        if owner_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        if not deps.event_venues.delete_for_owner(event_id=str(event_id), owner_id=owner_id):
+            raise HTTPException(status_code=404, detail="Venue not found")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.get("/events/{event_id}/tasks")
     def list_event_tasks(
