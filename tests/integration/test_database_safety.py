@@ -424,7 +424,7 @@ def test_failed_migration_rolls_back_partial_schema_and_version_record(
     monkeypatch.setattr(
         database_connection,
         "MIGRATIONS",
-        ((1, "CREATE TABLE partial_migration_table(id TEXT);\\nSELECT * FROM missing_table;"),),
+        ((1, "CREATE TABLE partial_migration_table(id TEXT);\nSELECT * FROM missing_table;"),),
     )
     try:
         with pytest.raises(sqlite3.OperationalError, match="missing_table"):
