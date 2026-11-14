@@ -2,7 +2,8 @@
 
 from collections.abc import Awaitable, Callable, Iterator
 from datetime import UTC, datetime
-from uuid import UUID
+from time import perf_counter
+from uuid import UUID, uuid4
 from typing import cast
 import hashlib
 import logging
@@ -13,7 +14,7 @@ from typing import Annotated
 from urllib.parse import urlencode, urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
@@ -59,6 +60,12 @@ from app.infrastructure.database.smtp_rate_limits_repository import (
     SmtpRateLimitsRepository,
 )
 from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
+from app.infrastructure.observability import (
+    bind_request_id,
+    configure_application_logging,
+    reset_request_id,
+    safe_exception_frames,
+)
 from app.interfaces.telegram.login_verification import verify_telegram_login
 from app.interfaces.web.client_ip import (
     IPNetwork,
@@ -457,6 +464,7 @@ def _send_verification_email(
 
 def create_app(database_path: str | Path | None = None) -> FastAPI:
     """Create an API app; tests may inject a temporary SQLite database path."""
+    configure_application_logging()
     validate_runtime_configuration(os.environ)
     smtp_rate_limit_settings = load_smtp_rate_limit_settings(os.environ)
     app = FastAPI(title="Gatherly Authentication API", version="0.1.0")
@@ -482,65 +490,109 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     async def validate_browser_origin(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        if request.method == "POST" and request.url.path in rate_limit_paths:
-            requester = _requester_ip(request)
-            retry_after = await run_in_threadpool(
-                _consume_http_rate_limit,
-                request.app.state.database_path,
-                requester,
-                request.url.path,
-            )
-            if retry_after is not None:
-                return _apply_security_headers(
-                    Response(
-                        content='{"detail":"Too many requests; try again later"}',
-                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                        headers={"Retry-After": str(retry_after)},
-                        media_type="application/json",
-                    ),
-                    production=production,
-                )
+        request_id = uuid4().hex
+        request.state.request_id = request_id
+        context_token = bind_request_id(request_id)
+        started_at = perf_counter()
 
-        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
-            origin = request.headers.get("origin")
-            referer = request.headers.get("referer")
-            # Behind a TLS-terminating reverse proxy, the app may see an
-            # internal HTTP URL. Compare browser origins with an explicitly
-            # configured public origin rather than trusting forwarded headers.
-            request_url = os.environ.get("PUBLIC_ORIGIN", "").strip() or str(
-                request.base_url
-            )
-            if origin is not None:
-                # An explicit Origin takes precedence; malformed, opaque ("null"),
-                # and cross-origin values are rejected rather than ignored.
-                same_origin = _is_same_origin(origin, request_url, origin_header=True)
-            elif referer is not None:
-                # Some clients omit Origin but send Referer. Validate its origin.
-                same_origin = _is_same_origin(referer, request_url, origin_header=False)
-            else:
-                # Cookie-authenticated state changes must prove their browser
-                # origin. Header-less requests remain available to clients that
-                # do not rely on the server-managed browser session cookie.
-                same_origin = SESSION_COOKIE not in request.cookies
-            if not same_origin:
-                return _apply_security_headers(
-                    Response(
-                        content='{"detail":"Cross-origin request rejected"}',
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        media_type="application/json",
-                    ),
-                    production=production,
+        def finish(response: Response) -> Response:
+            response.headers["X-Request-ID"] = request_id
+            if request.url.path in {"/", "/index.html", "/auth.html"}:
+                response.headers.setdefault(
+                    "Content-Security-Policy",
+                    "default-src 'self'; style-src 'self'; font-src 'self'; "
+                    "img-src 'self' data:; "
+                    "script-src 'self'; connect-src 'self'; base-uri 'self'; "
+                    "form-action 'self'; frame-ancestors 'none'",
                 )
-        response = await call_next(request)
-        if request.url.path in {"/", "/index.html", "/auth.html"}:
-            response.headers.setdefault(
-                "Content-Security-Policy",
-                "default-src 'self'; style-src 'self'; font-src 'self'; "
-                "img-src 'self' data:; "
-                "script-src 'self'; connect-src 'self'; base-uri 'self'; "
-                "form-action 'self'; frame-ancestors 'none'",
+            secured = _apply_security_headers(response, production=production)
+            logger.info(
+                "HTTP request completed",
+                extra={
+                    "request_id": request_id,
+                    "event": "http.request.completed",
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": secured.status_code,
+                    "duration_ms": round((perf_counter() - started_at) * 1000, 2),
+                },
             )
-        return _apply_security_headers(response, production=production)
+            return secured
+
+        try:
+            if request.method == "POST" and request.url.path in rate_limit_paths:
+                requester = _requester_ip(request)
+                retry_after = await run_in_threadpool(
+                    _consume_http_rate_limit,
+                    request.app.state.database_path,
+                    requester,
+                    request.url.path,
+                )
+                if retry_after is not None:
+                    return finish(
+                        Response(
+                            content='{"detail":"Too many requests; try again later"}',
+                            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                            headers={"Retry-After": str(retry_after)},
+                            media_type="application/json",
+                        )
+                    )
+
+            if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+                origin = request.headers.get("origin")
+                referer = request.headers.get("referer")
+                request_url = os.environ.get("PUBLIC_ORIGIN", "").strip() or str(
+                    request.base_url
+                )
+                if origin is not None:
+                    # An explicit Origin takes precedence; malformed, opaque ("null"),
+                    # and cross-origin values are rejected rather than ignored.
+                    same_origin = _is_same_origin(
+                        origin, request_url, origin_header=True
+                    )
+                elif referer is not None:
+                    # Some clients omit Origin but send Referer. Validate its origin.
+                    same_origin = _is_same_origin(
+                        referer, request_url, origin_header=False
+                    )
+                else:
+                    # Cookie-authenticated state changes must prove their browser
+                    # origin. Header-less requests remain available to clients that
+                    # do not rely on the server-managed browser session cookie.
+                    same_origin = SESSION_COOKIE not in request.cookies
+                if not same_origin:
+                    return finish(
+                        Response(
+                            content='{"detail":"Cross-origin request rejected"}',
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            media_type="application/json",
+                        )
+                    )
+
+            return finish(await call_next(request))
+        except Exception as error:
+            logger.error(
+                "Unhandled HTTP request exception",
+                extra={
+                    "request_id": request_id,
+                    "event": "http.request.exception",
+                    "method": request.method,
+                    "path": request.url.path,
+                    "exception_type": type(error).__name__,
+                    "exception_frames": safe_exception_frames(error),
+                },
+            )
+            return finish(
+                JSONResponse(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    content={
+                        "detail": "Internal server error",
+                        "request_id": request_id,
+                    },
+                )
+            )
+        finally:
+            reset_request_id(context_token)
     path = database_path or os.environ.get("GATHERLY_DATABASE_PATH", "var/gatherly.sqlite3")
     migration_connection = connect(path)
     try:
