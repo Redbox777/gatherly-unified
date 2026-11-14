@@ -34,6 +34,7 @@ from app.infrastructure.observability import (
     reset_request_id,
     safe_exception_frames,
 )
+from app.interfaces.web.constants import SESSION_COOKIE, SESSION_COOKIE_PATH
 from app.interfaces.web.dependencies import Dependencies, _email_sender
 from app.interfaces.web.operations import router as operations_router
 from app.interfaces.web.finance import create_finance_router
@@ -71,10 +72,6 @@ from app.interfaces.web.runtime_config import (
 
 
 logger = logging.getLogger(__name__)
-
-SESSION_COOKIE = "gatherly_session"
-SESSION_COOKIE_PATH = "/"
-
 
 def _apply_security_headers(response: Response, *, production: bool) -> Response:
     """Apply baseline browser security headers without overriding route policies."""
