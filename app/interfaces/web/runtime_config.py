@@ -89,8 +89,37 @@ def validate_runtime_configuration(environ: Mapping[str, str]) -> None:
     environment = environ.get("APP_ENV", "development").strip().casefold()
     if environment not in _ALLOWED_ENVIRONMENTS:
         raise ValueError("APP_ENV must be development, test, or production")
+
+    public_origin = environ.get("PUBLIC_ORIGIN", "").strip()
+    if public_origin:
+        parsed_origin = urlsplit(public_origin)
+        try:
+            public_port = parsed_origin.port
+        except ValueError as error:
+            raise ValueError("PUBLIC_ORIGIN must contain a valid port") from error
+        if public_port is not None and not 1 <= public_port <= 65535:
+            raise ValueError("PUBLIC_ORIGIN port must be between 1 and 65535")
+        if (
+            parsed_origin.scheme.casefold() not in {"http", "https"}
+            or not parsed_origin.hostname
+            or parsed_origin.username is not None
+            or parsed_origin.password is not None
+            or parsed_origin.path not in {"", "/"}
+            or parsed_origin.query
+            or parsed_origin.fragment
+        ):
+            raise ValueError("PUBLIC_ORIGIN must be an absolute origin without a path")
     if environment != "production":
         return
+
+    public_hostname = urlsplit(public_origin).hostname if public_origin else None
+    if (
+        not public_origin
+        or urlsplit(public_origin).scheme.casefold() != "https"
+        or public_hostname is None
+        or public_hostname.casefold() in _LOCAL_HOSTS
+    ):
+        raise ValueError("PUBLIC_ORIGIN must be a configured public HTTPS origin")
 
     if environ.get("COOKIE_SECURE", "true").strip().casefold() != "true":
         raise ValueError("COOKIE_SECURE must be true in production")

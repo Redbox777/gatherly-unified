@@ -504,7 +504,12 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             origin = request.headers.get("origin")
             referer = request.headers.get("referer")
-            request_url = str(request.base_url)
+            # Behind a TLS-terminating reverse proxy, the app may see an
+            # internal HTTP URL. Compare browser origins with an explicitly
+            # configured public origin rather than trusting forwarded headers.
+            request_url = os.environ.get("PUBLIC_ORIGIN", "").strip() or str(
+                request.base_url
+            )
             if origin is not None:
                 # An explicit Origin takes precedence; malformed, opaque ("null"),
                 # and cross-origin values are rejected rather than ignored.

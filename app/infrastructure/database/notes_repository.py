@@ -14,24 +14,27 @@ class NotesRepository:
         self._connection = connection
 
     def list_for_event(self, *, event_id: str, user_id: str) -> list[dict[str, object]] | None:
-        member = self._is_member(event_id=event_id, user_id=user_id)
-        if not member:
-            return None
-        rows = self._connection.execute(
-            """SELECT note.id, note.event_id, note.author_id, note.content,
-                      note.visibility, note.created_at, note.updated_at,
-                      (note.author_id = ?) AS can_edit,
-                      (note.author_id = ? OR (note.visibility = 'shared'
-                        AND EXISTS (
-                          SELECT 1 FROM events
-                          WHERE events.id = note.event_id AND events.owner_id = ?
-                        ))) AS can_delete
-               FROM event_notes AS note
-               WHERE note.event_id = ?
-                 AND (note.visibility = 'shared' OR note.author_id = ?)
-               ORDER BY note.created_at, note.id""",
-            (user_id, user_id, user_id, event_id, user_id),
-        ).fetchall()
+        # Membership and visibility must be read from one stable transaction.
+        # Otherwise a participant removed between the two queries could still
+        # receive notes after their event access had been revoked.
+        with transaction(self._connection):
+            if not self._is_member(event_id=event_id, user_id=user_id):
+                return None
+            rows = self._connection.execute(
+                """SELECT note.id, note.event_id, note.author_id, note.content,
+                          note.visibility, note.created_at, note.updated_at,
+                          (note.author_id = ?) AS can_edit,
+                          (note.author_id = ? OR (note.visibility = 'shared'
+                            AND EXISTS (
+                              SELECT 1 FROM events
+                              WHERE events.id = note.event_id AND events.owner_id = ?
+                            ))) AS can_delete
+                   FROM event_notes AS note
+                   WHERE note.event_id = ?
+                     AND (note.visibility = 'shared' OR note.author_id = ?)
+                   ORDER BY note.created_at, note.id""",
+                (user_id, user_id, user_id, event_id, user_id),
+            ).fetchall()
         return [dict(row) for row in rows]
 
     def create(
@@ -43,11 +46,13 @@ class NotesRepository:
             raise ValueError("Note content must contain 1 to 5000 characters")
         if visibility not in {"private", "shared"}:
             raise ValueError("Unsupported note visibility")
-        if not self._is_member(event_id=event_id, user_id=author_id):
-            return None
         note_id = str(uuid4())
         timestamp = self._format(now)
         with transaction(self._connection):
+            # Re-check membership while holding the write transaction so a
+            # concurrent participant removal cannot race the authorization check.
+            if not self._is_member(event_id=event_id, user_id=author_id):
+                return None
             self._connection.execute(
                 """INSERT INTO event_notes(
                     id, event_id, author_id, content, visibility, created_at, updated_at

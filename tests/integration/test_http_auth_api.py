@@ -1262,6 +1262,7 @@ def test_responses_include_baseline_security_headers(tmp_path) -> None:
 
 def test_production_responses_include_hsts(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("PUBLIC_ORIGIN", "https://app.example.com")
     monkeypatch.setenv("COOKIE_SECURE", "true")
     monkeypatch.setenv("SMTP_STARTTLS", "true")
     monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
@@ -1477,3 +1478,216 @@ def test_event_expense_split_api_supports_modes_and_owner_scope(
         )
         assert changed.status_code == 200
         assert owner.get(split_url).json()["mode"] is None
+
+
+def test_event_resource_access_matrix_for_owner_member_and_outsider(
+    tmp_path, monkeypatch
+) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "event-resource-access.sqlite3")
+
+    with (
+        TestClient(app, headers={"Origin": "http://testserver"}) as owner,
+        TestClient(app, headers={"Origin": "http://testserver"}) as member,
+        TestClient(app, headers={"Origin": "http://testserver"}) as outsider,
+    ):
+        accounts = (
+            (owner, "resource-owner@example.test", "owner password long enough"),
+            (member, "resource-member@example.test", "member password long enough"),
+            (outsider, "resource-outsider@example.test", "outsider password long enough"),
+        )
+        for client, email, password in accounts:
+            before = len(sender.messages)
+            registered = client.post(
+                "/auth/register", json={"email": email, "password": password}
+            )
+            assert registered.status_code == 202
+            verification_token = sender.messages[before][2].split(
+                "token=", maxsplit=1
+            )[1].splitlines()[0]
+            assert client.post(
+                "/auth/verify-email", json={"token": verification_token}
+            ).status_code == 200
+            assert client.post(
+                "/auth/login", json={"email": email, "password": password}
+            ).status_code == 200
+
+        event = owner.post("/events", json={"title": "Access control event"})
+        assert event.status_code == 201
+        event_id = event.json()["id"]
+
+        participant = owner.post(
+            f"/events/{event_id}/participants", json={"display_name": "Member"}
+        )
+        assert participant.status_code == 201
+        participant_id = participant.json()["id"]
+
+        invitation = owner.post(
+            f"/events/{event_id}/participants/{participant_id}/invitation",
+            json={"email": "resource-member@example.test"},
+        )
+        assert invitation.status_code == 201
+        invitation_token = sender.messages[-1][2].split(
+            "token=", maxsplit=1
+        )[1].splitlines()[0]
+        accepted = member.post(
+            "/participant-invitations/accept", json={"token": invitation_token}
+        )
+        assert accepted.status_code == 200
+
+        updated_event = owner.patch(
+            f"/events/{event_id}",
+            json={
+                "title": "Access control event updated",
+                "starts_at": "2026-11-20T19:00:00+00:00",
+            },
+        )
+        assert updated_event.status_code == 200
+
+        member_inbox = member.get("/notifications")
+        owner_inbox = owner.get("/notifications")
+        outsider_inbox = outsider.get("/notifications")
+        assert len(member_inbox.json()["items"]) == 1
+        assert owner_inbox.json()["items"] == []
+        assert outsider_inbox.json()["items"] == []
+        notification_id = member_inbox.json()["items"][0]["id"]
+        assert outsider.post(
+            f"/notifications/{notification_id}/read"
+        ).status_code == 404
+        assert owner.post(
+            f"/notifications/{notification_id}/read"
+        ).status_code == 404
+        assert member.post(
+            f"/notifications/{notification_id}/read"
+        ).status_code == 200
+
+        member_preferences = {
+            "email_enabled": False,
+            "event_updates_enabled": False,
+            "participant_added_enabled": False,
+            "reminders_enabled": False,
+        }
+        assert member.put(
+            "/notification-preferences", json=member_preferences
+        ).json() == member_preferences
+        assert owner.get("/notification-preferences").json()["email_enabled"] is True
+        assert outsider.get("/notification-preferences").json()["email_enabled"] is True
+
+        reminder_settings = {"offsets_minutes": [1440, 60]}
+        assert owner.put(
+            f"/events/{event_id}/reminders", json=reminder_settings
+        ).json()["offsets_minutes"] == [1440, 60]
+        assert owner.get(f"/events/{event_id}/reminders").status_code == 200
+        assert member.get(f"/events/{event_id}/reminders").status_code == 404
+        assert member.put(
+            f"/events/{event_id}/reminders", json={"offsets_minutes": [15]}
+        ).status_code == 404
+        assert outsider.get(f"/events/{event_id}/reminders").status_code == 404
+
+        owner_shared = owner.post(
+            f"/events/{event_id}/notes",
+            json={"content": "Owner shared note", "visibility": "shared"},
+        )
+        owner_private = owner.post(
+            f"/events/{event_id}/notes",
+            json={"content": "Owner private note", "visibility": "private"},
+        )
+        assert owner_shared.status_code == owner_private.status_code == 201
+
+        member_shared = member.post(
+            f"/events/{event_id}/notes",
+            json={"content": "Member shared note", "visibility": "shared"},
+        )
+        member_private = member.post(
+            f"/events/{event_id}/notes",
+            json={"content": "Member private note", "visibility": "private"},
+        )
+        assert member_shared.status_code == member_private.status_code == 201
+
+        owner_notes = owner.get(f"/events/{event_id}/notes")
+        member_notes = member.get(f"/events/{event_id}/notes")
+        outsider_notes = outsider.get(f"/events/{event_id}/notes")
+        assert owner_notes.status_code == member_notes.status_code == 200
+        assert outsider_notes.status_code == 404
+        assert {item["content"] for item in owner_notes.json()} == {
+            "Owner shared note", "Owner private note", "Member shared note"
+        }
+        assert {item["content"] for item in member_notes.json()} == {
+            "Owner shared note", "Member shared note", "Member private note"
+        }
+
+        member_private_id = member_private.json()["id"]
+        assert member.put(
+            f"/events/{event_id}/notes/{owner_shared.json()['id']}",
+            json={"content": "Tampered", "visibility": "shared"},
+        ).status_code == 404
+        assert owner.delete(
+            f"/events/{event_id}/notes/{member_private_id}"
+        ).status_code == 404
+        assert outsider.post(
+            f"/events/{event_id}/notes",
+            json={"content": "Intrusion", "visibility": "shared"},
+        ).status_code == 404
+
+        task_payload = {
+            "title": "Prepare venue",
+            "description": "Owner-managed task",
+            "assignee_participant_id": participant_id,
+        }
+        task = owner.post(f"/events/{event_id}/tasks", json=task_payload)
+        assert task.status_code == 201
+        task_id = task.json()["id"]
+        assert member.get(f"/events/{event_id}/tasks").status_code == 404
+        assert member.put(
+            f"/events/{event_id}/tasks/{task_id}", json=task_payload
+        ).status_code == 404
+        assert member.patch(
+            f"/events/{event_id}/tasks/{task_id}/completion",
+            json={"completed": True},
+        ).status_code == 404
+        assert member.delete(f"/events/{event_id}/tasks/{task_id}").status_code == 404
+        assert outsider.post(
+            f"/events/{event_id}/tasks", json={"title": "Unauthorized"}
+        ).status_code == 404
+
+        venue_payload = {
+            "venue_name": "Community Hall",
+            "address": "Main Street 1",
+            "latitude": 60.1699,
+            "longitude": 24.9384,
+        }
+        venue = owner.put(f"/events/{event_id}/venue", json=venue_payload)
+        assert venue.status_code == 200
+        assert member.get(f"/events/{event_id}/venue").status_code == 404
+        assert member.put(
+            f"/events/{event_id}/venue", json=venue_payload
+        ).status_code == 404
+        assert member.delete(f"/events/{event_id}/venue").status_code == 404
+        assert outsider.put(
+            f"/events/{event_id}/venue", json=venue_payload
+        ).status_code == 404
+
+        assert owner.get(f"/events/{event_id}/tasks").status_code == 200
+        assert owner.get(f"/events/{event_id}/venue").json()["venue_name"] == "Community Hall"
+
+
+def test_public_origin_supports_csrf_checks_behind_tls_terminating_proxy(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setenv("PUBLIC_ORIGIN", "https://gatherly.example")
+    app = create_app(tmp_path / "public-origin-proxy.sqlite3")
+
+    # Simulate Uvicorn receiving plain HTTP from an internal TLS-terminating proxy.
+    with TestClient(app, base_url="http://internal-gatherly") as client:
+        same_public_origin = client.post(
+            "/auth/logout", headers={"Origin": "https://gatherly.example"}
+        )
+        foreign_origin = client.post(
+            "/auth/logout", headers={"Origin": "https://attacker.example"}
+        )
+
+    assert same_public_origin.status_code == 200
+    assert foreign_origin.status_code == 403
