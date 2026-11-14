@@ -32,6 +32,16 @@
   const noteVisibility = document.getElementById("note-visibility");
   const noteStatus = document.getElementById("note-status");
   const noteSave = document.getElementById("note-save");
+  const tasksList = document.getElementById("tasks-list");
+  const tasksCount = document.getElementById("tasks-count");
+  const taskForm = document.getElementById("task-form");
+  const taskTitle = document.getElementById("task-title");
+  const taskDescription = document.getElementById("task-description");
+  const taskDueAt = document.getElementById("task-due-at");
+  const taskAssignee = document.getElementById("task-assignee");
+  const taskStatus = document.getElementById("task-status");
+  const taskSave = document.getElementById("task-save");
+  const taskCancel = document.getElementById("task-cancel");
   let participantsBusy = false;
   let events = [];
   let activeEvent = null;
@@ -139,6 +149,7 @@
   };
   const openDetail = async event => {
     activeEvent = event;
+    resetTaskForm();
     form.hidden = true;
     detail.hidden = false;
     document.getElementById("detail-title").textContent = event.title;
@@ -158,6 +169,7 @@
     loadParticipants(event.id);
     loadEventReminders(event.id);
     loadNotes(event.id);
+    loadTasks(event.id);
     try {
       const fresh = await api("/events/" + encodeURIComponent(event.id));
       activeEvent = fresh;
@@ -186,6 +198,21 @@
   };
   const renderParticipants = (list, eventId) => {
     participantsCount.textContent = String(list.length);
+    if (taskAssignee) {
+      const selected = taskAssignee.value;
+      taskAssignee.replaceChildren();
+      const unassigned = document.createElement("option");
+      unassigned.value = "";
+      unassigned.textContent = "Не назначен";
+      taskAssignee.append(unassigned);
+      list.forEach(participant => {
+        const option = document.createElement("option");
+        option.value = participant.id;
+        option.textContent = participant.display_name;
+        taskAssignee.append(option);
+      });
+      taskAssignee.value = selected;
+    }
     participantsList.replaceChildren();
     if (!list.length) {
       const empty = document.createElement("p");
@@ -392,6 +419,151 @@
       noteStatus.textContent = error.message;
     } finally {
       noteSave.disabled = false;
+    }
+  });
+
+  const resetTaskForm = () => {
+    taskForm.reset();
+    delete taskForm.dataset.editingTask;
+    taskSave.textContent = "Добавить задачу";
+    taskCancel.hidden = true;
+    taskStatus.textContent = "";
+  };
+  const loadTasks = async eventId => {
+    tasksList.replaceChildren();
+    const loading = document.createElement("p");
+    loading.className = "tasks-empty";
+    loading.textContent = "Загружаем задачи…";
+    tasksList.append(loading);
+    try {
+      const tasks = await api("/events/" + encodeURIComponent(eventId) + "/tasks");
+      if (!dialog.open || activeEvent?.id !== eventId) return;
+      renderTasks(tasks, eventId);
+    } catch (error) {
+      if (!dialog.open || activeEvent?.id !== eventId) return;
+      tasksList.replaceChildren();
+      const message = document.createElement("p");
+      message.className = "tasks-empty";
+      message.textContent = error.message;
+      tasksList.append(message);
+    }
+  };
+  const renderTasks = (tasks, eventId) => {
+    tasksCount.textContent = tasks.length + (tasks.length === 1 ? " задача" : " задач");
+    tasksList.replaceChildren();
+    if (!tasks.length) {
+      const empty = document.createElement("p");
+      empty.className = "tasks-empty";
+      empty.textContent = "Пока нет задач. Добавьте первую.";
+      tasksList.append(empty);
+      return;
+    }
+    tasks.forEach(task => {
+      const card = document.createElement("article");
+      card.className = "task-card" + (task.completed ? " completed" : "");
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.className = "task-check";
+      check.checked = Boolean(task.completed);
+      check.setAttribute("aria-label", (task.completed ? "Вернуть задачу в работу: " : "Отметить выполненной: ") + task.title);
+      check.addEventListener("change", async () => {
+        check.disabled = true;
+        try {
+          await api("/events/" + encodeURIComponent(eventId) + "/tasks/" + encodeURIComponent(task.id) + "/completion", {
+            method:"PATCH", body:JSON.stringify({completed:check.checked})
+          });
+          await loadTasks(eventId);
+        } catch (error) {
+          check.checked = !check.checked;
+          taskStatus.textContent = error.message;
+          check.disabled = false;
+        }
+      });
+      const main = document.createElement("div");
+      main.className = "task-main";
+      const title = document.createElement("strong");
+      title.className = "task-title";
+      title.textContent = task.title;
+      main.append(title);
+      if (task.description) {
+        const description = document.createElement("p");
+        description.className = "task-description";
+        description.textContent = task.description;
+        main.append(description);
+      }
+      const meta = document.createElement("div");
+      meta.className = "task-meta";
+      const due = document.createElement("span");
+      due.textContent = task.due_at ? "Срок: " + (formatDate(task.due_at) || "") + " · " + (formatTime(task.due_at) || "") : "Без срока";
+      const assignee = document.createElement("span");
+      assignee.textContent = task.display_name ? "Ответственный: " + task.display_name : "Не назначен";
+      meta.append(due, assignee);
+      main.append(meta);
+      const actions = document.createElement("div");
+      actions.className = "task-actions";
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.textContent = "Изменить";
+      edit.addEventListener("click", () => {
+        taskTitle.value = task.title;
+        taskDescription.value = task.description || "";
+        taskDueAt.value = localInputValue(task.due_at);
+        taskAssignee.value = task.assignee_participant_id || "";
+        taskForm.dataset.editingTask = task.id;
+        taskSave.textContent = "Сохранить изменения";
+        taskCancel.hidden = false;
+        taskStatus.textContent = "Редактирование задачи";
+        taskTitle.focus();
+      });
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "task-delete";
+      remove.textContent = "Удалить";
+      remove.addEventListener("click", async () => {
+        if (!window.confirm("Удалить задачу «" + task.title + "»?")) return;
+        remove.disabled = true;
+        try {
+          await api("/events/" + encodeURIComponent(eventId) + "/tasks/" + encodeURIComponent(task.id), {method:"DELETE"});
+          if (taskForm.dataset.editingTask === task.id) resetTaskForm();
+          await loadTasks(eventId);
+        } catch (error) {
+          taskStatus.textContent = error.message;
+          remove.disabled = false;
+        }
+      });
+      actions.append(edit, remove);
+      card.append(check, main, actions);
+      tasksList.append(card);
+    });
+  };
+  taskCancel.addEventListener("click", resetTaskForm);
+  taskForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!activeEvent || !taskTitle.value.trim()) return;
+    const taskId = taskForm.dataset.editingTask;
+    taskSave.disabled = true;
+    taskStatus.textContent = taskId ? "Сохраняем изменения…" : "Добавляем задачу…";
+    try {
+      await api(
+        "/events/" + encodeURIComponent(activeEvent.id) + "/tasks" +
+          (taskId ? "/" + encodeURIComponent(taskId) : ""),
+        {
+          method: taskId ? "PUT" : "POST",
+          body:JSON.stringify({
+            title:taskTitle.value,
+            description:taskDescription.value,
+            due_at:toIsoValue(taskDueAt.value),
+            assignee_participant_id:taskAssignee.value || null
+          })
+        }
+      );
+      resetTaskForm();
+      taskStatus.textContent = "Задача сохранена.";
+      await loadTasks(activeEvent.id);
+    } catch (error) {
+      taskStatus.textContent = error.message;
+    } finally {
+      taskSave.disabled = false;
     }
   });
 

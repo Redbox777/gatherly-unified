@@ -284,6 +284,27 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON event_notes(author_id, event_id);
         """,
     ),
+    (
+        13,
+        """
+        CREATE TABLE event_tasks (
+            id TEXT PRIMARY KEY,
+            event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            title TEXT NOT NULL CHECK (length(trim(title)) BETWEEN 1 AND 160),
+            description TEXT NOT NULL DEFAULT '' CHECK (length(description) <= 2000),
+            due_at TEXT NULL,
+            assignee_participant_id TEXT NULL
+                REFERENCES event_participants(id) ON DELETE SET NULL,
+            completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_event_tasks_event_status_due
+            ON event_tasks(event_id, completed, due_at, created_at);
+        CREATE INDEX idx_event_tasks_assignee
+            ON event_tasks(assignee_participant_id);
+        """,
+    ),
 )
 
  
