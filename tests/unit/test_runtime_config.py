@@ -9,6 +9,7 @@ from app.interfaces.web.runtime_config import (
 def production_settings() -> dict[str, str]:
     return {
         "APP_ENV": "production",
+        "PUBLIC_ORIGIN": "https://gatherly.example",
         "COOKIE_SECURE": "true",
         "SMTP_STARTTLS": "true",
         "SMTP_HOST": "smtp.example.com",
@@ -168,3 +169,33 @@ def test_smtp_authentication_requires_starttls_in_all_environments() -> None:
 
 def test_smtp_starttls_can_be_disabled_without_credentials_in_development() -> None:
     validate_runtime_configuration({"APP_ENV": "development", "SMTP_STARTTLS": "false"})
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "http://gatherly.example",
+        "https://gatherly.example/app",
+        "https://user:password@gatherly.example",
+        "https://gatherly.example?next=elsewhere",
+        "https://localhost",
+    ],
+)
+def test_production_rejects_invalid_public_origin(value: str) -> None:
+    settings = production_settings()
+    settings["PUBLIC_ORIGIN"] = value
+    with pytest.raises(ValueError, match="PUBLIC_ORIGIN"):
+        validate_runtime_configuration(settings)
+
+
+def test_production_requires_explicit_public_origin() -> None:
+    settings = production_settings()
+    settings.pop("PUBLIC_ORIGIN")
+    with pytest.raises(ValueError, match="PUBLIC_ORIGIN"):
+        validate_runtime_configuration(settings)
+
+
+def test_development_can_use_explicit_public_origin_for_proxy_testing() -> None:
+    validate_runtime_configuration(
+        {"APP_ENV": "development", "PUBLIC_ORIGIN": "https://gatherly.example"}
+    )
