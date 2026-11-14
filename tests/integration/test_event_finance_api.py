@@ -1,3 +1,17 @@
+from fastapi.testclient import TestClient
+
+import app.interfaces.web.http_api as http_api
+from app.interfaces.web.http_api import create_app
+
+
+class FakeEmailSender:
+    def __init__(self) -> None:
+        self.messages: list[tuple[str, str, str]] = []
+
+    def send_text(self, recipient: str, subject: str, body: str) -> None:
+        self.messages.append((recipient, subject, body))
+
+
 
 
 def test_event_balances_and_settlements_api(tmp_path, monkeypatch) -> None:
