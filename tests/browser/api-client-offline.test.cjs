@@ -88,6 +88,9 @@ test("successful account deletion purges the account-scoped offline cache and ou
   assert.equal(result, null);
   assert.equal(store.getUser(), null);
   assert.equal(store.getRememberedUser(), null);
-  await assert.rejects(() => store.listOutbox(), /active account/i);
+
+  // Re-authenticate the same account namespace to verify its old rows are gone.
+  await store.setUser("deleted-api-account");
+  assert.deepEqual(await store.listOutbox(), []);
   assert.equal(await store.get("GET:/events"), null);
 });
