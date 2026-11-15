@@ -260,8 +260,9 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                     "Content-Security-Policy",
                     "default-src 'self'; style-src 'self'; font-src 'self'; "
                     "img-src 'self' data:; "
-                    "script-src 'self'; connect-src 'self'; base-uri 'self'; "
-                    "form-action 'self'; frame-ancestors 'none'",
+                    "script-src 'self' https://telegram.org; "
+                    "frame-src https://oauth.telegram.org; connect-src 'self'; "
+                    "base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
                 )
             secured = _apply_security_headers(response, production=production)
             logger.info(
@@ -695,6 +696,40 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         if user_id is None:
             raise HTTPException(status_code=401, detail="Authentication required")
         return {"user_id": user_id}
+
+    @app.get("/account/identities")
+    def list_account_identities(
+        request: Request, deps: ServiceDependency
+    ) -> list[dict[str, str | bool | None]]:
+        """Return provider labels and safe identifiers for the signed-in account."""
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        return [
+            {
+                "provider": identity.provider,
+                "identifier": (
+                    identity.provider_subject if identity.provider == "email" else None
+                ),
+                "verified": identity.verified_at is not None,
+            }
+            for identity in deps.identities.list_for_user_id(user_id=user_id)
+        ]
+
+    @app.get("/account/link/config")
+    def account_link_config() -> dict[str, str]:
+        """Expose only the public Telegram bot username needed by the Login Widget."""
+        username = os.environ.get("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+        if (
+            not 5 <= len(username) <= 32
+            or not username[0].isalpha()
+            or not all(character.isalnum() or character == "_" for character in username)
+        ):
+            username = ""
+        return {"telegram_bot_username": username}
 
     @app.post("/account/link/email")
     def link_email_account(
