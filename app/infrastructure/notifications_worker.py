@@ -67,7 +67,10 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
             if not renewed:
                 logger.error(
                     "Notification worker lost its lease; stopping delivery",
-                    extra={"event": "notification.worker.lease_lost", "component": "notifications_worker"},
+                    extra={
+                        "event": "notification.worker.lease_lost",
+                        "component": "notifications_worker",
+                    },
                 )
             return renewed
 
