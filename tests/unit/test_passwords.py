@@ -20,8 +20,9 @@ def _legacy_scrypt_hash(password: str) -> str:
         p=1,
         dklen=32,
     )
-    encode = lambda value: base64.urlsafe_b64encode(value).decode("ascii")
-    return "scrypt$16384$8$1$" + encode(salt) + "$" + encode(digest)
+    salt_text = base64.urlsafe_b64encode(salt).decode("ascii")
+    digest_text = base64.urlsafe_b64encode(digest).decode("ascii")
+    return "scrypt$16384$8$1$" + salt_text + "$" + digest_text
 
 
 def test_hash_password_uses_argon2id_and_verifies_original_password() -> None:
