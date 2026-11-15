@@ -384,17 +384,26 @@
   const loadDashboard = async () => {
     showState("Загружаем встречи", "Получаем список событий вашего аккаунта…");
     try {
-      const session = await fetch("/auth/me", {credentials:"same-origin"});
-      if (session.status === 401) {
-        window.location.replace("/auth.html?next=%2F");
-        return;
+      let session = null;
+      try {
+        session = await fetch("/auth/me", {credentials:"same-origin"});
+      } catch (networkError) {
+        const rememberedUserId = offlineStore?.getRememberedUser();
+        if (!rememberedUserId) throw networkError;
+        await offlineStore.setUser(rememberedUserId);
       }
-      if (!session.ok) throw new Error("Не удалось проверить вход. Обновите страницу.");
-      const identity = await session.json();
-      if (!identity || typeof identity.user_id !== "string" || !identity.user_id) {
-        throw new Error("Не удалось подтвердить аккаунт. Обновите страницу.");
+      if (session) {
+        if (session.status === 401) {
+          window.location.replace("/auth.html?next=%2F");
+          return;
+        }
+        if (!session.ok) throw new Error("Не удалось проверить вход. Обновите страницу.");
+        const identity = await session.json();
+        if (!identity || typeof identity.user_id !== "string" || !identity.user_id) {
+          throw new Error("Не удалось подтвердить аккаунт. Обновите страницу.");
+        }
+        await offlineStore?.setUser(identity.user_id);
       }
-      await offlineStore?.setUser(identity.user_id);
       const list = await api("/events");
       if (!Array.isArray(list)) throw new Error("Сервер вернул неожиданный ответ.");
       list.sort((a,b) => !a.starts_at ? 1 : !b.starts_at ? -1 : new Date(a.starts_at)-new Date(b.starts_at));
@@ -488,7 +497,7 @@
     logout.disabled = true;
     try {
       await api("/auth/logout", {method:"POST",body:"{}"});
-      await offlineStore?.clearCurrentUser();
+      try { await offlineStore?.clearCurrentUser(); } catch (_) {}
       window.location.replace("/auth.html");
     } catch (_) {
       logout.disabled = false;

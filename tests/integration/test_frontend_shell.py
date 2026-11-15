@@ -25,6 +25,7 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
         homepage = client.get("/")
         stylesheet = client.get("/styles.css")
         script = client.get("/app.js")
+        api_client = client.get("/api-client.js")
         account_linking = client.get("/account-linking-ui.js")
         notifications = client.get("/notifications-ui.js")
         finance = client.get("/finance-ui.js")
@@ -40,6 +41,14 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     assert "grid-template-columns:1fr" in stylesheet.text
     assert ".finance-panel" in stylesheet.text
     assert script.status_code == 200
+    assert api_client.status_code == 200
+    assert "cacheKeyFor" in api_client.text
+    assert "offlineStore.put" in api_client.text
+    assert "offlineStore.get" in api_client.text
+    assert "clearCurrentCache" in api_client.text
+    assert "clearCurrentCache" in offline_store.text
+    assert "getRememberedUser" in offline_store.text
+    assert "getRememberedUser" in script.text
     assert account_linking.status_code == 200
     assert "GatherlyAccountLink" in account_linking.text
     assert 'id="account-settings-open"' in homepage.text
@@ -89,7 +98,7 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     assert 'id="pwa-install-button"' in homepage.text
     assert 'id="connection-status"' in homepage.text
     assert "navigator.onLine" in pwa_script.text
-    assert "данные встреч и изменения не синхронизируются" in pwa_script.text
+    assert "Новые изменения не синхронизируются" in pwa_script.text
     assert offline.status_code == 200
     assert "Нет подключения" in offline.text
     assert "onclick=" not in offline.text
