@@ -107,6 +107,10 @@ class AuthIdentitiesService:
             now=now,
         )
 
+    def list_for_user_id(self, *, user_id: str) -> list[AuthIdentity]:
+        """List the authenticated user's linked login methods."""
+        return self._repository.list_for_user_id(user_id=user_id)
+
     def find_identity(
         self, *, provider: str, provider_subject: str
     ) -> AuthIdentity | None:
