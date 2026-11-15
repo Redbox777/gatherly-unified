@@ -152,14 +152,9 @@ class AccountLinkingRepository:
                 self._connection.execute("DELETE FROM users WHERE id = ?", (source_user_id,))
 
         except Exception:
-            if merge_intent is not None and erasure_ledger is not None:
-                try:
-                    erasure_ledger.record_merge_resolution(
-                        intent=merge_intent, committed=False
-                    )
-                except Exception:
-                    # Startup reconciliation will resolve the durable pending intent.
-                    pass
+            # Do not guess whether a failed commit actually rolled back. Startup or
+            # the backup command reconciles the durable intent against live identity
+            # ownership and appends the correct commit/abort marker.
             raise
         if merge_intent is not None and erasure_ledger is not None:
             return erasure_ledger.record_merge_resolution(
