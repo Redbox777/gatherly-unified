@@ -16,6 +16,19 @@ class FakeConnection:
         self.closed = True
 
 
+class FakeBugReportsRepository:
+    deleted = 0
+    cutoffs: list[datetime] = []
+
+    def __init__(self, _connection: FakeConnection) -> None:
+        pass
+
+    def delete_older_than(self, *, created_before: datetime) -> int:
+        assert created_before.tzinfo is not None
+        self.cutoffs.append(created_before)
+        return self.deleted
+
+
 class FakeNotificationsRepository:
     messages: list[dict[str, str]] = []
     created = 2
@@ -74,6 +87,8 @@ class FakeSender:
 @pytest.fixture
 def worker_fakes(monkeypatch: pytest.MonkeyPatch) -> FakeConnection:
     connection = FakeConnection()
+    FakeBugReportsRepository.deleted = 0
+    FakeBugReportsRepository.cutoffs = []
     FakeNotificationsRepository.messages = []
     FakeNotificationsRepository.sent_ids = []
     FakeNotificationsRepository.failed = []
@@ -82,9 +97,11 @@ def worker_fakes(monkeypatch: pytest.MonkeyPatch) -> FakeConnection:
     FakeSender.sent = []
     monkeypatch.setattr(worker, "connect", lambda _path: connection)
     monkeypatch.setattr(worker, "migrate", lambda _connection: None)
+    monkeypatch.setattr(worker, "BugReportsRepository", FakeBugReportsRepository)
     monkeypatch.setattr(worker, "NotificationsRepository", FakeNotificationsRepository)
     monkeypatch.setattr(worker, "SmtpRateLimitsRepository", FakeRateLimitsRepository)
     monkeypatch.setattr(worker, "SmtpEmailSender", FakeSender)
+    monkeypatch.delenv("BUG_REPORT_RETENTION_DAYS", raising=False)
     return connection
 
 
@@ -95,6 +112,20 @@ def test_worker_materializes_reminders_without_smtp(
     monkeypatch.delenv("SMTP_SENDER", raising=False)
 
     assert worker.run_once("worker.sqlite3") == (2, 0)
+    assert len(FakeBugReportsRepository.cutoffs) == 1
+    assert worker_fakes.closed
+
+
+def test_worker_expires_diagnostic_reports_without_smtp(
+    worker_fakes: FakeConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+    monkeypatch.delenv("SMTP_SENDER", raising=False)
+    monkeypatch.setenv("BUG_REPORT_RETENTION_DAYS", "30")
+    FakeBugReportsRepository.deleted = 4
+
+    assert worker.run_once("worker.sqlite3") == (2, 0)
+    assert len(FakeBugReportsRepository.cutoffs) == 1
     assert worker_fakes.closed
 
 
