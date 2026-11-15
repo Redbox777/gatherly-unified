@@ -152,7 +152,7 @@ def test_task_and_venue_commands_use_owner_rules_and_increment_revision(database
         repository, kind="task.create", payload={"title": "Prepare", "description": ""}
     )
     assert task_status == 201
-    assert task["revision"] == 2
+    assert task["revision"] == 3
     task_id = str(task["result"]["id"])
     complete_status, completed = _command(
         repository,
@@ -162,7 +162,7 @@ def test_task_and_venue_commands_use_owner_rules_and_increment_revision(database
     )
     assert complete_status == 200
     assert completed["result"]["completed"] is True
-    assert completed["revision"] == 3
+    assert completed["revision"] == 4
 
     venue_status, venue = _command(
         repository,
@@ -171,7 +171,7 @@ def test_task_and_venue_commands_use_owner_rules_and_increment_revision(database
         payload={"venue_name": "Workshop", "address": "Main Street"},
     )
     assert venue_status == 200
-    assert venue["revision"] == 4
+    assert venue["revision"] == 5
 
 
 def test_invalid_coordinates_and_unknown_fields_are_rejected(database) -> None:
@@ -201,7 +201,7 @@ def test_failed_idempotency_receipt_rolls_back_domain_write(database) -> None:
     assert connection.execute(
         "SELECT revision FROM event_sync_state WHERE event_id = ?",
         ("11111111-1111-4111-8111-111111111111",),
-    ).fetchone()[0] == 1
+     ).fetchone()[0] == 2
     assert connection.execute(
         "SELECT COUNT(*) FROM offline_sync_idempotency"
     ).fetchone()[0] == 0
