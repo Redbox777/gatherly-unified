@@ -13,6 +13,7 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from app.infrastructure.database.connection import transaction
+from app.infrastructure.database.notification_retry_policy import next_retry_at
 
 
 _NONCE_BYTES = 12
@@ -209,10 +210,14 @@ class PushSubscriptionsRepository:
                 AND preference.push_enabled = 1
                WHERE delivery.sent_at IS NULL
                  AND delivery.attempts < 5
+                 AND (
+                     delivery.next_attempt_at IS NULL
+                     OR delivery.next_attempt_at <= ?
+                 )
                  AND notification.read_at IS NULL
                  AND subscription.revoked_at IS NULL
                ORDER BY delivery.created_at, delivery.id LIMIT ?""",
-            (limit,),
+            (timestamp, limit),
         ).fetchall()
         pending: list[dict[str, object]] = []
         invalid_subscriptions: set[str] = set()
@@ -252,11 +257,26 @@ class PushSubscriptionsRepository:
     ) -> None:
         self._require_aware(now)
         with transaction(self._connection):
+            row = self._connection.execute(
+                "SELECT attempts FROM push_deliveries WHERE id = ? AND sent_at IS NULL",
+                (delivery_id,),
+            ).fetchone()
+            if row is None:
+                return
+            attempts = int(row["attempts"]) + 1
+            retry_at = next_retry_at(now=now, attempt_number=attempts)
             self._connection.execute(
                 """UPDATE push_deliveries
-                   SET attempts = attempts + 1, last_error = ?, updated_at = ?
+                   SET attempts = ?, last_error = ?, updated_at = ?,
+                       next_attempt_at = ?
                    WHERE id = ? AND sent_at IS NULL""",
-                (error_name[:120], self._format(now), delivery_id),
+                (
+                    attempts,
+                    error_name[:120],
+                    self._format(now),
+                    self._format(retry_at) if retry_at else None,
+                    delivery_id,
+                ),
             )
 
     def record_sent(self, *, delivery_id: str, now: datetime) -> None:
@@ -265,7 +285,7 @@ class PushSubscriptionsRepository:
             self._connection.execute(
                 """UPDATE push_deliveries
                    SET attempts = attempts + 1, sent_at = ?, last_error = NULL,
-                       updated_at = ?
+                       updated_at = ?, next_attempt_at = NULL
                    WHERE id = ? AND sent_at IS NULL""",
                 (self._format(now), self._format(now), delivery_id),
             )

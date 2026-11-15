@@ -545,6 +545,24 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
         );
         """,
     ),
+    (
+        23,
+        """
+        ALTER TABLE notifications
+        ADD COLUMN email_next_attempt_at TEXT NULL;
+        ALTER TABLE notifications
+        ADD COLUMN telegram_next_attempt_at TEXT NULL;
+        ALTER TABLE push_deliveries
+        ADD COLUMN next_attempt_at TEXT NULL;
+
+        CREATE INDEX idx_notifications_email_retry
+            ON notifications(email_sent_at, email_attempts, email_next_attempt_at);
+        CREATE INDEX idx_notifications_telegram_retry
+            ON notifications(telegram_sent_at, telegram_attempts, telegram_next_attempt_at);
+        CREATE INDEX idx_push_deliveries_retry
+            ON push_deliveries(sent_at, attempts, next_attempt_at);
+        """,
+    ),
 )
 
 
