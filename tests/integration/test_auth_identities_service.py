@@ -23,7 +23,7 @@ def service(tmp_path):
 
 
 def _legacy_scrypt_hash(password: str) -> str:
-    salt = b"service-legacy123"
+    salt = b"service-legacy12"
     digest = hashlib.scrypt(
         password.encode("utf-8"),
         salt=salt,
@@ -32,8 +32,9 @@ def _legacy_scrypt_hash(password: str) -> str:
         p=1,
         dklen=32,
     )
-    encode = lambda value: base64.urlsafe_b64encode(value).decode("ascii")
-    return "scrypt$16384$8$1$" + encode(salt) + "$" + encode(digest)
+    salt_text = base64.urlsafe_b64encode(salt).decode("ascii")
+    digest_text = base64.urlsafe_b64encode(digest).decode("ascii")
+    return "scrypt$16384$8$1$" + salt_text + "$" + digest_text
 
 
 def test_email_registration_normalizes_email_and_hashes_password(service) -> None:
