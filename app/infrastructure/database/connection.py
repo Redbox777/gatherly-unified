@@ -563,6 +563,151 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON push_deliveries(sent_at, attempts, next_attempt_at);
         """,
     ),
+
+    (
+        24,
+        """
+        CREATE TABLE event_sync_state (
+            event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+            revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+            updated_at TEXT NOT NULL
+        );
+
+        INSERT INTO event_sync_state(event_id, revision, updated_at)
+        SELECT id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM events;
+
+        CREATE TABLE offline_sync_idempotency (
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            operation_id TEXT NOT NULL CHECK (length(trim(operation_id)) BETWEEN 1 AND 80),
+            event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            payload_hash TEXT NOT NULL CHECK (length(payload_hash) = 64),
+            response_status INTEGER NOT NULL CHECK (response_status BETWEEN 100 AND 599),
+            response_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY(user_id, operation_id)
+        );
+        CREATE INDEX idx_offline_sync_idempotency_created
+            ON offline_sync_idempotency(created_at);
+
+        CREATE TRIGGER event_sync_state_after_event_insert
+        AFTER INSERT ON events
+        BEGIN
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            VALUES (NEW.id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+        END;
+
+        CREATE TRIGGER event_sync_state_after_event_update
+        AFTER UPDATE OF owner_id, title, starts_at ON events
+        BEGIN
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            VALUES (NEW.id, 2, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+        END;
+
+        CREATE TRIGGER event_sync_state_after_participant_insert
+        AFTER INSERT ON event_participants
+        BEGIN
+            UPDATE event_sync_state
+            SET revision = revision + 1,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE event_id = NEW.event_id;
+        END;
+        CREATE TRIGGER event_sync_state_after_participant_update
+        AFTER UPDATE OF display_name, linked_user_id ON event_participants
+        BEGIN
+            UPDATE event_sync_state
+            SET revision = revision + 1,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE event_id = NEW.event_id;
+        END;
+        CREATE TRIGGER event_sync_state_after_participant_delete
+        AFTER DELETE ON event_participants
+        BEGIN
+            UPDATE event_sync_state
+            SET revision = revision + 1,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE event_id = OLD.event_id;
+        END;
+
+        CREATE TRIGGER event_sync_state_after_note_insert
+        AFTER INSERT ON event_notes
+        BEGIN
+            UPDATE event_sync_state
+            SET revision = revision + 1,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE event_id = NEW.event_id;
+        END;
+        CREATE TRIGGER event_sync_state_after_note_update
+        AFTER UPDATE OF content, visibility ON event_notes
+        BEGIN
+            UPDATE event_sync_state
+            SET revision = revision + 1,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE event_id = NEW.event_id;
+        END;
+        CREATE TRIGGER event_sync_state_after_note_delete
+        AFTER DELETE ON event_notes
+        BEGIN
+            UPDATE event_sync_state
+            SET revision = revision + 1,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE event_id = OLD.event_id;
+        END;
+
+        CREATE TRIGGER event_sync_state_after_task_insert
+        AFTER INSERT ON event_tasks
+        BEGIN
+            UPDATE event_sync_state
+            SET revision = revision + 1,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE event_id = NEW.event_id;
+        END;
+        CREATE TRIGGER event_sync_state_after_task_update
+        AFTER UPDATE OF title, description, due_at, assignee_participant_id, completed
+        ON event_tasks
+        BEGIN
+            UPDATE event_sync_state
+            SET revision = revision + 1,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE event_id = NEW.event_id;
+        END;
+        CREATE TRIGGER event_sync_state_after_task_delete
+        AFTER DELETE ON event_tasks
+        BEGIN
+            UPDATE event_sync_state
+            SET revision = revision + 1,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE event_id = OLD.event_id;
+        END;
+
+        CREATE TRIGGER event_sync_state_after_venue_insert
+        AFTER INSERT ON event_venues
+        BEGIN
+            UPDATE event_sync_state
+            SET revision = revision + 1,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE event_id = NEW.event_id;
+        END;
+        CREATE TRIGGER event_sync_state_after_venue_update
+        AFTER UPDATE OF venue_name, address, latitude, longitude ON event_venues
+        BEGIN
+            UPDATE event_sync_state
+            SET revision = revision + 1,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE event_id = NEW.event_id;
+        END;
+        CREATE TRIGGER event_sync_state_after_venue_delete
+        AFTER DELETE ON event_venues
+        BEGIN
+            UPDATE event_sync_state
+            SET revision = revision + 1,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE event_id = OLD.event_id;
+        END;
+        """,
+    ),
 )
 
 
