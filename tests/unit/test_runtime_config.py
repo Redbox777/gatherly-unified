@@ -19,6 +19,9 @@ def production_settings() -> dict[str, str]:
         "EMAIL_VERIFICATION_URL": "https://gatherly.example/auth/verify-email",
         "PASSWORD_RESET_URL": "https://gatherly.example/reset-password",
         "PARTICIPANT_INVITATION_URL": "https://gatherly.example/accept-invitation",
+        "GATHERLY_ERASURE_LEDGER_KEY": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "GATHERLY_ERASURE_LEDGER_PATH": "/var/lib/gatherly/erasure-ledger",
+        "GATHERLY_ERASURE_LEDGER_REMOTE": "s3:gatherly-erasure/production",
     }
 
 
@@ -115,6 +118,23 @@ def test_production_rejects_local_mail_server_and_sender() -> None:
     with pytest.raises(ValueError, match="SMTP_SENDER"):
         validate_runtime_configuration(settings)
 
+
+
+def test_production_requires_external_erasure_ledger_settings() -> None:
+    settings = production_settings()
+    settings.pop("GATHERLY_ERASURE_LEDGER_REMOTE")
+    with pytest.raises(ValueError, match="GATHERLY_ERASURE_LEDGER_REMOTE"):
+        validate_runtime_configuration(settings)
+
+    settings = production_settings()
+    settings["GATHERLY_ERASURE_LEDGER_KEY"] = "not-a-key"
+    with pytest.raises(ValueError, match="GATHERLY_ERASURE_LEDGER_KEY"):
+        validate_runtime_configuration(settings)
+
+    settings = production_settings()
+    settings["GATHERLY_ERASURE_LEDGER_KEY"] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    with pytest.raises(ValueError, match="GATHERLY_ERASURE_LEDGER_KEY"):
+        validate_runtime_configuration(settings)
 
 def test_complete_production_configuration_is_accepted() -> None:
     validate_runtime_configuration(production_settings())
