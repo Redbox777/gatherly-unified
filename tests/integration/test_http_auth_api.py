@@ -1745,11 +1745,11 @@ def test_participant_creation_succeeds_when_secondary_notification_fails(
         try:
             connection.execute(
                 "INSERT INTO users(id, created_at) VALUES (?, ?)",
-                ("linked-user", "2026-11-15T10:00:00Z"),
+                ("00000000-0000-0000-0000-000000000099", "2026-11-15T10:00:00Z"),
             )
             connection.execute(
                 "UPDATE event_participants SET linked_user_id = ? WHERE id = ?",
-                ("linked-user", existing.json()["id"]),
+                ("00000000-0000-0000-0000-000000000099", existing.json()["id"]),
             )
             connection.commit()
         finally:
