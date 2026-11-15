@@ -107,6 +107,25 @@ class AuthIdentitiesRepository:
         ).fetchone()
         return self._identity_from_row(row) if row is not None else None
 
+    def upgrade_password_hash(
+        self,
+        *,
+        user_id: str,
+        current_password_hash: str,
+        new_password_hash: str,
+    ) -> bool:
+        """Upgrade a verified password hash only if the stored value is unchanged."""
+        if not current_password_hash.strip() or not new_password_hash.strip():
+            raise ValueError("Password hashes must not be blank")
+        with transaction(self._connection):
+            cursor = self._connection.execute(
+                """UPDATE auth_identities SET password_hash = ?
+                   WHERE user_id = ? AND provider = 'email'
+                     AND verified_at IS NOT NULL AND password_hash = ?""",
+                (new_password_hash, user_id, current_password_hash),
+            )
+        return cursor.rowcount == 1
+
     def update_password_and_revoke_sessions(
         self,
         *,
