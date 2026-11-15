@@ -24,6 +24,7 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     with TestClient(app) as client:
         stylesheet = client.get("/styles.css")
         script = client.get("/app.js")
+        account_linking = client.get("/account-linking-ui.js")
         notifications = client.get("/notifications-ui.js")
         finance = client.get("/finance-ui.js")
         mark = client.get("/magpie.svg")
@@ -37,6 +38,9 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     assert "grid-template-columns:1fr" in stylesheet.text
     assert ".finance-panel" in stylesheet.text
     assert script.status_code == 200
+    assert account_linking.status_code == 200
+    assert "GatherlyAccountLink" in account_linking.text
+    assert 'id="account-settings-open"' in response.text
     assert notifications.status_code == 200
     assert finance.status_code == 200
     assert "GatherlyFinanceUI" in finance.text
