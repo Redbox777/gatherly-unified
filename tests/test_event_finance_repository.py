@@ -192,3 +192,51 @@ def test_payer_and_settlement_names_survive_participant_deletion(finance) -> Non
     assert stored_settlements is not None
     assert stored_settlements[0]["to_participant_id"] is None
     assert stored_settlements[0]["to_participant_name"] == "Boris"
+
+
+def test_participant_removal_preserves_allocation_snapshot_and_settlement_history(finance) -> None:
+    connection, expenses, splits, repository = finance
+    expense = add_expense(finance, payer="b")
+    shares = calculate_split(
+        Money(3000, "EUR"), SplitMode.EQUAL,
+        [SplitInput("a"), SplitInput("b"), SplitInput("c")],
+    )
+    splits.replace_for_owner(
+        event_id="event-1", expense_id=expense["id"], owner_id="owner",
+        mode=SplitMode.EQUAL, shares=shares,
+    )
+    repository.create_settlement_for_owner(
+        event_id="event-1", owner_id="owner",
+        from_participant_id="a", to_participant_id="b",
+        amount_minor_units=500, currency="EUR",
+        settled_at=datetime.now(UTC), note="Historical payment", now=datetime.now(UTC),
+    )
+
+    connection.execute("DELETE FROM event_participants WHERE id = ?", ("b",))
+    connection.commit()
+
+    allocation = connection.execute(
+        """SELECT participant_id, participant_name, amount_minor_units
+           FROM event_expense_allocations
+           WHERE expense_id = ? AND participant_name = 'Boris'""",
+        (expense["id"],),
+    ).fetchone()
+    assert allocation is not None
+    assert allocation["participant_id"] is None
+    assert allocation["amount_minor_units"] == 1000
+
+    stored_expense = expenses.get_for_owner(
+        expense_id=expense["id"], event_id="event-1", owner_id="owner"
+    )
+    assert stored_expense is not None
+    assert stored_expense["paid_by_participant_id"] is None
+    assert stored_expense["paid_by_name"] == "Boris"
+
+    settlements = repository.list_settlements_for_owner(
+        event_id="event-1", owner_id="owner"
+    )
+    assert settlements is not None
+    assert len(settlements) == 1
+    assert settlements[0]["to_participant_id"] is None
+    assert settlements[0]["to_participant_name"] == "Boris"
+    assert settlements[0]["note"] == "Historical payment"
