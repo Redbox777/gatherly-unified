@@ -29,6 +29,9 @@ from app.infrastructure.database.participant_invitations_repository import (
 )
 from app.infrastructure.database.participants_repository import ParticipantsRepository
 from app.infrastructure.database.privacy_repository import PrivacyRepository
+from app.infrastructure.database.push_subscriptions_repository import (
+    PushSubscriptionsRepository,
+)
 from app.infrastructure.database.smtp_rate_limits_repository import SmtpRateLimitsRepository
 from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
 from app.interfaces.web.runtime_config import SmtpRateLimitSettings
@@ -92,6 +95,7 @@ class Dependencies:
         self.event_expense_splits = EventExpenseSplitsRepository(connection)
         self.event_finance = EventFinanceRepository(connection)
         self.privacy = PrivacyRepository(connection)
+        self.push_subscriptions = PushSubscriptionsRepository(connection)
         self.reset_requests = PasswordResetRequestService(
             identities=self.identities,
             resets=self.resets,
