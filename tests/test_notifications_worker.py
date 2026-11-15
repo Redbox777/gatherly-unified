@@ -374,7 +374,11 @@ def test_worker_sends_push_messages_when_vapid_configuration_is_present(
     assert FakeWebPushSender.sent == [
         (
             "https://push.example.test/send/device",
-            {"title": "Gatherly", "body": "У вас новое уведомление. Откройте приложение.", "url": "/"},
+            {
+                "title": "Gatherly",
+                "body": "У вас новое уведомление. Откройте приложение.",
+                "url": "/",
+            },
         )
     ]
     assert FakePushSubscriptionsRepository.push_sent_ids == ["push-delivery-1"]
