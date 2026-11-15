@@ -43,7 +43,7 @@
         return { eventId, kind: "task.update", payload: { ...body, task_id: resourceId } };
       }
       if (method === "PATCH" && resourceId && parsed.pathname.endsWith("/completion")) {
-        return { eventId, kind: "task.complete", payload: { task_id: resourceId, ...body } };
+        return { eventId, kind: "task.complete", payload: { ...body, task_id: resourceId } };
       }
       if (method === "DELETE" && resourceId) return { eventId, kind: "task.delete", payload: { task_id: resourceId } };
     }
