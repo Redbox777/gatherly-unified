@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.domain.auth_tokens import hash_token
 from app.infrastructure.database.connection import connect, migrate
 from app.infrastructure.database.offline_sync_repository import (
     OfflineSyncError,
@@ -21,6 +22,12 @@ def database(tmp_path):
     now = datetime.now(UTC).isoformat()
     connection.execute("INSERT INTO users(id, created_at) VALUES ('owner', ?)", (now,))
     connection.execute("INSERT INTO users(id, created_at) VALUES ('guest', ?)", (now,))
+    for user_id, raw_token in (("owner", "owner-session-token"), ("guest", "guest-session-token")):
+        connection.execute(
+            "INSERT INTO auth_sessions(id, user_id, token_hash, created_at, expires_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (str(uuid4()), user_id, hash_token(raw_token), now, "2027-11-15T00:00:00Z"),
+        )
     connection.execute(
         "INSERT INTO events(id, owner_id, title, created_at) VALUES (?, ?, ?, ?)",
         ("11111111-1111-4111-8111-111111111111", "owner", "Planning", now),
@@ -46,7 +53,7 @@ def _command(
     payload: dict[str, object] | None = None,
 ):
     return repository.apply(
-        authenticated_user_id=user,
+        session_token=user + "-session-token",
         operation_id=operation_id or str(uuid4()),
         event_id="11111111-1111-4111-8111-111111111111",
         base_revision=revision,
@@ -230,6 +237,11 @@ def test_concurrent_duplicate_requests_apply_once(tmp_path) -> None:
     migrate(setup)
     now = datetime.now(UTC).isoformat()
     setup.execute("INSERT INTO users(id, created_at) VALUES ('owner', ?)", (now,))
+    setup.execute(
+        "INSERT INTO auth_sessions(id, user_id, token_hash, created_at, expires_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (str(uuid4()), "owner", hash_token("owner-session-token"), now, "2027-11-15T00:00:00Z"),
+    )
     setup.execute(
         "INSERT INTO events(id, owner_id, title, created_at) VALUES (?, ?, ?, ?)",
         ("11111111-1111-4111-8111-111111111111", "owner", "Planning", now),
