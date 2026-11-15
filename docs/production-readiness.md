@@ -15,6 +15,8 @@ This checklist separates repository-level implementation from deployment and ope
 - [ ] On the deployed HTTPS origin, verify Email-to-Telegram and Telegram-to-Email account merges with test accounts, including provider-collision rejection, data transfer, and old-session revocation.
 - [ ] If Web Push is enabled, configure the VAPID public/private keys, VAPID subject, and separate subscription-encryption key in both web and worker environments. Keep private keys in the secret manager and verify the push provider/transfer review.
 - [x] PWA manifest, root service worker, static shell cache, and offline fallback are implemented; private API data is not cached.
+- [x] Notification worker uses an expiring SQLite lease to prevent overlapping worker processes; outbound delivery retries are capped at five attempts with bounded backoff.
+- [ ] Verify the scheduled notification worker runs at the intended cadence against the same persistent local SQLite database, and alert on repeated worker failures or skipped runs.
 - [ ] Verify PWA installability and Web Push delivery on the actual HTTPS domain and supported target browsers/devices.
 - [ ] Account linking merges two existing accounts only when their provider sets do not overlap. It requires recent destination authentication and independent source-account proof; it does not attach a new provider identity or support unlinking.
 
@@ -32,6 +34,7 @@ This checklist separates repository-level implementation from deployment and ope
 - [ ] Schedule online backups using the documented backup command; store copies off-host and encrypt them at rest.
 - [ ] Define access controls and retention for backups.
 - [ ] Perform a restore drill in a separate path/environment, run integrity checks, start the app, and verify `/health/ready`.
+- [ ] Confirm the independent erasure ledger is available from its off-host remote during the drill, including a deleted account that exists in the selected older backup.
 - [ ] Keep migrations append-only and test every new migration from the immediately previous schema.
 - [ ] Reassess PostgreSQL and shared/network rate limiting before horizontal scaling or sustained concurrent writes.
 
