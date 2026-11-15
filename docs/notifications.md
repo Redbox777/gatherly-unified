@@ -71,6 +71,8 @@ adapter rather than duplicating notification generation logic.
 
 ## Current scope
 
+Web Push is now available as a separate opt-in channel for supported browsers; its VAPID configuration, encrypted subscription storage, and delivery behavior are documented in [web-push.md](web-push.md).
+
 The inbox API is authenticated and user-scoped. Event owners configure reminders.
 Event changes and newly added participant records notify already-linked members
 who have that notification type enabled. Guest participants without an account

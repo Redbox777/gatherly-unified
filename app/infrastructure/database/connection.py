@@ -495,6 +495,45 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
         ADD COLUMN telegram_consent_version TEXT NULL;
         """,
     ),
+    (
+        21,
+        """
+        ALTER TABLE notification_preferences
+        ADD COLUMN push_enabled INTEGER NOT NULL DEFAULT 0
+            CHECK (push_enabled IN (0, 1));
+        ALTER TABLE notification_preferences
+        ADD COLUMN push_consent_at TEXT NULL;
+        ALTER TABLE notification_preferences
+        ADD COLUMN push_consent_version TEXT NULL;
+
+        CREATE TABLE push_subscriptions (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            endpoint_hash TEXT NOT NULL UNIQUE,
+            subscription_ciphertext BLOB NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            revoked_at TEXT NULL
+        );
+
+        CREATE TABLE push_deliveries (
+            id TEXT PRIMARY KEY,
+            notification_id TEXT NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+            subscription_id TEXT NOT NULL REFERENCES push_subscriptions(id) ON DELETE CASCADE,
+            attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+            sent_at TEXT NULL,
+            last_error TEXT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(notification_id, subscription_id)
+        );
+
+        CREATE INDEX idx_push_subscriptions_user_active
+            ON push_subscriptions(user_id, revoked_at);
+        CREATE INDEX idx_push_deliveries_pending
+            ON push_deliveries(sent_at, attempts, updated_at);
+        """,
+    ),
 )
 
 
