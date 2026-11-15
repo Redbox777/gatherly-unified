@@ -23,6 +23,9 @@
     return item.kind;
   };
   const setStatus = message => { if (status) status.textContent = message || ""; };
+  const recordSyncState = state => {
+    try { window.GatherlyDiagnostics?.recordSyncState(state); } catch (_) {}
+  };
   const verifySession = async expectedUserId => {
     try {
       const response = await fetch("/auth/me", { credentials: "same-origin", headers: { "Accept": "application/json" } });
@@ -128,6 +131,7 @@
       let pauseReason = null;
       for (let attempt = 0; attempt < 3 && !completed; attempt += 1) {
         await store.updateOutboxState(item.operationId, "sending");
+        recordSyncState("sending");
         await render();
         let response;
         try {
@@ -164,6 +168,7 @@
           }
           await store.setEventRevision(eventId, body.revision);
           await store.removeOutboxItem(item.operationId);
+          recordSyncState("done");
           completed = true;
           setStatus("Изменение встречи синхронизировано.");
           continue;
@@ -184,6 +189,7 @@
             error: "На сервере уже есть более новая версия.",
             serverRevision: body.current_revision
           });
+          recordSyncState("conflict");
           setStatus("Есть конфликт версии. Последующие изменения этой встречи приостановлены.");
           pauseReason = "conflict";
           break;
@@ -219,6 +225,7 @@
           if (typeof body.detail === "string") detail = body.detail;
         } catch (_) {}
         await store.updateOutboxState(item.operationId, "blocked", { error: detail });
+        recordSyncState("blocked");
         setStatus("Одно изменение заблокировано. Проверьте очередь перед продолжением.");
         pauseReason = "blocked";
         break;
