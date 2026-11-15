@@ -323,7 +323,10 @@ def test_schedule_change_preserves_notification_with_already_sent_push(tmp_path)
                 id, user_id, endpoint_hash, subscription_ciphertext,
                 created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?)""",
-            ("subscription-1", "owner", "endpoint-hash", b"encrypted", now.isoformat(), now.isoformat()),
+            (
+                "subscription-1", "owner", "endpoint-hash", b"encrypted",
+                now.isoformat(), now.isoformat(),
+            ),
         )
         connection.execute(
             """INSERT INTO push_deliveries(
