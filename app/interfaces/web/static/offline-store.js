@@ -3,6 +3,7 @@
   const DB_NAME = "gatherly-private-cache";
   const DB_VERSION = 1;
   const OPT_IN_KEY = "gatherly.offline-storage.enabled";
+  const LAST_USER_KEY = "gatherly.offline-storage.last-user";
   let activeUserId = null;
   let dbPromise = null;
 
@@ -63,14 +64,21 @@
     },
     async setUser(userId) {
       const nextUserId = typeof userId === "string" && userId.trim() ? userId : null;
-      if (activeUserId && activeUserId !== nextUserId) await clearUser(activeUserId);
+      let previousUserId = activeUserId;
+      try { previousUserId = previousUserId || window.localStorage.getItem(LAST_USER_KEY); } catch (_) {}
+      if (previousUserId && previousUserId !== nextUserId) await clearUser(previousUserId);
       activeUserId = nextUserId;
+      try {
+        if (nextUserId) window.localStorage.setItem(LAST_USER_KEY, nextUserId);
+        else window.localStorage.removeItem(LAST_USER_KEY);
+      } catch (_) {}
       return activeUserId;
     },
     getUser() { return activeUserId; },
     async clearCurrentUser() {
       const previous = activeUserId;
       activeUserId = null;
+      try { window.localStorage.removeItem(LAST_USER_KEY); } catch (_) {}
       if (previous) await clearUser(previous);
     },
     async put(key, value) {

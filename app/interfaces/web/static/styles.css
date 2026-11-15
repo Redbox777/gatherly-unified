@@ -387,8 +387,3 @@ button:disabled{opacity:.55;cursor:wait}
 .pwa-install-button:hover{background:var(--mint)}
 .pwa-install-button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 @media(max-width:760px){.connection-status{padding:9px 18px;font-size:11px}.pwa-install-button{padding:7px 8px;font-size:10px}}
-
-.offline-storage-settings{margin-top:14px;background:#f6fbf9}
-.offline-storage-toggle{display:flex;align-items:flex-start;gap:9px;color:#31575b;font-size:12px;line-height:1.5}
-.offline-storage-toggle input{margin:2px 0 0;accent-color:var(--teal)}
-.offline-storage-settings>p{margin:0;color:#71888b;font-size:11px;line-height:1.55}

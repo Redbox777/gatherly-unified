@@ -77,6 +77,9 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     assert "clearCurrentUser" in offline_store.text
     assert "setEnabled" in offline_store.text
     assert "gatherly-private-cache" in offline_store.text
+    assert "gatherly.offline-storage.last-user" in offline_store.text
+    assert "offline-store.js" in service_worker.text
+    assert homepage.text.index('src="./offline-store.js"') < homepage.text.index('src="./pwa.js"')
     assert 'id="offline-storage-enabled"' in homepage.text
     assert "user_id" in script.text
     assert "clearCurrentUser" in script.text
