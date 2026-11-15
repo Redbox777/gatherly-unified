@@ -27,6 +27,7 @@ jobs:
       - run: node --check app/interfaces/web/static/app.js
       - run: node --check app/interfaces/web/static/auth.js
       - run: node --check app/interfaces/web/static/diagnostics.js
+      - run: node --test tests/browser/diagnostics.test.cjs
       - run: node --check app/interfaces/web/static/offline-store.js
       - run: node --check app/interfaces/web/static/offline-sync.js
       - run: node --check app/interfaces/web/static/pwa.js
