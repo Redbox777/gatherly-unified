@@ -102,13 +102,18 @@ class PrivacyRepository:
             """SELECT id, participant_id, target_email, created_by_owner_id,
                       created_at, expires_at, accepted_at, revoked_at
                FROM participant_invitations
-               WHERE created_by_owner_id = ? OR participant_id IN (
-                   SELECT participant.id FROM event_participants AS participant
-                   JOIN events ON events.id = participant.event_id
-                   WHERE events.owner_id = ?
-               )
+               WHERE created_by_owner_id = ?
+                  OR lower(target_email) IN (
+                      SELECT lower(provider_subject) FROM auth_identities
+                      WHERE user_id = ? AND provider = 'email'
+                  )
+                  OR participant_id IN (
+                      SELECT participant.id FROM event_participants AS participant
+                      JOIN events ON events.id = participant.event_id
+                      WHERE events.owner_id = ?
+                  )
                ORDER BY created_at, id""",
-            (user_id, user_id),
+            (user_id, user_id, user_id),
         )
         notifications = self._rows(
             """SELECT id, event_id, kind, title, body, created_at, read_at,
@@ -165,18 +170,75 @@ class PrivacyRepository:
             ).fetchone()
             if user is None:
                 return False
+            email_addresses = [
+                str(row["provider_subject"])
+                for row in self._connection.execute(
+                    """SELECT provider_subject FROM auth_identities
+                       WHERE user_id = ? AND provider = 'email'""",
+                    (user_id,),
+                ).fetchall()
+            ]
             self._connection.execute(
                 "DELETE FROM participant_invitations WHERE created_by_owner_id = ?",
                 (user_id,),
             )
+            for email in email_addresses:
+                self._connection.execute(
+                    "DELETE FROM participant_invitations WHERE lower(target_email) = lower(?)",
+                    (email,),
+                )
             self._connection.execute(
                 "DELETE FROM event_reminder_preferences WHERE owner_id = ?",
                 (user_id,),
             )
+            owned_event_ids = {
+                str(row["id"])
+                for row in self._connection.execute(
+                    "SELECT id FROM events WHERE owner_id = ?", (user_id,)
+                ).fetchall()
+            }
+            linked_participants = self._connection.execute(
+                """SELECT id FROM event_participants
+                   WHERE linked_user_id = ? AND event_id NOT IN (
+                       SELECT id FROM events WHERE owner_id = ?
+                   )""",
+                (user_id, user_id),
+            ).fetchall()
+            for participant in linked_participants:
+                participant_id = str(participant["id"])
+                anonymized_name = f"Former member {participant_id[:8]}"
+                self._connection.execute(
+                    """UPDATE event_participants
+                       SET display_name = ?, linked_user_id = NULL WHERE id = ?""",
+                    (anonymized_name, participant_id),
+                )
+                self._connection.execute(
+                    """UPDATE event_expense_allocations
+                       SET participant_name = ? WHERE participant_id = ?""",
+                    (anonymized_name, participant_id),
+                )
+                self._connection.execute(
+                    """UPDATE event_expenses
+                       SET paid_by_participant_name = ?
+                       WHERE paid_by_participant_id = ?""",
+                    (anonymized_name, participant_id),
+                )
+                self._connection.execute(
+                    """UPDATE event_settlements
+                       SET from_participant_name = ?
+                       WHERE from_participant_id = ?""",
+                    (anonymized_name, participant_id),
+                )
+                self._connection.execute(
+                    """UPDATE event_settlements
+                       SET to_participant_name = ?
+                       WHERE to_participant_id = ?""",
+                    (anonymized_name, participant_id),
+                )
             self._connection.execute("DELETE FROM events WHERE owner_id = ?", (user_id,))
             # Foreign keys cascade identities, sessions, tokens, notifications,
-            # preferences, and authored notes. Linked participant records in
-            # events owned by other people are retained as guest records.
+            # preferences, and authored notes. Shared event finance records are
+            # retained under a non-identifying participant label.
             cursor = self._connection.execute("DELETE FROM users WHERE id = ?", (user_id,))
             return cursor.rowcount == 1
 
