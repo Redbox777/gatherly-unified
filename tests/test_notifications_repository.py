@@ -197,3 +197,46 @@ def test_telegram_notifications_require_verified_identity_and_explicit_opt_in(
         assert revoked_consent["telegram_consent_version"] is None
     finally:
         connection.close()
+
+
+
+def test_reminder_schedule_is_loaded_after_write_transaction_begins(
+    tmp_path, monkeypatch
+) -> None:
+    connection = connect(tmp_path / "reminder-transaction.sqlite3")
+    try:
+        migrate(connection)
+        now = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
+        connection.execute(
+            "INSERT INTO users(id, created_at) VALUES (?, ?)",
+            ("owner", now.isoformat()),
+        )
+        connection.execute(
+            "INSERT INTO events(id, owner_id, title, starts_at, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                "event-1",
+                "owner",
+                "Planning",
+                (now + timedelta(minutes=45)).isoformat(),
+                now.isoformat(),
+            ),
+        )
+        connection.commit()
+        repository = NotificationsRepository(connection)
+        repository.set_event_reminders(
+            event_id="event-1", owner_id="owner", offsets=[60], now=now
+        )
+        original_loader = repository._load_reminder_rows
+        transaction_states = []
+
+        def tracked_loader():
+            transaction_states.append(connection.in_transaction)
+            return original_loader()
+
+        monkeypatch.setattr(repository, "_load_reminder_rows", tracked_loader)
+
+        assert repository.materialize_due_reminders(now=now) == 1
+        assert transaction_states == [True]
+    finally:
+        connection.close()
