@@ -5,6 +5,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const values = new Map();
+const diagnosticEvents = [];
+global.GatherlyDiagnostics = { recordApiEvent(event) { diagnosticEvents.push(event); } };
 global.window = globalThis;
 global.window.location = { origin: "https://gatherly.test", replace() {} };
 global.localStorage = {
@@ -56,6 +58,9 @@ test("API client caches the initial revision and queues supported writes without
   assert.equal(items[0].payload.content, "Queued while offline");
 
   assert.deepEqual(await api("/events/" + eventId + "/notes"), []);
+  assert.equal(diagnosticEvents.length, 2);
+  assert.ok(diagnosticEvents.every(event => event.network_error === true));
+  assert.ok(diagnosticEvents.every(event => event.route_category === undefined));
 });
 
 
