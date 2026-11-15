@@ -11,6 +11,7 @@ from app.infrastructure.database.push_subscriptions_repository import (
     decode_subscription_encryption_key,
 )
 from app.infrastructure.database.privacy_repository import PrivacyRepository
+from app.infrastructure.database.erasure_ledger import AccountErasureLedger
 
 
 NOW = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
@@ -249,7 +250,10 @@ def test_account_erasure_cascades_encrypted_push_subscriptions_and_deliveries(
         ) == 1
 
         assert PrivacyRepository(connection).delete_user_account(
-            user_id="push-user"
+            user_id="push-user",
+            erasure_ledger=AccountErasureLedger(
+                tmp_path / "erasure-ledger", b"e" * 32
+            ),
         )
         assert connection.execute(
             "SELECT COUNT(*) FROM push_subscriptions"
