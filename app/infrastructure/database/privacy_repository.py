@@ -123,7 +123,8 @@ class PrivacyRepository:
         )
         notification_preferences = self._rows(
             """SELECT email_enabled, event_updates_enabled,
-                      participant_added_enabled, reminders_enabled, updated_at
+                      participant_added_enabled, reminders_enabled, telegram_enabled,
+                      telegram_consent_at, telegram_consent_version, updated_at
                FROM notification_preferences WHERE user_id = ?""",
             (user_id,),
         )
