@@ -24,6 +24,7 @@ A modular backend foundation for Gatherly with shared application logic and web/
 - One-shot notification worker for scheduled email delivery, with shared SMTP quotas and bounded retries.
 - SQLite persistence, versioned migrations, and integration tests.
 - CI checks for linting, typing, and tests.
+- Authenticated account data export and confirmed account erasure with fresh-session checks.
 
 ## Email authentication links
 
@@ -123,5 +124,6 @@ Event notes support private entries and shared entries. Private notes are visibl
 - Consent-based diagnostic reports and privacy/retention boundaries: [bug reports and diagnostics](docs/bug-reports-and-diagnostics.md).
 - SQLite online backups, restore drills, health probes, and immutable migration policy: [database operations](docs/database-operations.md).
 - Production configuration and release gates: [production readiness checklist](docs/production-readiness.md).
+- Account export, erasure, retention, and legal review requirements: [privacy and data rights](docs/privacy-and-data-rights.md).
 
 Gatherly currently targets a single-host SQLite deployment. Do not run multiple application hosts against one SQLite file. Production launch still requires an exercised restore drill, correct public-origin/reverse-proxy configuration, a reviewed privacy notice and retention schedule, and verified repository branch protection.
