@@ -42,6 +42,20 @@ class NotificationPreferencesRequest(BaseModel):
     telegram_enabled: bool = False
 
 
+class PushSubscriptionKeysRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    p256dh: str = Field(min_length=1, max_length=256)
+    auth: str = Field(min_length=1, max_length=128)
+
+
+class PushSubscriptionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    endpoint: str = Field(min_length=1, max_length=2048)
+    keys: PushSubscriptionKeysRequest
+
+
 class EventReminderRequest(BaseModel):
     offsets_minutes: list[int] = Field(default_factory=list, max_length=3)
 
@@ -110,11 +124,6 @@ class AcceptParticipantInvitationRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=1024)
     new_password: str = Field(min_length=12, max_length=1024)
-
-
-class LinkEmailAccountRequest(BaseModel):
-    email: str = Field(min_length=3, max_length=254)
-    password: str = Field(min_length=1, max_length=1024)
 
 
 class TelegramLoginRequest(BaseModel):

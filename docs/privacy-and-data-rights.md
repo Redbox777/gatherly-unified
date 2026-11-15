@@ -11,7 +11,7 @@ GET /account/export
 Cookie: gatherly_session=...
 ```
 
-The export is returned as an attachment using the versioned format `gatherly-account-export-v1`. It includes account creation time, login identity metadata, session metadata, owned events and their event data, linked participant records, authored notes, invitations associated with the account, notifications, and notification/reminder preferences.
+The export is returned as an attachment using the versioned format `gatherly-account-export-v1`. It includes account creation time, login identity metadata, session metadata, owned events and their event data, linked participant records, authored notes, invitations associated with the account, notifications, and notification/reminder preferences including Telegram and Web Push consent metadata. Encrypted browser push endpoints and their encryption keys are excluded.
 
 Credential and bearer secrets are deliberately excluded: password hashes, session token hashes, email verification/reset token hashes, and participant invitation token hashes. Export access requires an active authenticated session. Responses inherit `Cache-Control: no-store`.
 

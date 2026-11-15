@@ -39,6 +39,8 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             "event_settlements",
             "bug_reports",
             "notification_preferences",
+            "push_subscriptions",
+            "push_deliveries",
         } <= tables
 
         token_columns = {
@@ -78,6 +80,9 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             "telegram_enabled",
             "telegram_consent_at",
             "telegram_consent_version",
+            "push_enabled",
+            "push_consent_at",
+            "push_consent_version",
         } <= preference_columns
         assert {"telegram_sent_at", "telegram_attempts", "telegram_last_error"} <= (
             notification_columns
@@ -87,7 +92,7 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             row["version"]
             for row in connection.execute("SELECT version FROM schema_migrations").fetchall()
         }
-        assert versions == set(range(1, 21))
+        assert versions == set(range(1, 22))
     finally:
         connection.close()
 

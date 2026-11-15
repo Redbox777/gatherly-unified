@@ -63,7 +63,7 @@ class NotificationsRepository:
     def get_preferences(self, *, user_id: str) -> dict[str, bool]:
         row = self._connection.execute(
             """SELECT email_enabled, event_updates_enabled,
-                      participant_added_enabled, reminders_enabled, telegram_enabled
+                      participant_added_enabled, reminders_enabled, telegram_enabled, push_enabled
                FROM notification_preferences WHERE user_id = ?""",
             (user_id,),
         ).fetchone()
@@ -74,6 +74,7 @@ class NotificationsRepository:
                 "participant_added_enabled": True,
                 "reminders_enabled": True,
                 "telegram_enabled": False,
+                "push_enabled": False,
             }
         return {
             "email_enabled": bool(row["email_enabled"]),
@@ -81,6 +82,7 @@ class NotificationsRepository:
             "participant_added_enabled": bool(row["participant_added_enabled"]),
             "reminders_enabled": bool(row["reminders_enabled"]),
             "telegram_enabled": bool(row["telegram_enabled"]),
+            "push_enabled": bool(row["push_enabled"]),
         }
 
     def set_preferences(
@@ -226,6 +228,37 @@ class NotificationsRepository:
             (limit,),
         ).fetchall()
         return [dict(row) for row in rows]
+
+    def set_push_enabled(
+        self, *, user_id: str, enabled: bool, now: datetime
+    ) -> None:
+        """Record explicit push opt-in/revocation and its policy version."""
+        timestamp = self._format(now)
+        with transaction(self._connection):
+            if enabled:
+                self._connection.execute(
+                    """INSERT INTO notification_preferences(
+                        user_id, email_enabled, event_updates_enabled,
+                        participant_added_enabled, reminders_enabled,
+                        telegram_enabled, telegram_consent_at,
+                        telegram_consent_version, updated_at,
+                        push_enabled, push_consent_at, push_consent_version
+                    ) VALUES (?, 1, 1, 1, 1, 0, NULL, NULL, ?, 1, ?, 'push-v1')
+                    ON CONFLICT(user_id) DO UPDATE SET
+                        push_enabled = 1,
+                        push_consent_at = excluded.push_consent_at,
+                        push_consent_version = excluded.push_consent_version,
+                        updated_at = excluded.updated_at""",
+                    (user_id, timestamp, timestamp),
+                )
+            else:
+                self._connection.execute(
+                    """UPDATE notification_preferences
+                       SET push_enabled = 0, push_consent_at = NULL,
+                           push_consent_version = NULL, updated_at = ?
+                       WHERE user_id = ?""",
+                    (timestamp, user_id),
+                )
 
     def has_telegram_identity(self, *, user_id: str) -> bool:
         """Return whether the account has a verified Telegram identity."""
