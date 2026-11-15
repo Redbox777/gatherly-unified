@@ -144,7 +144,6 @@ def test_account_deletion_erases_owned_data_and_revokes_cookie(
         connection.close()
 
 
-
 def test_account_deletion_fails_closed_when_off_host_ledger_is_unavailable(
     tmp_path, monkeypatch
 ) -> None:
