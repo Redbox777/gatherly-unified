@@ -213,7 +213,11 @@ def test_merge_preserves_destination_preferences_moves_invitations_and_revokes_s
             source.user_id, NOW.isoformat(), "2026-11-16T12:00:00+00:00",
         ),
     )
-    for session_id, user_id in (("target-session", target.user_id), ("source-session", source.user_id)):
+    sessions_to_create = (
+        ("target-session", target.user_id),
+        ("source-session", source.user_id),
+    )
+    for session_id, user_id in sessions_to_create:
         database.execute(
             """INSERT INTO auth_sessions(id, user_id, token_hash, created_at, expires_at)
                VALUES (?, ?, ?, ?, ?)""",
