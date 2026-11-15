@@ -237,6 +237,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         "/auth/verification/request",
         "/participant-invitations/accept",
         "/diagnostics/bug-reports",
+        "/account",
     }
 
     @app.middleware("http")
@@ -273,7 +274,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             return secured
 
         try:
-            if request.method == "POST" and request.url.path in rate_limit_paths:
+            if request.method in {"POST", "DELETE"} and request.url.path in rate_limit_paths:
                 requester = _requester_ip(request)
                 retry_after = await run_in_threadpool(
                     _consume_http_rate_limit,
@@ -690,6 +691,63 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         if user_id is None:
             raise HTTPException(status_code=401, detail="Authentication required")
         return {"user_id": user_id}
+
+    @app.get("/account/export")
+    def export_account_data(request: Request, deps: ServiceDependency) -> JSONResponse:
+        """Download a portable account-data export without credential secrets."""
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        exported = deps.privacy.export_user_data(user_id=user_id)
+        if exported is None:
+            raise HTTPException(status_code=404, detail="Account not found")
+        return JSONResponse(
+            content=exported,
+            headers={
+                "Content-Disposition": 'attachment; filename="gatherly-account-export.json"'
+            },
+        )
+
+    @app.delete("/account", status_code=status.HTTP_204_NO_CONTENT)
+    def delete_account(
+        request: Request,
+        response: Response,
+        deps: ServiceDependency,
+    ) -> Response:
+        """Erase the account after explicit confirmation and fresh authentication."""
+        token = request.cookies.get(SESSION_COOKIE, "")
+        now = datetime.now(UTC)
+        user_id = deps.authentication.resolve_session(raw_token=token, now=now)
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        if request.headers.get("x-account-deletion-confirmation") != "DELETE":
+            raise HTTPException(
+                status_code=400,
+                detail="Explicit account deletion confirmation is required",
+            )
+        if not deps.sessions.is_recently_authenticated(
+            raw_token=token,
+            now=now,
+            max_age_seconds=600,
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="Sign in again before deleting your account",
+            )
+        if not deps.privacy.delete_user_account(user_id=user_id):
+            raise HTTPException(status_code=404, detail="Account not found")
+        response.delete_cookie(
+            key=SESSION_COOKIE,
+            httponly=True,
+            secure=os.environ.get("COOKIE_SECURE", "true").casefold() == "true",
+            samesite="lax",
+            path=SESSION_COOKIE_PATH,
+        )
+        response.status_code = status.HTTP_204_NO_CONTENT
+        return response
 
     @app.post("/auth/password/change")
     def change_password(
