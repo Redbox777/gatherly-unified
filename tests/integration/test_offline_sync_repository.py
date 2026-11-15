@@ -224,7 +224,9 @@ def test_concurrent_duplicate_requests_apply_once(tmp_path) -> None:
     def submit():
         connection = connect(path)
         try:
-            return _command(OfflineSyncRepository(connection), operation_id=operation_id, revision=1)
+            return _command(
+                OfflineSyncRepository(connection), operation_id=operation_id, revision=1
+            )
         finally:
             connection.close()
 
