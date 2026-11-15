@@ -45,3 +45,15 @@ class BugReportsRepository:
                 ),
             )
         return report_id
+
+    def delete_older_than(self, *, created_before: datetime) -> int:
+        """Delete diagnostic reports strictly older than an aware UTC cutoff."""
+        if created_before.tzinfo is None or created_before.utcoffset() is None:
+            raise ValueError("created_before must be timezone-aware")
+        cutoff = created_before.astimezone(UTC).isoformat()
+        with transaction(self._connection):
+            cursor = self._connection.execute(
+                "DELETE FROM bug_reports WHERE created_at < ?",
+                (cutoff,),
+            )
+        return cursor.rowcount
