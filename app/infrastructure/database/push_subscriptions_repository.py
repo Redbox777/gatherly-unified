@@ -18,6 +18,12 @@ from app.infrastructure.database.connection import transaction
 
 _NONCE_BYTES = 12
 _MAX_ENDPOINT_LENGTH = 2048
+_ALLOWED_PUSH_HOST_SUFFIXES = (
+    "fcm.googleapis.com",
+    "push.services.mozilla.com",
+    "push.apple.com",
+    "notify.windows.com",
+)
 
 
 def decode_subscription_encryption_key(encoded: str) -> bytes:
@@ -74,8 +80,15 @@ class PushSubscriptionsRepository:
             or parsed.username is not None
             or parsed.password is not None
             or parsed.fragment
+            or (parsed.port is not None and parsed.port != 443)
         ):
             raise ValueError("Web Push endpoint must be a valid HTTPS URL")
+        host = parsed.hostname.lower().rstrip(".")
+        if not any(
+            host == suffix or host.endswith("." + suffix)
+            for suffix in _ALLOWED_PUSH_HOST_SUFFIXES
+        ):
+            raise ValueError("Web Push endpoint host is not an approved push service")
         _decode_browser_key(p256dh, expected_length=65, name="p256dh")
         _decode_browser_key(auth, expected_length=16, name="auth")
         endpoint_hash = hashlib.sha256(endpoint.encode("utf-8")).hexdigest()
