@@ -13,7 +13,10 @@ def repository(tmp_path):
     connection = connect(tmp_path / "expenses.sqlite3")
     migrate(connection)
     now = datetime.now(UTC).isoformat()
-    connection.execute("INSERT INTO users(id, created_at) VALUES (?, ?)", ("owner", now))
+    connection.executemany(
+        "INSERT INTO users(id, created_at) VALUES (?, ?)",
+        [("owner", now), ("other-owner", now)],
+    )
     connection.execute(
         "INSERT INTO events(id, owner_id, title, starts_at, created_at) VALUES (?, ?, ?, ?, ?)",
         ("event-1", "owner", "Dinner", None, now),
@@ -24,7 +27,12 @@ def repository(tmp_path):
     )
     connection.execute(
         "INSERT INTO events(id, owner_id, title, starts_at, created_at) VALUES (?, ?, ?, ?, ?)",
-        ("event-2", "owner", "Other event", None, now),
+        ("event-2", "other-owner", "Other event", None, now),
+    )
+    connection.execute(
+        "INSERT INTO event_participants(id, event_id, display_name, added_at) "
+        "VALUES (?, ?, ?, ?)",
+        ("participant-2", "event-2", "Jordan", now),
     )
     connection.commit()
     yield EventExpensesRepository(connection)
@@ -131,3 +139,59 @@ def test_deleting_event_cascades_to_expenses(repository):
     assert connection.execute(
         "SELECT 1 FROM event_expenses WHERE event_id = ?", ("event-1",)
     ).fetchone() is None
+
+
+
+def test_update_with_foreign_event_id_cannot_delete_another_owners_split(repository):
+    foreign_expense = _create(
+        repository,
+        event_id="event-2",
+        owner_id="other-owner",
+        paid_by_participant_id="participant-2",
+    )
+    assert foreign_expense is not None
+    expense_id = foreign_expense["id"]
+    connection = repository._connection
+    connection.execute(
+        "INSERT INTO event_expense_splits(expense_id, mode) VALUES (?, ?)",
+        (expense_id, "equal"),
+    )
+    connection.execute(
+        "INSERT INTO event_expense_allocations("
+        "id, expense_id, participant_id, participant_name, amount_minor_units, weight"
+        ") VALUES (?, ?, ?, ?, ?, ?)",
+        ("foreign-allocation", expense_id, "participant-2", "Jordan", 1234, None),
+    )
+    connection.commit()
+
+    result = repository.update(
+        expense_id=expense_id,
+        event_id="event-1",
+        owner_id="owner",
+        title="Tampered",
+        description="",
+        amount_minor_units=9999,
+        currency="EUR",
+        paid_by_participant_id="participant-1",
+        incurred_at=datetime.now(UTC),
+        now=datetime.now(UTC),
+    )
+
+    assert result is None
+    split = connection.execute(
+        "SELECT mode FROM event_expense_splits WHERE expense_id = ?",
+        (expense_id,),
+    ).fetchone()
+    allocation = connection.execute(
+        "SELECT participant_name, amount_minor_units "
+        "FROM event_expense_allocations WHERE expense_id = ?",
+        (expense_id,),
+    ).fetchone()
+    original = repository.get_for_owner(
+        expense_id=expense_id, event_id="event-2", owner_id="other-owner"
+    )
+    assert split["mode"] == "equal"
+    assert allocation["participant_name"] == "Jordan"
+    assert allocation["amount_minor_units"] == 1234
+    assert original is not None
+    assert original["title"] == "Dinner"
