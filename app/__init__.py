@@ -1,1 +1,0 @@
-"""Gatherly Unified application package."""

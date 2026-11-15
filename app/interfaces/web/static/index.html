@@ -12,6 +12,7 @@
   <title>Gatherly — встречи, люди, вместе</title>
   <link rel="stylesheet" href="./styles.css">
   <script src="./pwa.js" defer></script>
+  <script src="./offline-store.js" defer></script>
   <script src="./api-client.js" defer></script>
   <script src="./account-linking-ui.js" defer></script>
   <script src="./date-utils.js" defer></script>
@@ -295,6 +296,12 @@
       <div class="dialog-heading">
         <div><p class="eyebrow">БЕЗОПАСНОСТЬ</p><h2 id="account-link-heading">Связанные аккаунты</h2></div>
         <button class="dialog-close" id="account-link-close" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <div class="account-link-form offline-storage-settings">
+        <h3>Локальное хранение на этом устройстве</h3>
+        <label class="offline-storage-toggle" for="offline-storage-enabled"><input id="offline-storage-enabled" type="checkbox"> Сохранять выбранные данные встреч для просмотра без интернета</label>
+        <p>Копии будут храниться в браузере на этом устройстве и будут доступны только после входа в тот же аккаунт. Не включайте эту функцию на общедоступном или чужом устройстве. Локальные данные не зашифрованы отдельно от защиты устройства.</p>
+        <p class="participant-status" id="offline-storage-status" role="status" aria-live="polite"></p>
       </div>
       <p class="account-link-intro">Объедините два своих аккаунта Gatherly, чтобы встречи, заметки и другие данные находились в одном пространстве.</p>
       <div class="account-identities" id="account-identities" aria-live="polite"><p>Загружаем способы входа…</p></div>

@@ -32,6 +32,7 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
         manifest = client.get("/manifest.webmanifest")
         service_worker = client.get("/service-worker.js")
         pwa_script = client.get("/pwa.js")
+        offline_store = client.get("/offline-store.js")
         offline = client.get("/offline.html")
         pwa_icon = client.get("/icon.svg")
 
@@ -70,6 +71,15 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     assert "application/json" in service_worker.text
     assert 'addEventListener("push"' in service_worker.text
     assert 'addEventListener("notificationclick"' in service_worker.text
+    assert offline_store.status_code == 200
+    assert "indexedDB.open" in offline_store.text
+    assert 'keyPath: ["userId", "key"]' in offline_store.text
+    assert "clearCurrentUser" in offline_store.text
+    assert "setEnabled" in offline_store.text
+    assert "gatherly-private-cache" in offline_store.text
+    assert 'id="offline-storage-enabled"' in homepage.text
+    assert "user_id" in script.text
+    assert "clearCurrentUser" in script.text
     assert pwa_script.status_code == 200
     assert "serviceWorker.register" in pwa_script.text
     assert "beforeinstallprompt" in pwa_script.text
