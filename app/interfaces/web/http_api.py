@@ -1319,6 +1319,15 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     app.include_router(operations_router)
 
     static_directory = Path(__file__).resolve().parent / "static"
+
+    @app.get("/manifest.webmanifest")
+    def get_pwa_manifest() -> Response:
+        return Response(
+            content=(static_directory / "manifest.webmanifest").read_text(encoding="utf-8"),
+            media_type="application/manifest+json",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+
     app.mount(
         "/",
         StaticFiles(directory=static_directory, html=True),
