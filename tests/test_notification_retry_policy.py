@@ -73,7 +73,7 @@ def test_email_and_telegram_retries_wait_until_scheduled_time(tmp_path) -> None:
         assert len(repository.pending_telegram(now=now + timedelta(minutes=1))) == 1
 
         notification_id = repository.pending_email(now=now + timedelta(minutes=1))[0]["id"]
-        for attempt in range(2, 6):
+        for _attempt in range(2, 6):
             attempt_time = now + timedelta(minutes=1)
             repository.record_email_failure(
                 notification_id=notification_id,
