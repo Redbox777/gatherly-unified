@@ -74,7 +74,11 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             row["name"]
             for row in connection.execute("PRAGMA table_info(notifications)").fetchall()
         }
-        assert "telegram_enabled" in preference_columns
+        assert {
+            "telegram_enabled",
+            "telegram_consent_at",
+            "telegram_consent_version",
+        } <= preference_columns
         assert {"telegram_sent_at", "telegram_attempts", "telegram_last_error"} <= (
             notification_columns
         )
@@ -83,7 +87,7 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             row["version"]
             for row in connection.execute("SELECT version FROM schema_migrations").fetchall()
         }
-        assert versions == set(range(1, 20))
+        assert versions == set(range(1, 21))
     finally:
         connection.close()
 
