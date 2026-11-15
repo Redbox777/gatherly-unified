@@ -55,7 +55,7 @@ def test_push_subscription_requires_auth_and_can_be_enabled_and_revoked(
     assert public_key.json() == {"public_key": "public-vapid-key"}
 
     subscription = {
-        "endpoint": "https://push.example.test/send/private-endpoint",
+        "endpoint": "https://fcm.googleapis.com/send/private-endpoint",
         "keys": {"p256dh": P256DH, "auth": AUTH},
     }
     created = client.post("/push-subscriptions", json=subscription)
