@@ -268,7 +268,7 @@ def test_resend_invalidates_old_token_and_owner_can_revoke_new_invitation(
 
 
 def test_expired_invitation_cannot_be_accepted(tmp_path, monkeypatch) -> None:
-    from datetime import UTC, datetime, timedelta
+    from datetime import datetime, timedelta
 
     sender = FakeEmailSender()
     monkeypatch.setenv("COOKIE_SECURE", "false")
