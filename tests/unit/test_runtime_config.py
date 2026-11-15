@@ -119,7 +119,6 @@ def test_production_rejects_local_mail_server_and_sender() -> None:
         validate_runtime_configuration(settings)
 
 
-
 def test_production_requires_external_erasure_ledger_settings() -> None:
     settings = production_settings()
     settings.pop("GATHERLY_ERASURE_LEDGER_REMOTE")
