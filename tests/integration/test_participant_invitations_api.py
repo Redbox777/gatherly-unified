@@ -265,3 +265,78 @@ def test_resend_invalidates_old_token_and_owner_can_revoke_new_invitation(
         assert len(rows) == 2
         assert all(row["accepted_at"] is None for row in rows)
         assert all(row["revoked_at"] is not None for row in rows)
+
+
+def test_expired_invitation_cannot_be_accepted(tmp_path, monkeypatch) -> None:
+    from datetime import datetime, timedelta
+
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "participant-invitation-expired.sqlite3")
+
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
+        _register_and_sign_in(client, sender, "owner@example.test")
+        event = client.post("/events", json={"title": "Game night"}).json()
+        participant = client.post(
+            f"/events/{event['id']}/participants", json={"display_name": "Alice"}
+        ).json()
+        created = client.post(
+            f"/events/{event['id']}/participants/{participant['id']}/invitation",
+            json={"email": "invitee@example.test"},
+        )
+        assert created.status_code == 201
+        token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+
+        connection = connect(app.state.database_path)
+        try:
+            created_at = connection.execute(
+                "SELECT created_at FROM participant_invitations WHERE id = ?",
+                (created.json()["id"],),
+            ).fetchone()["created_at"]
+            expired_at = datetime.fromisoformat(created_at) + timedelta(microseconds=1)
+            connection.execute(
+                "UPDATE participant_invitations SET expires_at = ? WHERE id = ?",
+                (expired_at.isoformat(), created.json()["id"]),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        _register_and_sign_in(client, sender, "invitee@example.test")
+        rejected = client.post("/participant-invitations/accept", json={"token": token})
+        assert rejected.status_code == 400
+        assert _read_rows(
+            app, "SELECT accepted_at FROM participant_invitations WHERE id = ?",
+            (created.json()["id"],),
+        )[0]["accepted_at"] is None
+
+
+def test_removing_participant_invalidates_its_pending_invitation(
+    tmp_path, monkeypatch
+) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "participant-invitation-participant-delete.sqlite3")
+
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
+        _register_and_sign_in(client, sender, "owner@example.test")
+        event = client.post("/events", json={"title": "Game night"}).json()
+        participant = client.post(
+            f"/events/{event['id']}/participants", json={"display_name": "Alice"}
+        ).json()
+        created = client.post(
+            f"/events/{event['id']}/participants/{participant['id']}/invitation",
+            json={"email": "invitee@example.test"},
+        )
+        assert created.status_code == 201
+
+        removed = client.delete(
+            f"/events/{event['id']}/participants/{participant['id']}"
+        )
+        assert removed.status_code == 204
+        assert _read_rows(
+            app, "SELECT COUNT(*) FROM participant_invitations WHERE id = ?",
+            (created.json()["id"],),
+        )[0][0] == 0
