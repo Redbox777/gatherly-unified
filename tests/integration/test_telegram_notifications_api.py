@@ -43,7 +43,7 @@ def _client_with_identity(tmp_path, monkeypatch, *, provider: str):
 def test_telegram_preference_requires_linked_identity_and_exposes_bot_link(
     tmp_path, monkeypatch
 ) -> None:
-    client, _ = _client_with_identity(tmp_path, monkeypatch, provider="telegram")
+    client, database_path = _client_with_identity(tmp_path, monkeypatch, provider="telegram")
 
     preferences = client.get("/notification-preferences")
 
@@ -64,6 +64,18 @@ def test_telegram_preference_requires_linked_identity_and_exposes_bot_link(
     )
     assert updated.status_code == 200
     assert updated.json()["telegram_enabled"] is True
+    connection = connect(database_path)
+    try:
+        consent = connection.execute(
+            """SELECT telegram_enabled, telegram_consent_at,
+                      telegram_consent_version
+               FROM notification_preferences"""
+        ).fetchone()
+        assert consent["telegram_enabled"] == 1
+        assert consent["telegram_consent_at"] is not None
+        assert consent["telegram_consent_version"] == "telegram-v1"
+    finally:
+        connection.close()
 
 
 def test_telegram_preference_cannot_be_enabled_without_telegram_identity(
