@@ -276,7 +276,8 @@
       if (!isUuid(operationId)) throw new Error("Некорректный идентификатор операции.");
       const record = {
         userId, operationId, eventId: command.eventId, baseRevision: command.baseRevision,
-        kind, payload, state: "pending", attempts: 0, createdAt: Date.now(),
+        kind, payload, state: "pending", attempts: 0,
+        createdAt: Number.isFinite(command.createdAt) ? command.createdAt : Date.now(),
         updatedAt: Date.now(), lastError: null
       };
       const db = await openDatabase();
@@ -375,6 +376,32 @@
       const tx = db.transaction("outbox", "readwrite");
       tx.objectStore("outbox").delete([userId, operationId]);
       await transactionDone(tx);
+    },
+    async rebasePendingEvent(eventId, afterCreatedAt, startingRevision, skipOperationId) {
+      const userId = requireActive();
+      if (!isUuid(eventId) || !Number.isSafeInteger(startingRevision) || startingRevision < 1) return false;
+      const db = await openDatabase();
+      const tx = db.transaction("outbox", "readwrite");
+      const done = transactionDone(tx);
+      const store = tx.objectStore("outbox");
+      const request = store.index("by-user-event-created").getAll(
+        IDBKeyRange.bound([userId, eventId, afterCreatedAt], [userId, eventId, Number.MAX_SAFE_INTEGER], true, false)
+      );
+      request.onsuccess = () => {
+        const later = (request.result || [])
+          .filter(item => item.operationId !== skipOperationId && item.state === "pending")
+          .sort((a, b) => a.createdAt - b.createdAt);
+        let revision = startingRevision;
+        for (const item of later) {
+          item.baseRevision = revision;
+          item.updatedAt = Date.now();
+          delete item.retryAt;
+          store.put(item);
+          revision += 1;
+        }
+      };
+      await done;
+      return true;
     },
     async purgeOutbox() {
       const userId = requireActive();
