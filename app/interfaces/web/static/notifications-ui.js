@@ -84,7 +84,7 @@
         pushStatus.textContent = "Push включён для этого аккаунта.";
       } else if (!preferences.push_available) {
         pushStatus.textContent = "Push пока не настроен на сервере.";
-      } else if ("Notification" in window && Notification.permission === "denied") {
+      } else if ("Notification" in window && window.Notification.permission === "denied") {
         pushStatus.textContent = "Разрешение заблокировано в настройках браузера.";
       } else {
         pushStatus.textContent = "Уведомления можно включить отдельно для этого устройства.";
@@ -130,7 +130,7 @@
     button.disabled = true;
     status.textContent = "Запрашиваем разрешение браузера…";
     try {
-      const permission = await Notification.requestPermission();
+      const permission = await window.Notification.requestPermission();
       if (permission !== "granted") {
         status.textContent = "Разрешение на уведомления не выдано.";
         return;
