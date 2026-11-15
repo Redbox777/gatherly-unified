@@ -62,7 +62,7 @@ test("IndexedDB outbox is durable, account-scoped and protected from accidental 
   await store.setUser(userB);
   assert.equal((await store.listOutbox()).length, 0);
   await store.setUser(userA);
-  assert.equal((await store.listOutbox()).length, 2);
+  assert.equal((await store.listOutbox()).length, 3);
 
   assert.equal(await store.acquireLease(eventId, ownerOne), true);
   assert.equal(await store.acquireLease(eventId, ownerTwo), false);
@@ -77,9 +77,12 @@ test("IndexedDB outbox is durable, account-scoped and protected from accidental 
   assert.equal(recovered.attempts, 1);
 
   const next = (await store.listOutbox()).find(item => item.operationId === task.operationId);
+  const nextAfter = (await store.listOutbox()).find(item => item.operationId === datedTask.operationId);
   await store.rebasePendingEvent(eventId, first.createdAt, 12);
   const rebased = (await store.listOutbox()).find(item => item.operationId === next.operationId);
+  const rebasedAfter = (await store.listOutbox()).find(item => item.operationId === nextAfter.operationId);
   assert.equal(rebased.baseRevision, 12);
+  assert.equal(rebasedAfter.baseRevision, 13);
 
   await assert.rejects(store.setEnabled(false), /несинхронизированные изменения/);
   await store.setEnabled(false, { discardPending: true });
