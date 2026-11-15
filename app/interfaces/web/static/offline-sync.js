@@ -1,0 +1,276 @@
+(() => {
+  const store = window.GatherlyOfflineStore;
+  const panel = document.getElementById("offline-sync-panel");
+  const count = document.getElementById("offline-sync-count");
+  const status = document.getElementById("offline-sync-status");
+  const list = document.getElementById("offline-sync-list");
+  const syncButton = document.getElementById("offline-sync-now");
+  const ownerId = crypto.randomUUID();
+  let busy = false;
+
+  const stateLabel = state => ({
+    pending: "Ожидает отправки",
+    sending: "Отправляется…",
+    done: "Синхронизировано",
+    conflict: "Конфликт версии",
+    blocked: "Требует внимания"
+  })[state] || state;
+  const commandLabel = item => {
+    const p = item.payload || {};
+    if (item.kind.startsWith("note.")) return "Заметка: " + String(p.content || "удаление").slice(0, 72);
+    if (item.kind.startsWith("task.")) return "Задача: " + String(p.title || p.task_id || "изменение").slice(0, 72);
+    if (item.kind.startsWith("venue.")) return "Место: " + String(p.venue_name || "изменение места").slice(0, 72);
+    return item.kind;
+  };
+  const setStatus = message => { if (status) status.textContent = message || ""; };
+  const fetchRevision = async eventId => {
+    const response = await fetch("/events/" + encodeURIComponent(eventId) + "/sync-state", {
+      credentials: "same-origin", headers: { "Accept": "application/json" }
+    });
+    if (!response.ok) throw new Error(response.status === 401
+      ? "Войдите в тот же аккаунт, чтобы продолжить синхронизацию."
+      : "Не удалось получить актуальную версию встречи.");
+    const value = await response.json();
+    if (!Number.isSafeInteger(value.revision) || value.revision < 1) throw new Error("Сервер вернул некорректную версию встречи.");
+    await store.setEventRevision(eventId, value.revision);
+    return value.revision;
+  };
+  const render = async () => {
+    if (!panel || !store) return;
+    if (!store.isEnabled() || !store.getUser()) {
+      panel.hidden = true;
+      if (list) list.replaceChildren();
+      return;
+    }
+    panel.hidden = false;
+    let items = [];
+    try { items = await store.listOutbox(); }
+    catch (_) { setStatus("Не удалось прочитать локальную очередь."); return; }
+    const pending = items.filter(item => item.state !== "done").length;
+    if (count) count.textContent = String(pending);
+    if (syncButton) syncButton.disabled = busy || !navigator.onLine || pending === 0;
+    if (list) {
+      list.replaceChildren();
+      items.forEach(item => {
+        const row = document.createElement("div");
+        row.className = "offline-sync-item";
+        const description = document.createElement("div");
+        description.className = "offline-sync-item-copy";
+        const title = document.createElement("strong");
+        title.textContent = commandLabel(item);
+        const meta = document.createElement("span");
+        meta.textContent = stateLabel(item.state) + (item.lastError ? " · " + item.lastError : "");
+        description.append(title, meta);
+        const actions = document.createElement("div");
+        actions.className = "offline-sync-item-actions";
+        if (item.state === "conflict") {
+          const reapply = document.createElement("button");
+          reapply.type = "button";
+          reapply.className = "text-button";
+          reapply.textContent = "Применить заново";
+          reapply.addEventListener("click", () => reapplyItem(item));
+          actions.append(reapply);
+        }
+        if (item.state !== "sending") {
+          const discard = document.createElement("button");
+          discard.type = "button";
+          discard.className = "text-button";
+          discard.textContent = "Удалить";
+          discard.addEventListener("click", () => discardItem(item));
+          actions.append(discard);
+        }
+        row.append(description, actions);
+        list.append(row);
+      });
+    }
+    if (!pending) setStatus("Все локальные изменения синхронизированы.");
+    else if (!navigator.onLine) setStatus("Нет подключения. Изменения сохранены на этом устройстве.");
+    else if (!busy && !status?.textContent) setStatus("Изменения сохранены локально. Нажмите «Синхронизировать», когда будете готовы.");
+  };
+  const withEventLock = async (eventId, callback) => {
+    const name = "gatherly-offline-sync:" + eventId;
+    if (navigator.locks?.request) {
+      return navigator.locks.request(name, { mode: "exclusive", ifAvailable: true }, lock =>
+        lock ? callback() : false
+      );
+    }
+    if (!await store.acquireLease(eventId, ownerId)) return false;
+    try { return await callback(); }
+    finally { await store.releaseLease(eventId, ownerId); }
+  };
+  const sendEventQueue = async eventId => withEventLock(eventId, async () => {
+    let items = (await store.listOutbox())
+      .filter(item => item.eventId === eventId)
+      .sort((a, b) => a.createdAt - b.createdAt);
+    for (const item of items) {
+      if (item.state === "done") {
+        await store.removeOutboxItem(item.operationId);
+        continue;
+      }
+      if (item.state === "conflict" || item.state === "blocked") break;
+      if (item.state !== "pending") break;
+      if (item.retryAt && item.retryAt > Date.now()) break;
+
+      let completed = false;
+      for (let attempt = 0; attempt < 3 && !completed; attempt += 1) {
+        await store.updateOutboxState(item.operationId, "sending");
+        await render();
+        let response;
+        try {
+          response = await fetch("/offline-sync/commands", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify({
+              operation_id: item.operationId,
+              event_id: item.eventId,
+              base_revision: item.baseRevision,
+              kind: item.kind,
+              payload: item.payload
+            })
+          });
+        } catch (_) {
+          const delay = Math.min(60000, 750 * (2 ** (item.attempts + attempt))) + Math.floor(Math.random() * 350);
+          await store.updateOutboxState(item.operationId, "pending", {
+            error: "Нет ответа от сервера. Повторим ту же операцию.",
+            retryAt: Date.now() + delay
+          });
+          if (attempt < 2) await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+
+        if (response.ok) {
+          let body;
+          try { body = await response.json(); } catch (_) { body = null; }
+          if (!body || !Number.isSafeInteger(body.revision)) {
+            await store.updateOutboxState(item.operationId, "pending", {
+              error: "Ответ сервера неполный; операция будет безопасно повторена."
+            });
+            break;
+          }
+          await store.setEventRevision(eventId, body.revision);
+          await store.removeOutboxItem(item.operationId);
+          completed = true;
+          setStatus("Изменение встречи синхронизировано.");
+          continue;
+        }
+
+        if (response.status === 401) {
+          await store.updateOutboxState(item.operationId, "pending", { error: "Нужно повторно войти в аккаунт." });
+          setStatus("Синхронизация приостановлена: требуется вход в аккаунт.");
+          return "auth";
+        }
+        if (response.status === 409) {
+          let body = {};
+          try { body = await response.json(); } catch (_) {}
+          if (Number.isSafeInteger(body.current_revision)) {
+            await store.setEventRevision(eventId, body.current_revision);
+          }
+          await store.updateOutboxState(item.operationId, "conflict", {
+            error: "На сервере уже есть более новая версия.",
+            serverRevision: body.current_revision
+          });
+          setStatus("Есть конфликт версии. Последующие изменения этой встречи приостановлены.");
+          break;
+        }
+        if (response.status === 429) {
+          const header = response.headers.get("Retry-After");
+          let retryAt = Date.now() + 30000;
+          if (header) {
+            const seconds = Number(header);
+            const parsed = Number.isFinite(seconds) ? Date.now() + seconds * 1000 : Date.parse(header);
+            if (Number.isFinite(parsed)) retryAt = parsed;
+          }
+          await store.updateOutboxState(item.operationId, "pending", {
+            error: "Сервер ограничил частоту запросов; повторим позже.",
+            retryAt
+          });
+          setStatus("Сервер попросил подождать перед следующей синхронизацией.");
+          break;
+        }
+        if (response.status >= 500) {
+          const delay = Math.min(60000, 750 * (2 ** (item.attempts + attempt))) + Math.floor(Math.random() * 350);
+          await store.updateOutboxState(item.operationId, "pending", {
+            error: "Сервер временно недоступен.",
+            retryAt: Date.now() + delay
+          });
+          if (attempt < 2) await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        let detail = "Сервер отклонил изменение (" + response.status + ").";
+        try {
+          const body = await response.json();
+          if (typeof body.detail === "string") detail = body.detail;
+        } catch (_) {}
+        await store.updateOutboxState(item.operationId, "blocked", { error: detail });
+        setStatus("Одно изменение заблокировано. Проверьте очередь перед продолжением.");
+        break;
+      }
+      const current = (await store.listOutbox()).find(value => value.operationId === item.operationId);
+      if (current) break;
+      items = items.filter(value => value.operationId !== item.operationId);
+    }
+    return true;
+  });
+
+  const syncNow = async () => {
+    if (busy || !store?.isEnabled() || !store.getUser()) return;
+    if (!navigator.onLine) { setStatus("Нет подключения к интернету."); return; }
+    busy = true;
+    if (syncButton) syncButton.disabled = true;
+    setStatus("Синхронизируем изменения…");
+    try {
+      await store.recoverSending();
+      const items = await store.listOutbox();
+      const eventIds = [...new Set(items.map(item => item.eventId))];
+      for (const eventId of eventIds) {
+        const result = await sendEventQueue(eventId);
+        if (result === "auth") break;
+      }
+      setStatus("Проверка очереди завершена.");
+    } catch (_) {
+      setStatus("Не удалось завершить синхронизацию. Очередь сохранена.");
+    } finally {
+      busy = false;
+      await render();
+    }
+  };
+  const discardItem = async item => {
+    if (!window.confirm("Удалить это локальное изменение?")) return;
+    try {
+      await store.removeOutboxItem(item.operationId);
+      if (navigator.onLine) {
+        try {
+          const revision = await fetchRevision(item.eventId);
+          await store.rebasePendingEvent(item.eventId, item.createdAt, revision);
+        } catch (_) {}
+      }
+      setStatus("Локальное изменение удалено.");
+      await render();
+    } catch (_) { setStatus("Не удалось удалить изменение."); }
+  };
+  const reapplyItem = async item => {
+    if (!window.confirm("Создать новую операцию на основе актуальной версии встречи? Содержимое изменения останется прежним.")) return;
+    try {
+      if (!navigator.onLine) throw new Error("Для повторного применения нужно подключение к интернету.");
+      const revision = await fetchRevision(item.eventId);
+      const replacement = await store.enqueue({
+        eventId: item.eventId,
+        baseRevision: revision,
+        kind: item.kind,
+        payload: item.payload,
+        createdAt: item.createdAt - 0.5
+      });
+      await store.removeOutboxItem(item.operationId);
+      await store.rebasePendingEvent(item.eventId, item.createdAt, revision + 1, replacement.operationId);
+      setStatus("Создана новая операция. Проверьте её перед синхронизацией.");
+      await render();
+    } catch (error) { setStatus(error.message || "Не удалось повторно применить изменение."); }
+  };
+
+  if (syncButton) syncButton.addEventListener("click", syncNow);
+  window.addEventListener("online", render);
+  window.addEventListener("offline", render);
+  window.GatherlyOfflineSync = { refresh: render, syncNow };
+  render();
+})();
