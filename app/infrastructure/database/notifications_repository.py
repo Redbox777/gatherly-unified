@@ -5,6 +5,7 @@ import sqlite3
 from uuid import uuid4
 
 from app.infrastructure.database.connection import transaction
+from app.infrastructure.database.notification_retry_policy import next_retry_at
 
 
 class NotificationsRepository:
@@ -224,7 +225,10 @@ class NotificationsRepository:
                     created += cursor.rowcount
         return created
 
-    def pending_email(self, *, limit: int = 100) -> list[dict[str, str]]:
+    def pending_email(
+        self, *, now: datetime | None = None, limit: int = 100
+    ) -> list[dict[str, str]]:
+        eligible_at = self._format(now or datetime.now(UTC))
         rows = self._connection.execute(
             """SELECT notification.id, notification.title, notification.body,
                       identity.provider_subject AS email
@@ -236,9 +240,13 @@ class NotificationsRepository:
                  ON preference.user_id = notification.user_id
                WHERE notification.email_sent_at IS NULL
                  AND notification.email_attempts < 5
+                 AND (
+                     notification.email_next_attempt_at IS NULL
+                     OR notification.email_next_attempt_at <= ?
+                 )
                  AND COALESCE(preference.email_enabled, 1) = 1
                ORDER BY notification.created_at, notification.id LIMIT ?""",
-            (limit,),
+            (eligible_at, limit),
         ).fetchall()
         return [dict(row) for row in rows]
 
@@ -283,8 +291,11 @@ class NotificationsRepository:
         ).fetchone()
         return row is not None
 
-    def pending_telegram(self, *, limit: int = 20) -> list[dict[str, str]]:
-        """Return opted-in Telegram deliveries with verified chat identities."""
+    def pending_telegram(
+        self, *, limit: int = 20, now: datetime | None = None
+    ) -> list[dict[str, str]]:
+        """Return opted-in Telegram deliveries whose retry delay has elapsed."""
+        eligible_at = self._format(now or datetime.now(UTC))
         rows = self._connection.execute(
             """SELECT notification.id, notification.title, notification.body,
                       identity.provider_subject AS chat_id
@@ -297,23 +308,46 @@ class NotificationsRepository:
                  ON preference.user_id = notification.user_id
                WHERE notification.telegram_sent_at IS NULL
                  AND notification.telegram_attempts < 5
+                 AND (
+                     notification.telegram_next_attempt_at IS NULL
+                     OR notification.telegram_next_attempt_at <= ?
+                 )
                  AND COALESCE(preference.telegram_enabled, 0) = 1
                ORDER BY notification.created_at, notification.id LIMIT ?""",
-            (limit,),
+            (eligible_at, limit),
         ).fetchall()
         return [dict(row) for row in rows]
 
     def record_telegram_failure(
-        self, *, notification_id: str, error_name: str
+        self,
+        *,
+        notification_id: str,
+        error_name: str,
+        now: datetime | None = None,
     ) -> None:
-        """Count a failed Telegram delivery without storing provider response data."""
+        """Count a failed Telegram delivery and schedule a bounded retry."""
+        failed_at = now or datetime.now(UTC)
         with transaction(self._connection):
+            row = self._connection.execute(
+                """SELECT telegram_attempts FROM notifications
+                   WHERE id = ? AND telegram_sent_at IS NULL""",
+                (notification_id,),
+            ).fetchone()
+            if row is None:
+                return
+            attempts = int(row["telegram_attempts"]) + 1
+            retry_at = next_retry_at(now=failed_at, attempt_number=attempts)
             self._connection.execute(
                 """UPDATE notifications
-                   SET telegram_attempts = telegram_attempts + 1,
-                       telegram_last_error = ?
+                   SET telegram_attempts = ?, telegram_last_error = ?,
+                       telegram_next_attempt_at = ?
                    WHERE id = ? AND telegram_sent_at IS NULL""",
-                (error_name[:120], notification_id),
+                (
+                    attempts,
+                    error_name[:120],
+                    self._format(retry_at) if retry_at else None,
+                    notification_id,
+                ),
             )
 
     def record_telegram_sent(self, *, notification_id: str, now: datetime) -> None:
@@ -322,20 +356,41 @@ class NotificationsRepository:
             self._connection.execute(
                 """UPDATE notifications
                    SET telegram_attempts = telegram_attempts + 1,
-                       telegram_sent_at = ?, telegram_last_error = NULL
+                       telegram_sent_at = ?, telegram_last_error = NULL,
+                       telegram_next_attempt_at = NULL
                    WHERE id = ? AND telegram_sent_at IS NULL""",
                 (self._format(now), notification_id),
             )
 
     def record_email_failure(
-        self, *, notification_id: str, error_name: str
+        self,
+        *,
+        notification_id: str,
+        error_name: str,
+        now: datetime | None = None,
     ) -> None:
+        failed_at = now or datetime.now(UTC)
         with transaction(self._connection):
+            row = self._connection.execute(
+                """SELECT email_attempts FROM notifications
+                   WHERE id = ? AND email_sent_at IS NULL""",
+                (notification_id,),
+            ).fetchone()
+            if row is None:
+                return
+            attempts = int(row["email_attempts"]) + 1
+            retry_at = next_retry_at(now=failed_at, attempt_number=attempts)
             self._connection.execute(
                 """UPDATE notifications
-                   SET email_attempts = email_attempts + 1, email_last_error = ?
+                   SET email_attempts = ?, email_last_error = ?,
+                       email_next_attempt_at = ?
                    WHERE id = ? AND email_sent_at IS NULL""",
-                (error_name[:120], notification_id),
+                (
+                    attempts,
+                    error_name[:120],
+                    self._format(retry_at) if retry_at else None,
+                    notification_id,
+                ),
             )
 
     def record_email_sent(self, *, notification_id: str, now: datetime) -> None:
@@ -343,7 +398,8 @@ class NotificationsRepository:
             self._connection.execute(
                 """UPDATE notifications
                    SET email_attempts = email_attempts + 1,
-                       email_sent_at = ?, email_last_error = NULL
+                       email_sent_at = ?, email_last_error = NULL,
+                       email_next_attempt_at = NULL
                    WHERE id = ? AND email_sent_at IS NULL""",
                 (self._format(now), notification_id),
             )

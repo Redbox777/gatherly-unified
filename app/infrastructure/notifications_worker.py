@@ -104,7 +104,7 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                 use_starttls=os.environ.get("SMTP_STARTTLS", "true").casefold() == "true",
                 timeout=float(os.environ.get("SMTP_TIMEOUT", "10")),
             )
-            for message in repository.pending_email():
+            for message in repository.pending_email(now=datetime.now(UTC)):
                 attempt_time = datetime.now(UTC)
                 retry_after = rate_limits.consume(
                     recipient=message["email"],
@@ -127,6 +127,7 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                     repository.record_email_failure(
                         notification_id=message["id"],
                         error_name=type(error).__name__,
+                        now=datetime.now(UTC),
                     )
                     logger.warning(
                         "Notification email delivery failed",
@@ -150,7 +151,7 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                 bot_token=telegram_token,
                 timeout=float(os.environ.get("TELEGRAM_TIMEOUT", "10")),
             )
-            for message in repository.pending_telegram(limit=20):
+            for message in repository.pending_telegram(limit=20, now=datetime.now(UTC)):
                 if not renew_worker_lease():
                     return created, sent, telegram_sent, push_sent
                 try:
@@ -164,6 +165,7 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                     repository.record_telegram_failure(
                         notification_id=message["id"],
                         error_name=type(error).__name__,
+                        now=datetime.now(UTC),
                     )
                     logger.warning(
                         "Notification Telegram delivery failed",
