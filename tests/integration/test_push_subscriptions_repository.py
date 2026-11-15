@@ -144,6 +144,15 @@ def test_invalid_push_endpoint_keys_and_encryption_key_are_rejected(tmp_path) ->
                 encryption_key=ENCRYPTION_KEY,
                 now=NOW,
             )
+        with pytest.raises(ValueError, match="approved push service"):
+            repository.upsert_subscription(
+                user_id="push-user",
+                endpoint="https://attacker.example.test/collect",
+                p256dh=P256DH,
+                auth=AUTH,
+                encryption_key=ENCRYPTION_KEY,
+                now=NOW,
+            )
         with pytest.raises(ValueError, match="p256dh"):
             repository.upsert_subscription(
                 user_id="push-user",
