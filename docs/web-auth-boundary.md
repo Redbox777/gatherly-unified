@@ -10,7 +10,6 @@ Implemented:
 - Telegram Login Widget HMAC verification, freshness checks, and replay protection.
 - Server-managed HttpOnly session cookies with expiry and server-side revocation.
 - Hashed session and email-token storage.
-- Owner-scoped event APIs and membership-scoped shared/private notes.
 - Rate limits for sensitive authentication and email-delivery flows.
 - CSRF Origin/Referer checks for state-changing browser requests.
 
@@ -27,14 +26,15 @@ Implemented:
 
 ## Password hashing
 
-The current implementation uses Python hashlib.scrypt with:
-- N = 2^14;
-- r = 8, p = 1;
-- a fresh 16-byte random salt;
-- a 32-byte derived key;
-- constant-time digest comparison.
+New passwords are hashed with Argon2id using versioned PHC strings and fixed resource limits:
+- Memory: 19,456 KiB (19 MiB).
+- Time cost: 2 iterations.
+- Parallelism: 1.
+- Salt: 16 bytes; derived hash: 32 bytes.
+- Password input is UTF-8 and limited to 1,024 bytes.
+- Verification rejects unexpected Argon2id parameters before performing the expensive hash operation.
 
-This is the implemented prototype choice. The earlier Argon2id preference was a target for evaluation, not the current algorithm. Before production launch, benchmark the configured parameters under expected login concurrency and make an explicit decision whether to retain scrypt or migrate to Argon2id. Any algorithm change needs a versioned hash format and a safe rehash-on-login or password-reset strategy.
+Existing scrypt hashes remain verifiable using their original fixed parameters. After a successful login, the service upgrades the stored hash to Argon2id with a compare-and-swap update; it does not change the user's password or revoke sessions. Failed logins never trigger a hash upgrade. No bulk hash rewrite or plaintext password storage is used.
 
 ## Session and browser protections
 
@@ -62,7 +62,7 @@ Before production launch:
 1. Configure APP_ENV=production, PUBLIC_ORIGIN, COOKIE_SECURE=true, HTTPS public URLs, SMTP, and actual trusted proxy CIDRs.
 2. Verify the reverse-proxy network path and ensure clients cannot bypass the trusted proxy.
 3. Reassess the SQLite-backed rate limiter and database choice before multi-host deployment.
-4. Decide whether scrypt remains the password-hashing algorithm or whether to migrate to Argon2id.
+4. Benchmark Argon2id latency and memory use under expected login concurrency on the intended server.
 5. Add tested backup/restore procedures, readiness checks, operational monitoring, and retention policies.
 6. Design cross-provider account linking only if the product requires a single account to use both login methods.
 7. Review privacy notice, data retention, and consent flows against the actual hosting and processing setup.
