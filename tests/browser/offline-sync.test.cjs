@@ -94,4 +94,5 @@ test("foreground sender applies in order and pauses only a conflicted event", as
   assert.equal(remaining.find(item => item.operationId === later.operationId).state, "pending");
   assert.equal(await store.getEventRevision(eventOne), 2);
   assert.equal(await store.getEventRevision(eventTwo), 4);
+  assert.match(elements.get("offline-sync-status").textContent, /завершена частично/i);
 });
