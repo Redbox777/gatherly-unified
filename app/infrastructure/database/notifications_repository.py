@@ -1,0 +1,422 @@
+"""SQLite persistence for the notification inbox, preferences, and reminders."""
+
+from datetime import UTC, datetime, timedelta
+import sqlite3
+from uuid import uuid4
+
+from app.infrastructure.database.connection import transaction
+from app.infrastructure.database.notification_retry_policy import next_retry_at
+
+
+class NotificationsRepository:
+    """Persist inbox entries and idempotently materialize due event reminders."""
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+
+    def create(
+        self,
+        *,
+        user_id: str,
+        event_id: str | None,
+        kind: str,
+        title: str,
+        body: str,
+        dedupe_key: str,
+        now: datetime,
+    ) -> None:
+        with transaction(self._connection):
+            self._connection.execute(
+                """INSERT OR IGNORE INTO notifications(
+                    id, user_id, event_id, kind, title, body, dedupe_key, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    str(uuid4()), user_id, event_id, kind, title, body,
+                    dedupe_key, self._format(now),
+                ),
+            )
+
+    def list_for_user(self, *, user_id: str, limit: int = 50) -> list[dict[str, object]]:
+        rows = self._connection.execute(
+            """SELECT id, event_id, kind, title, body, created_at, read_at
+               FROM notifications WHERE user_id = ?
+               ORDER BY created_at DESC, id DESC LIMIT ?""",
+            (user_id, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def mark_read(self, *, user_id: str, notification_id: str, now: datetime) -> bool:
+        with transaction(self._connection):
+            cursor = self._connection.execute(
+                """UPDATE notifications SET read_at = ?
+                   WHERE id = ? AND user_id = ? AND read_at IS NULL""",
+                (self._format(now), notification_id, user_id),
+            )
+        return cursor.rowcount == 1
+
+    def unread_count(self, *, user_id: str) -> int:
+        row = self._connection.execute(
+            "SELECT COUNT(*) AS total FROM notifications WHERE user_id = ? AND read_at IS NULL",
+            (user_id,),
+        ).fetchone()
+        return int(row["total"])
+
+    def get_preferences(self, *, user_id: str) -> dict[str, bool]:
+        row = self._connection.execute(
+            """SELECT email_enabled, event_updates_enabled,
+                      participant_added_enabled, reminders_enabled, telegram_enabled, push_enabled
+               FROM notification_preferences WHERE user_id = ?""",
+            (user_id,),
+        ).fetchone()
+        if row is None:
+            return {
+                "email_enabled": True,
+                "event_updates_enabled": True,
+                "participant_added_enabled": True,
+                "reminders_enabled": True,
+                "telegram_enabled": False,
+                "push_enabled": False,
+            }
+        return {
+            "email_enabled": bool(row["email_enabled"]),
+            "event_updates_enabled": bool(row["event_updates_enabled"]),
+            "participant_added_enabled": bool(row["participant_added_enabled"]),
+            "reminders_enabled": bool(row["reminders_enabled"]),
+            "telegram_enabled": bool(row["telegram_enabled"]),
+            "push_enabled": bool(row["push_enabled"]),
+        }
+
+    def set_preferences(
+        self, *, user_id: str, values: dict[str, bool], now: datetime
+    ) -> dict[str, bool]:
+        current = self.get_preferences(user_id=user_id)
+        current.update(values)
+        with transaction(self._connection):
+            self._connection.execute(
+                """INSERT INTO notification_preferences(
+                    user_id, email_enabled, event_updates_enabled,
+                    participant_added_enabled, reminders_enabled,
+                    telegram_enabled, telegram_consent_at,
+                    telegram_consent_version, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    email_enabled = excluded.email_enabled,
+                    event_updates_enabled = excluded.event_updates_enabled,
+                    participant_added_enabled = excluded.participant_added_enabled,
+                    reminders_enabled = excluded.reminders_enabled,
+                    telegram_enabled = excluded.telegram_enabled,
+                    telegram_consent_at = excluded.telegram_consent_at,
+                    telegram_consent_version = excluded.telegram_consent_version,
+                    updated_at = excluded.updated_at""",
+                (
+                    user_id,
+                    int(current["email_enabled"]),
+                    int(current["event_updates_enabled"]),
+                    int(current["participant_added_enabled"]),
+                    int(current["reminders_enabled"]),
+                    int(current["telegram_enabled"]),
+                    self._format(now) if current["telegram_enabled"] else None,
+                    "telegram-v1" if current["telegram_enabled"] else None,
+                    self._format(now),
+                ),
+            )
+        return current
+
+    def set_event_reminders(
+        self, *, event_id: str, owner_id: str, offsets: list[int], now: datetime
+    ) -> None:
+        if any(offset not in {1440, 60, 15} for offset in offsets):
+            raise ValueError("Unsupported reminder offset")
+        with transaction(self._connection):
+            self._connection.execute(
+                "DELETE FROM event_reminder_preferences WHERE event_id = ? AND owner_id = ?",
+                (event_id, owner_id),
+            )
+            self._connection.executemany(
+                """INSERT INTO event_reminder_preferences(
+                    event_id, owner_id, offset_minutes, created_at
+                ) VALUES (?, ?, ?, ?)""",
+                [
+                    (event_id, owner_id, offset, self._format(now))
+                    for offset in sorted(set(offsets))
+                ],
+            )
+
+    def get_event_reminders(self, *, event_id: str, owner_id: str) -> list[int]:
+        rows = self._connection.execute(
+            """SELECT offset_minutes FROM event_reminder_preferences
+               WHERE event_id = ? AND owner_id = ? ORDER BY offset_minutes DESC""",
+            (event_id, owner_id),
+        ).fetchall()
+        return [int(row["offset_minutes"]) for row in rows]
+
+    def clear_pending_event_reminders(self, *, event_id: str) -> int:
+        """Discard unsent reminders when an owner changes the event schedule."""
+        with transaction(self._connection):
+            # A schedule change must also cancel browser-push jobs. Otherwise a
+            # notification already sent by email can keep an unsent push job alive.
+            self._connection.execute(
+                """DELETE FROM push_deliveries
+                   WHERE sent_at IS NULL
+                     AND notification_id IN (
+                         SELECT id FROM notifications
+                         WHERE event_id = ? AND kind = 'event_reminder'
+                     )""",
+                (event_id,),
+            )
+            cursor = self._connection.execute(
+                """DELETE FROM notifications
+                   WHERE event_id = ? AND kind = 'event_reminder'
+                     AND email_sent_at IS NULL AND telegram_sent_at IS NULL
+                     AND NOT EXISTS (
+                         SELECT 1 FROM push_deliveries AS delivery
+                         WHERE delivery.notification_id = notifications.id
+                           AND delivery.sent_at IS NOT NULL
+                     )""",
+                (event_id,),
+            )
+        return cursor.rowcount
+
+    def materialize_due_reminders(self, *, now: datetime) -> int:
+        """Create one inbox item per recipient/reminder; unique keys prevent duplicates."""
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("now must be timezone-aware")
+        now_utc = now.astimezone(UTC)
+        created = 0
+        with transaction(self._connection):
+            # Read the current schedule only after acquiring SQLite's write lock.
+            # Otherwise a concurrent event edit can leave this worker holding a
+            # stale reminder snapshot and enqueue a notification for the old time.
+            rows = self._load_reminder_rows()
+            for row in rows:
+                starts_at = datetime.fromisoformat(str(row["starts_at"]))
+                if starts_at.tzinfo is None or starts_at.utcoffset() is None:
+                    continue
+                due_at = starts_at.astimezone(UTC) - timedelta(
+                    minutes=int(row["offset_minutes"])
+                )
+                if due_at > now_utc or starts_at.astimezone(UTC) <= now_utc:
+                    continue
+                event_id = str(row["event_id"])
+                owner_id = str(row["owner_id"])
+                recipients = {owner_id}
+                linked_rows = self._connection.execute(
+                    """SELECT linked_user_id FROM event_participants
+                       WHERE event_id = ? AND linked_user_id IS NOT NULL""",
+                    (event_id,),
+                ).fetchall()
+                recipients.update(str(item["linked_user_id"]) for item in linked_rows)
+                for user_id in recipients:
+                    preference = self.get_preferences(user_id=user_id)
+                    if not preference["reminders_enabled"]:
+                        continue
+                    cursor = self._connection.execute(
+                        """INSERT OR IGNORE INTO notifications(
+                            id, user_id, event_id, kind, title, body, dedupe_key, created_at
+                        ) VALUES (?, ?, ?, 'event_reminder', ?, ?, ?, ?)""",
+                        (
+                            str(uuid4()), user_id, event_id,
+                            "Скоро встреча",
+                            f"«{row['title']}» начнётся через {row['offset_minutes']} мин.",
+                            f"reminder:{event_id}:{starts_at.isoformat()}:{row['offset_minutes']}:{user_id}",
+                            self._format(now_utc),
+                        ),
+                    )
+                    created += cursor.rowcount
+        return created
+
+    def pending_email(
+        self, *, now: datetime | None = None, limit: int = 100
+    ) -> list[dict[str, str]]:
+        eligible_at = self._format(now or datetime.now(UTC))
+        rows = self._connection.execute(
+            """SELECT notification.id, notification.title, notification.body,
+                      identity.provider_subject AS email
+               FROM notifications AS notification
+               JOIN auth_identities AS identity
+                 ON identity.user_id = notification.user_id
+                AND identity.provider = 'email' AND identity.verified_at IS NOT NULL
+               LEFT JOIN notification_preferences AS preference
+                 ON preference.user_id = notification.user_id
+               WHERE notification.email_sent_at IS NULL
+                 AND notification.email_attempts < 5
+                 AND (
+                     notification.email_next_attempt_at IS NULL
+                     OR notification.email_next_attempt_at <= ?
+                 )
+                 AND COALESCE(preference.email_enabled, 1) = 1
+               ORDER BY notification.created_at, notification.id LIMIT ?""",
+            (eligible_at, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def set_push_enabled(
+        self, *, user_id: str, enabled: bool, now: datetime
+    ) -> None:
+        """Record explicit push opt-in/revocation and its policy version."""
+        timestamp = self._format(now)
+        with transaction(self._connection):
+            if enabled:
+                self._connection.execute(
+                    """INSERT INTO notification_preferences(
+                        user_id, email_enabled, event_updates_enabled,
+                        participant_added_enabled, reminders_enabled,
+                        telegram_enabled, telegram_consent_at,
+                        telegram_consent_version, updated_at,
+                        push_enabled, push_consent_at, push_consent_version
+                    ) VALUES (?, 1, 1, 1, 1, 0, NULL, NULL, ?, 1, ?, 'push-v1')
+                    ON CONFLICT(user_id) DO UPDATE SET
+                        push_enabled = 1,
+                        push_consent_at = excluded.push_consent_at,
+                        push_consent_version = excluded.push_consent_version,
+                        updated_at = excluded.updated_at""",
+                    (user_id, timestamp, timestamp),
+                )
+            else:
+                self._connection.execute(
+                    """UPDATE notification_preferences
+                       SET push_enabled = 0, push_consent_at = NULL,
+                           push_consent_version = NULL, updated_at = ?
+                       WHERE user_id = ?""",
+                    (timestamp, user_id),
+                )
+
+    def has_telegram_identity(self, *, user_id: str) -> bool:
+        """Return whether the account has a verified Telegram identity."""
+        row = self._connection.execute(
+            """SELECT 1 FROM auth_identities
+               WHERE user_id = ? AND provider = 'telegram'
+                 AND verified_at IS NOT NULL LIMIT 1""",
+            (user_id,),
+        ).fetchone()
+        return row is not None
+
+    def pending_telegram(
+        self, *, limit: int = 20, now: datetime | None = None
+    ) -> list[dict[str, str]]:
+        """Return opted-in Telegram deliveries whose retry delay has elapsed."""
+        eligible_at = self._format(now or datetime.now(UTC))
+        rows = self._connection.execute(
+            """SELECT notification.id, notification.title, notification.body,
+                      identity.provider_subject AS chat_id
+               FROM notifications AS notification
+               JOIN auth_identities AS identity
+                 ON identity.user_id = notification.user_id
+                AND identity.provider = 'telegram'
+                AND identity.verified_at IS NOT NULL
+               LEFT JOIN notification_preferences AS preference
+                 ON preference.user_id = notification.user_id
+               WHERE notification.telegram_sent_at IS NULL
+                 AND notification.telegram_attempts < 5
+                 AND (
+                     notification.telegram_next_attempt_at IS NULL
+                     OR notification.telegram_next_attempt_at <= ?
+                 )
+                 AND COALESCE(preference.telegram_enabled, 0) = 1
+               ORDER BY notification.created_at, notification.id LIMIT ?""",
+            (eligible_at, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def record_telegram_failure(
+        self,
+        *,
+        notification_id: str,
+        error_name: str,
+        now: datetime | None = None,
+    ) -> None:
+        """Count a failed Telegram delivery and schedule a bounded retry."""
+        failed_at = now or datetime.now(UTC)
+        with transaction(self._connection):
+            row = self._connection.execute(
+                """SELECT telegram_attempts FROM notifications
+                   WHERE id = ? AND telegram_sent_at IS NULL""",
+                (notification_id,),
+            ).fetchone()
+            if row is None:
+                return
+            attempts = int(row["telegram_attempts"]) + 1
+            retry_at = next_retry_at(now=failed_at, attempt_number=attempts)
+            self._connection.execute(
+                """UPDATE notifications
+                   SET telegram_attempts = ?, telegram_last_error = ?,
+                       telegram_next_attempt_at = ?
+                   WHERE id = ? AND telegram_sent_at IS NULL""",
+                (
+                    attempts,
+                    error_name[:120],
+                    self._format(retry_at) if retry_at else None,
+                    notification_id,
+                ),
+            )
+
+    def record_telegram_sent(self, *, notification_id: str, now: datetime) -> None:
+        """Mark a Telegram delivery successful once."""
+        with transaction(self._connection):
+            self._connection.execute(
+                """UPDATE notifications
+                   SET telegram_attempts = telegram_attempts + 1,
+                       telegram_sent_at = ?, telegram_last_error = NULL,
+                       telegram_next_attempt_at = NULL
+                   WHERE id = ? AND telegram_sent_at IS NULL""",
+                (self._format(now), notification_id),
+            )
+
+    def record_email_failure(
+        self,
+        *,
+        notification_id: str,
+        error_name: str,
+        now: datetime | None = None,
+    ) -> None:
+        failed_at = now or datetime.now(UTC)
+        with transaction(self._connection):
+            row = self._connection.execute(
+                """SELECT email_attempts FROM notifications
+                   WHERE id = ? AND email_sent_at IS NULL""",
+                (notification_id,),
+            ).fetchone()
+            if row is None:
+                return
+            attempts = int(row["email_attempts"]) + 1
+            retry_at = next_retry_at(now=failed_at, attempt_number=attempts)
+            self._connection.execute(
+                """UPDATE notifications
+                   SET email_attempts = ?, email_last_error = ?,
+                       email_next_attempt_at = ?
+                   WHERE id = ? AND email_sent_at IS NULL""",
+                (
+                    attempts,
+                    error_name[:120],
+                    self._format(retry_at) if retry_at else None,
+                    notification_id,
+                ),
+            )
+
+    def record_email_sent(self, *, notification_id: str, now: datetime) -> None:
+        with transaction(self._connection):
+            self._connection.execute(
+                """UPDATE notifications
+                   SET email_attempts = email_attempts + 1,
+                       email_sent_at = ?, email_last_error = NULL,
+                       email_next_attempt_at = NULL
+                   WHERE id = ? AND email_sent_at IS NULL""",
+                (self._format(now), notification_id),
+            )
+
+    def _load_reminder_rows(self) -> list[sqlite3.Row]:
+        return self._connection.execute(
+            """SELECT reminder.event_id, reminder.owner_id, reminder.offset_minutes,
+                      event.title, event.starts_at
+               FROM event_reminder_preferences AS reminder
+               JOIN events AS event ON event.id = reminder.event_id
+               WHERE event.starts_at IS NOT NULL"""
+        ).fetchall()
+
+    @staticmethod
+    def _format(value: datetime) -> str:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Datetime must be timezone-aware")
+        return value.astimezone(UTC).isoformat(timespec="microseconds").replace(
+            "+00:00", "Z"
+        )

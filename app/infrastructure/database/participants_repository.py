@@ -1,0 +1,67 @@
+"""SQLite persistence for event participants."""
+
+import sqlite3
+from datetime import datetime
+from uuid import UUID
+
+from app.domain.participants import EventParticipant
+
+
+class ParticipantsRepository:
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+
+    @property
+    def connection(self) -> sqlite3.Connection:
+        return self._connection
+
+    def add(self, participant: EventParticipant) -> None:
+        self._connection.execute(
+            "INSERT INTO event_participants("
+            "id, event_id, display_name, added_at, linked_user_id"
+            ") VALUES (?, ?, ?, ?, ?)",
+            (
+                str(participant.id),
+                str(participant.event_id),
+                participant.display_name,
+                participant.added_at.isoformat(),
+                str(participant.linked_user_id) if participant.linked_user_id else None,
+            ),
+        )
+
+    def delete_for_event(self, *, participant_id: UUID, event_id: UUID) -> bool:
+        cursor = self._connection.execute(
+            "DELETE FROM event_participants WHERE id = ? AND event_id = ?",
+            (str(participant_id), str(event_id)),
+        )
+        return cursor.rowcount == 1
+
+    def link_to_user(
+        self, *, participant_id: UUID, event_id: UUID, user_id: UUID
+    ) -> bool:
+        cursor = self._connection.execute(
+            "UPDATE event_participants SET linked_user_id = ? "
+            "WHERE id = ? AND event_id = ? AND linked_user_id IS NULL",
+            (str(user_id), str(participant_id), str(event_id)),
+        )
+        return cursor.rowcount == 1
+
+    def list_for_event(self, event_id: UUID) -> list[EventParticipant]:
+        rows = self._connection.execute(
+            "SELECT id, event_id, display_name, added_at, linked_user_id "
+            "FROM event_participants "
+            "WHERE event_id = ? ORDER BY added_at, id",
+            (str(event_id),),
+        ).fetchall()
+        return [
+            EventParticipant(
+                id=UUID(row["id"]),
+                event_id=UUID(row["event_id"]),
+                display_name=row["display_name"],
+                added_at=datetime.fromisoformat(row["added_at"]),
+                linked_user_id=(
+                    UUID(row["linked_user_id"]) if row["linked_user_id"] else None
+                ),
+            )
+            for row in rows
+        ]
