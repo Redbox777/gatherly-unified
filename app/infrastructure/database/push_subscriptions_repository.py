@@ -232,13 +232,16 @@ class PushSubscriptionsRepository:
             self.delete_subscription(subscription_id=subscription_id, now=now)
         return pending
 
-    def record_failure(self, *, delivery_id: str, error_name: str) -> None:
+    def record_failure(
+        self, *, delivery_id: str, error_name: str, now: datetime
+    ) -> None:
+        self._require_aware(now)
         with transaction(self._connection):
             self._connection.execute(
                 """UPDATE push_deliveries
                    SET attempts = attempts + 1, last_error = ?, updated_at = ?
                    WHERE id = ? AND sent_at IS NULL""",
-                (error_name[:120], self._format(datetime.now(UTC)), delivery_id),
+                (error_name[:120], self._format(now), delivery_id),
             )
 
     def record_sent(self, *, delivery_id: str, now: datetime) -> None:
@@ -255,9 +258,29 @@ class PushSubscriptionsRepository:
     def delete_subscription(self, *, subscription_id: str, now: datetime) -> bool:
         self._require_aware(now)
         with transaction(self._connection):
+            row = self._connection.execute(
+                "SELECT user_id FROM push_subscriptions WHERE id = ?",
+                (subscription_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            user_id = str(row["user_id"])
             cursor = self._connection.execute(
                 "DELETE FROM push_subscriptions WHERE id = ?", (subscription_id,)
             )
+            remaining = self._connection.execute(
+                """SELECT 1 FROM push_subscriptions
+                   WHERE user_id = ? AND revoked_at IS NULL LIMIT 1""",
+                (user_id,),
+            ).fetchone()
+            if remaining is None:
+                self._connection.execute(
+                    """UPDATE notification_preferences
+                       SET push_enabled = 0, push_consent_at = NULL,
+                           push_consent_version = NULL, updated_at = ?
+                       WHERE user_id = ?""",
+                    (self._format(now), user_id),
+                )
         return cursor.rowcount == 1
 
     @staticmethod
