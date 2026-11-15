@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 import hashlib
 import hmac
+import re
 
 
 def verify_telegram_login(
@@ -23,7 +24,7 @@ def verify_telegram_login(
         raise ValueError("now must be timezone-aware")
 
     supplied_hash = payload.get("hash", "")
-    if len(supplied_hash) != 64:
+    if re.fullmatch(r"[0-9a-fA-F]{64}", supplied_hash) is None:
         return False
 
     try:

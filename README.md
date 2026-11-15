@@ -18,6 +18,7 @@ A modular backend foundation for Gatherly with shared application logic and web/
 - Private and shared event notes with membership- and author-scoped access.
 - Exact event expenses, equal/fixed/weighted splits, per-currency balances, and records of completed settlements.
 - Email registration, verification, login, server-managed sessions, password reset/change, and Telegram login.
+- Safe account merging between existing Email and Telegram accounts after independent proof of ownership, with transactional data transfer and session revocation.
 - Participant invitation lifecycle: owner-only creation/revocation, one-time token hashes, verified-email acceptance, and atomic participant linking.
 - Invitation email delivery through the SMTP adapter; failed delivery revokes the newly issued invitation before returning an error.
 - Authenticated notification inbox, per-user email/Telegram preferences, and event reminders at 24 hours, 1 hour, or 15 minutes.
@@ -27,6 +28,14 @@ A modular backend foundation for Gatherly with shared application logic and web/
 - SQLite persistence, versioned migrations, and integration tests.
 - CI checks for linting, typing, and tests.
 - Authenticated account data export and confirmed account erasure with fresh-session checks.
+
+## Account linking
+
+Email/password and Telegram sign-in can initially create separate Gatherly accounts. The account settings dialog supports merging two existing accounts when their login-provider sets do not overlap.
+
+The user must recently authenticate the destination account (within 10 minutes) and independently prove ownership of the source account. Email linking requires the source account's verified email and password. Telegram linking requires a fresh, signed Telegram Login Widget payload (maximum age 5 minutes), verified on the server using `TELEGRAM_BOT_TOKEN`; the browser receives only the public `TELEGRAM_BOT_USERNAME`.
+
+The merge is transactional: identities and account-owned records move to the destination, existing sessions are revoked, and the source user is deleted only after its references are transferred. Provider collisions are rejected. This feature does not attach a brand-new provider identity or support unlinking. See [account linking security and API behavior](docs/account-linking.md).
 
 ## Email authentication links
 
@@ -114,11 +123,9 @@ See [notification delivery and worker scheduling](docs/notifications.md). Run th
 python -m app.infrastructure.notifications_worker
 ```
 
-
 ## Event notes
 
 Event notes support private entries and shared entries. Private notes are visible only to their author; shared notes are visible to the event owner and linked Gatherly participants. Notes are scoped to event membership, and edits are limited to the author. Event owners can remove shared notes for moderation. Unlinked guest records cannot access the application or notes.
-
 
 ## Operations and production readiness
 

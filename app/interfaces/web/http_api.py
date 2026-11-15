@@ -20,6 +20,7 @@ from starlette.concurrency import run_in_threadpool
 from app.application.events import EventNotFoundError
 from app.application.participants import DuplicateParticipantError
 from app.application.participant_invitations import ParticipantAlreadyLinkedError
+from app.infrastructure.database.account_linking_repository import AccountLinkConflict
 from app.infrastructure.database.connection import (
     connect,
     migrate,
@@ -48,6 +49,7 @@ from app.interfaces.web.schemas import (
     CreateParticipantInvitationRequest,
     EmailTokenRequest,
     LoginRequest,
+    LinkEmailAccountRequest,
     PasswordResetConfirmRequest,
     PasswordResetRequest,
     RegisterRequest,
@@ -238,6 +240,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         "/participant-invitations/accept",
         "/diagnostics/bug-reports",
         "/account",
+        "/account/link/email",
+        "/account/link/telegram",
     }
 
     @app.middleware("http")
@@ -256,8 +260,9 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                     "Content-Security-Policy",
                     "default-src 'self'; style-src 'self'; font-src 'self'; "
                     "img-src 'self' data:; "
-                    "script-src 'self'; connect-src 'self'; base-uri 'self'; "
-                    "form-action 'self'; frame-ancestors 'none'",
+                    "script-src 'self' https://telegram.org; "
+                    "frame-src https://oauth.telegram.org; connect-src 'self'; "
+                    "base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
                 )
             secured = _apply_security_headers(response, production=production)
             logger.info(
@@ -691,6 +696,179 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         if user_id is None:
             raise HTTPException(status_code=401, detail="Authentication required")
         return {"user_id": user_id}
+
+    @app.get("/account/identities")
+    def list_account_identities(
+        request: Request, deps: ServiceDependency
+    ) -> list[dict[str, str | bool | None]]:
+        """Return provider labels and safe identifiers for the signed-in account."""
+        token = request.cookies.get(SESSION_COOKIE, "")
+        user_id = deps.authentication.resolve_session(
+            raw_token=token, now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        return [
+            {
+                "provider": identity.provider,
+                "identifier": (
+                    identity.provider_subject if identity.provider == "email" else None
+                ),
+                "verified": identity.verified_at is not None,
+            }
+            for identity in deps.identities.list_for_user_id(user_id=user_id)
+        ]
+
+    @app.get("/account/link/config")
+    def account_link_config() -> dict[str, str]:
+        """Expose only the public Telegram bot username needed by the Login Widget."""
+        username = os.environ.get("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+        if (
+            not 5 <= len(username) <= 32
+            or not username[0].isalpha()
+            or not all(character.isalnum() or character == "_" for character in username)
+        ):
+            username = ""
+        return {"telegram_bot_username": username}
+
+    @app.post("/account/link/email")
+    def link_email_account(
+        payload: LinkEmailAccountRequest,
+        request: Request,
+        response: Response,
+        deps: ServiceDependency,
+    ) -> dict[str, str]:
+        """Merge a separately authenticated, verified email account into this account."""
+        token = request.cookies.get(SESSION_COOKIE, "")
+        now = datetime.now(UTC)
+        target_user_id = deps.authentication.resolve_session(raw_token=token, now=now)
+        if target_user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        if not deps.sessions.is_recently_authenticated(
+            raw_token=token, now=now, max_age_seconds=600
+        ):
+            raise HTTPException(status_code=403, detail="Sign in again before linking accounts")
+
+        identity = deps.identities.authenticate_email(
+            email=payload.email, password=payload.password
+        )
+        if identity is None:
+            raise HTTPException(status_code=401, detail="Second account verification failed")
+        # Authentication may transparently upgrade a legacy password hash. Re-read
+        # the identity so the transactional merge compares against the current hash.
+        identity = deps.identities.find_identity(
+            provider="email", provider_subject=identity.provider_subject
+        )
+        if identity is None or identity.verified_at is None or identity.password_hash is None:
+            raise HTTPException(status_code=401, detail="Second account verification failed")
+        try:
+            deps.account_linking.merge_accounts(
+                target_user_id=target_user_id,
+                source_user_id=identity.user_id,
+                proof_identity_id=identity.identity_id,
+                proof_provider="email",
+                expected_password_hash=identity.password_hash,
+                now=now,
+            )
+        except AccountLinkConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+        session = deps.sessions.create(user_id=target_user_id, now=now)
+        response.set_cookie(
+            key=SESSION_COOKIE,
+            value=session.raw_token,
+            httponly=True,
+            secure=os.environ.get("COOKIE_SECURE", "true").casefold() == "true",
+            samesite="lax",
+            path=SESSION_COOKIE_PATH,
+            max_age=max(0, int((session.expires_at - session.created_at).total_seconds())),
+        )
+        return {"message": "Email account linked; previous sessions were revoked"}
+
+    @app.post("/account/link/telegram")
+    def link_telegram_account(
+        payload: TelegramLoginRequest,
+        request: Request,
+        response: Response,
+        deps: ServiceDependency,
+    ) -> dict[str, str]:
+        """Merge the account proven by a fresh, signed Telegram Login Widget payload."""
+        token = request.cookies.get(SESSION_COOKIE, "")
+        now = datetime.now(UTC)
+        target_user_id = deps.authentication.resolve_session(raw_token=token, now=now)
+        if target_user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        if not deps.sessions.is_recently_authenticated(
+            raw_token=token, now=now, max_age_seconds=600
+        ):
+            raise HTTPException(status_code=403, detail="Sign in again before linking accounts")
+
+        telegram_payload = {
+            key: value
+            for key, value in payload.model_dump().items()
+            if isinstance(value, str)
+        }
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if not verify_telegram_login(
+            payload=telegram_payload, bot_token=bot_token, now=now
+        ):
+            raise HTTPException(status_code=401, detail="Second account verification failed")
+        try:
+            verified_timestamp = int(payload.auth_date)
+            verified_at = datetime.fromtimestamp(verified_timestamp, tz=UTC)
+        except (ValueError, OverflowError):
+            raise HTTPException(
+                status_code=401, detail="Second account verification failed"
+            ) from None
+        age_seconds = (now - verified_at).total_seconds()
+        if age_seconds < 0 or age_seconds > 300:
+            raise HTTPException(status_code=401, detail="Telegram confirmation has expired")
+
+        signature_hash = hashlib.sha256(payload.hash.encode("ascii")).hexdigest()
+        try:
+            with transaction(deps.connection):
+                deps.connection.execute(
+                    "DELETE FROM auth_telegram_login_payloads WHERE consumed_at < ?",
+                    (datetime.fromtimestamp(now.timestamp() - 600, tz=UTC).isoformat(),),
+                )
+                deps.connection.execute(
+                    """INSERT INTO auth_telegram_login_payloads(payload_hash, consumed_at)
+                       VALUES (?, ?)""",
+                    (signature_hash, now.isoformat()),
+                )
+        except sqlite3.IntegrityError:
+            raise HTTPException(
+                status_code=401, detail="Second account verification failed"
+            ) from None
+
+        identity = deps.identities.find_identity(
+            provider="telegram", provider_subject=payload.id
+        )
+        if identity is None or identity.verified_at is None:
+            raise HTTPException(status_code=401, detail="No existing Telegram account was found")
+        try:
+            deps.account_linking.merge_accounts(
+                target_user_id=target_user_id,
+                source_user_id=identity.user_id,
+                proof_identity_id=identity.identity_id,
+                proof_provider="telegram",
+                expected_password_hash=None,
+                now=now,
+            )
+        except AccountLinkConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+        session = deps.sessions.create(user_id=target_user_id, now=now)
+        response.set_cookie(
+            key=SESSION_COOKIE,
+            value=session.raw_token,
+            httponly=True,
+            secure=os.environ.get("COOKIE_SECURE", "true").casefold() == "true",
+            samesite="lax",
+            path=SESSION_COOKIE_PATH,
+            max_age=max(0, int((session.expires_at - session.created_at).total_seconds())),
+        )
+        return {"message": "Telegram account linked; previous sessions were revoked"}
 
     @app.get("/account/export")
     def export_account_data(request: Request, deps: ServiceDependency) -> JSONResponse:

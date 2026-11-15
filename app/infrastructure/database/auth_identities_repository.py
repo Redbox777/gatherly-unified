@@ -96,6 +96,18 @@ class AuthIdentitiesRepository:
             return None
         return self._identity_from_row(row)
 
+    def list_for_user_id(self, *, user_id: str) -> list[AuthIdentity]:
+        """List login identities owned by one user, ordered by provider."""
+        rows = self._connection.execute(
+            """SELECT id, user_id, provider, provider_subject, password_hash,
+                      verified_at, created_at
+               FROM auth_identities
+               WHERE user_id = ?
+               ORDER BY provider, created_at""",
+            (user_id,),
+        ).fetchall()
+        return [self._identity_from_row(row) for row in rows]
+
     def find_email_identity_by_user_id(self, *, user_id: str) -> AuthIdentity | None:
         """Find the account's email identity without exposing other providers."""
         row = self._connection.execute(

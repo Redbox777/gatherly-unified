@@ -354,3 +354,30 @@ button:disabled{opacity:.55;cursor:wait}
 .bug-report-actions{display:flex;justify-content:flex-end;gap:9px}
 .bug-report-actions button{min-height:38px;padding:8px 13px;font-size:11px;cursor:pointer}
 @media(max-width:480px){.bug-report-form{padding:17px}.bug-report-actions{flex-direction:column-reverse}.bug-report-actions button{width:100%}}
+
+
+.account-settings-button{border:1px solid #dce9e5;border-radius:9px;background:#fff;color:#31575b;padding:8px 12px;font:inherit;font-size:11px;font-weight:700;cursor:pointer}
+.account-settings-button:hover{border-color:#9ccdc5;background:#f4fbf8}
+.account-link-dialog{width:min(92vw,620px);max-height:88vh;overflow:auto;padding:0;border:1px solid #dce9e5;border-radius:18px;background:#fff;color:#173941;box-shadow:0 24px 80px #082d3740}
+.account-link-dialog::backdrop{background:#082d3780;backdrop-filter:blur(3px)}
+.account-link-content{display:grid;gap:14px;padding:22px}
+.account-link-content .dialog-heading{align-items:flex-start}
+.account-link-content h2{margin:0;color:#173941;font-size:22px}
+.account-link-intro,.account-link-footnote{margin:0;color:#71888b;font-size:12px;line-height:1.6}
+.account-identities{display:grid;gap:7px}
+.account-identity-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border:1px solid #e5efec;border-radius:10px;background:#fbfdfc;color:#31575b;font-size:12px}
+.account-identity-row strong{font-size:12px}
+.account-identity-row span{color:#71888b;font-size:11px;text-align:right;overflow-wrap:anywhere}
+.account-link-warning{padding:12px;border:1px solid #f0dfb9;border-radius:10px;background:#fffaf0;color:#765d30}
+.account-link-warning strong{font-size:12px}
+.account-link-warning p{margin:5px 0 0;font-size:11px;line-height:1.55}
+.account-link-form{display:grid;gap:8px;padding:14px;border:1px solid #e5efec;border-radius:12px;background:#fff}
+.account-link-form h3{margin:0;color:#31575b;font-size:13px}
+.account-link-form>p{margin:0;color:#71888b;font-size:11px;line-height:1.5}
+.account-link-form label{margin-top:3px;color:#426267;font-size:10px;font-weight:700}
+.account-link-form input{box-sizing:border-box;width:100%;min-height:39px;padding:9px 10px;border:1px solid #dce9e5;border-radius:9px;background:#fff;color:#173941;font:inherit;font-size:12px}
+.account-link-form button{justify-self:start;min-height:38px;padding:8px 13px;font-size:11px;cursor:pointer}
+.telegram-link-widget{min-height:42px;display:flex;align-items:center;justify-content:flex-start}
+.telegram-link-widget p{margin:0;color:#82999a;font-size:11px}
+.account-link-content .participant-status{margin:0;min-height:1.2em;font-size:11px;line-height:1.5}
+@media(max-width:600px){.account-link-content{padding:16px}.account-identity-row{align-items:flex-start;flex-direction:column;gap:4px}.account-identity-row span{text-align:left}.account-settings-button{padding:7px 9px}.topbar-right{gap:7px}}

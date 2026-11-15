@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="./styles.css">
   <script src="./pwa.js" defer></script>
   <script src="./api-client.js" defer></script>
+  <script src="./account-linking-ui.js" defer></script>
   <script src="./date-utils.js" defer></script>
   <script src="./participants-ui.js" defer></script>
   <script src="./notes-ui.js" defer></script>
@@ -75,7 +76,7 @@
       <header class="topbar">
         <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Открыть меню" aria-expanded="false"><svg class="ui-icon" aria-hidden="true"><use href="#icon-menu"></use></svg></button>
         <div class="breadcrumb">Моё пространство <span>/</span> Обзор</div>
-        <div class="topbar-right"><span class="account-label">Моё пространство</span><button class="notification-toggle" id="notification-toggle" type="button" aria-expanded="false" aria-controls="notification-panel">Уведомления <span id="notification-count" aria-label="Непрочитанные">0</span></button><button class="logout-button" id="logout-button" type="button">Выйти</button><div class="avatar" aria-hidden="true">G</div></div>
+        <div class="topbar-right"><span class="account-label">Моё пространство</span><button class="account-settings-button" id="account-settings-open" type="button" aria-haspopup="dialog">Аккаунт</button><button class="notification-toggle" id="notification-toggle" type="button" aria-expanded="false" aria-controls="notification-panel">Уведомления <span id="notification-count" aria-label="Непрочитанные">0</span></button><button class="logout-button" id="logout-button" type="button">Выйти</button><div class="avatar" aria-hidden="true">G</div></div>
       </header>
 
       <section class="notification-panel" id="notification-panel" hidden aria-labelledby="notification-heading">
@@ -283,6 +284,31 @@
       </div>
     </main>
   </div>
+
+  <dialog class="account-link-dialog" id="account-link-dialog" aria-labelledby="account-link-heading">
+    <section class="account-link-content">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">БЕЗОПАСНОСТЬ</p><h2 id="account-link-heading">Связанные аккаунты</h2></div>
+        <button class="dialog-close" id="account-link-close" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <p class="account-link-intro">Объедините два своих аккаунта Gatherly, чтобы встречи, заметки и другие данные находились в одном пространстве.</p>
+      <div class="account-identities" id="account-identities" aria-live="polite"><p>Загружаем способы входа…</p></div>
+      <div class="account-link-warning"><strong>Перед объединением</strong><p>Вы подтвердите доступ к обоим аккаунтам. Данные второго аккаунта будут перенесены в текущий, сам второй аккаунт будет удалён, а прежние сессии завершатся. Отменить объединение нельзя.</p></div>
+      <form class="account-link-form" id="account-link-email-form">
+        <h3>Добавить существующий Email-аккаунт</h3><p>Введите почту и пароль второго аккаунта. Его адрес должен быть подтверждён.</p>
+        <label for="link-source-email">Почта второго аккаунта</label><input id="link-source-email" type="email" autocomplete="email" maxlength="254" required>
+        <label for="link-source-password">Пароль второго аккаунта</label><input id="link-source-password" type="password" autocomplete="current-password" maxlength="1024" required>
+        <button class="secondary-button" id="account-link-email-submit" type="submit">Проверить и объединить</button>
+        <p class="participant-status" id="account-link-email-status" role="status" aria-live="polite"></p>
+      </form>
+      <div class="account-link-form">
+        <h3>Добавить существующий Telegram-аккаунт</h3><p>Подтвердите второй аккаунт через официальный виджет Telegram. Подтверждение действует пять минут.</p>
+        <div id="account-link-telegram-widget" class="telegram-link-widget"><p>Проверяем настройки Telegram…</p></div>
+        <p class="participant-status" id="account-link-telegram-status" role="status" aria-live="polite"></p>
+      </div>
+      <p class="account-link-footnote">Для защиты текущего аккаунта вход в него должен быть выполнен не более 10 минут назад. Если срок истёк, выйдите и войдите снова, используя текущий способ входа.</p>
+    </section>
+  </dialog>
 
   <dialog class="bug-report-dialog" id="bug-report-dialog" aria-labelledby="bug-report-heading">
     <form id="bug-report-form" class="bug-report-form">
