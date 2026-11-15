@@ -61,7 +61,7 @@
       const telegramLink = document.getElementById("telegram-bot-link");
       const telegramStatus = document.getElementById("telegram-preference-status");
       telegramToggle.checked = preferences.telegram_enabled;
-      telegramToggle.disabled = !preferences.telegram_available;
+      telegramToggle.disabled = !preferences.telegram_available && !preferences.telegram_enabled;
       telegramLink.hidden = !preferences.telegram_available;
       if (preferences.telegram_available) {
         telegramLink.href = preferences.telegram_bot_url;
