@@ -60,6 +60,8 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     assert service_worker.status_code == 200
     assert "gatherly-shell-v1" in service_worker.text
     assert "application/json" in service_worker.text
+    assert 'addEventListener("push"' in service_worker.text
+    assert 'addEventListener("notificationclick"' in service_worker.text
     assert pwa_script.status_code == 200
     assert "serviceWorker.register" in pwa_script.text
     assert offline.status_code == 200
