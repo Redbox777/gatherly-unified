@@ -175,3 +175,48 @@ def test_linking_email_merges_verified_account_and_rotates_session(
         ).fetchone() is None
     finally:
         connection.close()
+
+
+def test_account_identity_list_and_telegram_widget_config(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setenv("TELEGRAM_BOT_USERNAME", "@gatherly_test_bot")
+    database_path = tmp_path / "account-identities-list.sqlite3"
+    app = create_app(database_path)
+    now = datetime.now(UTC)
+    connection = connect(database_path)
+    try:
+        identities = AuthIdentitiesRepository(connection)
+        identities.create_user_with_identity(
+            provider="email",
+            provider_subject="owner@example.test",
+            password_hash=hash_password("owner account secure password"),
+            now=now,
+            verified_at=now,
+        )
+    finally:
+        connection.close()
+
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
+        login = client.post(
+            "/auth/login",
+            json={
+                "email": "owner@example.test",
+                "password": "owner account secure password",
+            },
+        )
+        assert login.status_code == 200
+        listed = client.get("/account/identities")
+        assert listed.status_code == 200
+        assert listed.json() == [
+            {
+                "provider": "email",
+                "identifier": "owner@example.test",
+                "verified": True,
+            }
+        ]
+        config = client.get("/account/link/config")
+        assert config.status_code == 200
+        assert config.json() == {"telegram_bot_username": "gatherly_test_bot"}
+
+    unauthenticated = TestClient(app)
+    assert unauthenticated.get("/account/identities").status_code == 401
