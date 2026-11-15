@@ -10,6 +10,7 @@ const SHELL_ASSETS = [
   "/offline-store.js",
   "/api-client.js",
   "/offline-sync.js",
+  "/account-linking-ui.js",
   "/date-utils.js",
   "/participants-ui.js",
   "/notes-ui.js",
