@@ -13,6 +13,7 @@ import sqlite3
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from app.domain.auth_tokens import hash_token
 from app.infrastructure.database.connection import transaction
 
 
@@ -39,7 +40,7 @@ class OfflineSyncRepository:
     def apply(
         self,
         *,
-        authenticated_user_id: str,
+        session_token: str,
         operation_id: str,
         event_id: str,
         base_revision: int,
@@ -47,9 +48,9 @@ class OfflineSyncRepository:
         payload: dict[str, object],
         now: datetime | None = None,
     ) -> tuple[int, dict[str, object]]:
-        user_id = authenticated_user_id.strip()
-        if not user_id:
+        if not session_token or not session_token.strip():
             raise OfflineSyncError(401, "Authentication required")
+        session_digest = hash_token(session_token)
         try:
             normalized_operation_id = str(UUID(operation_id))
             normalized_event_id = str(UUID(event_id))
@@ -72,6 +73,15 @@ class OfflineSyncRepository:
         timestamp = self._timestamp(now or datetime.now(UTC))
 
         with transaction(self._connection):
+            session = self._connection.execute(
+                """SELECT user_id FROM auth_sessions
+                   WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ?""",
+                (session_digest, timestamp),
+            ).fetchone()
+            if session is None:
+                raise OfflineSyncError(401, "Authentication required")
+            user_id = str(session["user_id"])
+
             authorization = self._connection.execute(
                 """SELECT events.owner_id, state.revision
                    FROM events
@@ -183,7 +193,7 @@ class OfflineSyncRepository:
     def _timestamp(value: datetime) -> str:
         if value.tzinfo is None or value.utcoffset() is None:
             raise OfflineSyncError(422, "Server timestamp must be timezone-aware")
-        return value.astimezone(UTC).isoformat()
+        return value.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
     @staticmethod
     def _keys(
