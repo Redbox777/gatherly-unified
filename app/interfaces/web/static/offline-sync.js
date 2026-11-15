@@ -134,6 +134,7 @@
         recordSyncState("sending");
         await render();
         let response;
+        const requestStartedAt = Date.now();
         try {
           response = await fetch("/offline-sync/commands", {
             method: "POST",
@@ -148,6 +149,15 @@
             })
           });
         } catch (_) {
+          recordSyncState("pending");
+          try {
+            window.GatherlyDiagnostics?.recordApiEvent({
+              network_error: true,
+              path: "/offline-sync/commands",
+              method: "POST",
+              duration_ms: Date.now() - requestStartedAt
+            });
+          } catch (_) {}
           const delay = Math.min(60000, 750 * (2 ** (item.attempts + attempt))) + Math.floor(Math.random() * 350);
           await store.updateOutboxState(item.operationId, "pending", {
             error: "Нет ответа от сервера. Повторим ту же операцию.",
@@ -155,6 +165,19 @@
           });
           if (attempt < 2) await new Promise(resolve => setTimeout(resolve, delay));
           continue;
+        }
+
+        if (!response.ok) {
+          try {
+            window.GatherlyDiagnostics?.recordApiEvent({
+              network_error: false,
+              path: "/offline-sync/commands",
+              method: "POST",
+              status_code: response.status,
+              duration_ms: Date.now() - requestStartedAt,
+              request_id: response.headers?.get("X-Request-ID") || null
+            });
+          } catch (_) {}
         }
 
         if (response.ok) {
