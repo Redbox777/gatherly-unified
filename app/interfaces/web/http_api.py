@@ -238,6 +238,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         "/participant-invitations/accept",
         "/diagnostics/bug-reports",
         "/account",
+        "/push-subscriptions",
     }
 
     @app.middleware("http")
