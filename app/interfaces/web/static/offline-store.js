@@ -9,8 +9,8 @@
     "note.create": { required: ["content"], optional: ["visibility"] },
     "note.update": { required: ["note_id", "content", "visibility"], optional: [] },
     "note.delete": { required: ["note_id"], optional: [] },
-    "task.create": { required: ["title", "description"], optional: ["assignee_participant_id"] },
-    "task.update": { required: ["task_id", "title", "description"], optional: ["assignee_participant_id"] },
+    "task.create": { required: ["title"], optional: ["description", "due_at", "assignee_participant_id"] },
+    "task.update": { required: ["task_id", "title"], optional: ["description", "due_at", "assignee_participant_id"] },
     "task.complete": { required: ["task_id", "completed"], optional: [] },
     "task.delete": { required: ["task_id"], optional: [] },
     "venue.set": { required: ["venue_name", "address"], optional: ["latitude", "longitude"] },
@@ -97,17 +97,58 @@
     }
     const encoded = JSON.stringify(payload);
     if (encoded.length > 12000) throw new Error("Данные офлайн-команды слишком велики.");
-    if (kind.startsWith("note.") && typeof payload.content === "string" && payload.content.length > 5000) {
-      throw new Error("Заметка превышает допустимую длину.");
+    if (kind.startsWith("note.") && kind !== "note.delete") {
+      if (typeof payload.content !== "string" || !payload.content.trim() || payload.content.length > 5000) {
+        throw new Error("Некорректное содержимое заметки.");
+      }
+      if (kind === "note.update" && !["private", "shared"].includes(payload.visibility)) {
+        throw new Error("Недопустимая видимость заметки.");
+      }
+      if (kind === "note.create" && payload.visibility !== undefined &&
+          !["private", "shared"].includes(payload.visibility)) {
+        throw new Error("Недопустимая видимость заметки.");
+      }
     }
-    if (kind.startsWith("task.") && typeof payload.title === "string" && payload.title.length > 160) {
-      throw new Error("Название задачи слишком длинное.");
+    if (kind.startsWith("task.") && ["task.create", "task.update"].includes(kind)) {
+      if (typeof payload.title !== "string" || !payload.title.trim() || payload.title.length > 160) {
+        throw new Error("Некорректное название задачи.");
+      }
+      if (payload.description !== undefined &&
+          (typeof payload.description !== "string" || payload.description.length > 2000)) {
+        throw new Error("Некорректное описание задачи.");
+      }
+      if (payload.due_at !== undefined && payload.due_at !== null) {
+        if (typeof payload.due_at !== "string" || !Number.isFinite(Date.parse(payload.due_at)) ||
+            !/(Z|[+-]\\d{2}:?\\d{2})$/i.test(payload.due_at)) {
+          throw new Error("Срок задачи должен содержать дату, время и часовой пояс.");
+        }
+      }
+      if (payload.assignee_participant_id !== undefined &&
+          payload.assignee_participant_id !== null && !isUuid(payload.assignee_participant_id)) {
+        throw new Error("Некорректный исполнитель задачи.");
+      }
     }
-    if (payload.visibility && !["private", "shared"].includes(payload.visibility)) {
+    if (payload.visibility !== undefined && !["private", "shared"].includes(payload.visibility)) {
       throw new Error("Недопустимая видимость заметки.");
     }
     if (kind === "task.complete" && typeof payload.completed !== "boolean") {
       throw new Error("Статус задачи должен быть логическим значением.");
+    }
+    if (kind === "venue.set") {
+      if (typeof payload.venue_name !== "string" || !payload.venue_name.trim() ||
+          payload.venue_name.length > 160 || typeof payload.address !== "string" ||
+          !payload.address.trim() || payload.address.length > 500) {
+        throw new Error("Некорректные данные места проведения.");
+      }
+      const hasLatitude = payload.latitude !== undefined && payload.latitude !== null;
+      const hasLongitude = payload.longitude !== undefined && payload.longitude !== null;
+      if (hasLatitude !== hasLongitude ||
+          (hasLatitude && (typeof payload.latitude !== "number" || !Number.isFinite(payload.latitude) ||
+            payload.latitude < -90 || payload.latitude > 90 ||
+            typeof payload.longitude !== "number" || !Number.isFinite(payload.longitude) ||
+            payload.longitude < -180 || payload.longitude > 180))) {
+        throw new Error("Некорректные координаты места проведения.");
+      }
     }
     return JSON.parse(encoded);
   };
@@ -127,7 +168,7 @@
         if (pending.length && options.discardPending !== true) {
           throw new Error("Есть несинхронизированные изменения. Сначала синхронизируйте их или явно удалите очередь.");
         }
-        if (pending.length) await this.purgeOutbox();
+        await this.purgeOutbox();
       }
       try {
         if (enabled) window.localStorage.setItem(OPT_IN_KEY, "true");
