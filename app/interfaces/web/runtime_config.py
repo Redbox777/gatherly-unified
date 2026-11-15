@@ -132,9 +132,31 @@ def validate_runtime_configuration(environ: Mapping[str, str]) -> None:
         )
     if not ledger_path:
         raise ValueError("GATHERLY_ERASURE_LEDGER_PATH is required in production")
+    from pathlib import Path
+
+    ledger_directory = Path(ledger_path).expanduser()
+    if not ledger_directory.is_absolute():
+        raise ValueError("GATHERLY_ERASURE_LEDGER_PATH must be an absolute persistent path")
+    backup_directory = Path(
+        environ.get("GATHERLY_BACKUP_DIR", "/var/backups/gatherly")
+    ).expanduser().resolve()
+    resolved_ledger_directory = ledger_directory.resolve()
+    if (
+        resolved_ledger_directory == backup_directory
+        or resolved_ledger_directory in backup_directory.parents
+        or backup_directory in resolved_ledger_directory.parents
+    ):
+        raise ValueError(
+            "GATHERLY_ERASURE_LEDGER_PATH must be separate from GATHERLY_BACKUP_DIR"
+        )
     if not ledger_remote or ":" not in ledger_remote or ledger_remote.startswith(":"):
         raise ValueError(
             "GATHERLY_ERASURE_LEDGER_REMOTE must name a configured off-host rclone remote"
+        )
+    backup_remote = environ.get("GATHERLY_BACKUP_REMOTE", "").strip()
+    if backup_remote and ledger_remote == backup_remote:
+        raise ValueError(
+            "GATHERLY_ERASURE_LEDGER_REMOTE must be separate from GATHERLY_BACKUP_REMOTE"
         )
 
     public_hostname = urlsplit(public_origin).hostname if public_origin else None
