@@ -290,12 +290,14 @@ def test_expired_invitation_cannot_be_accepted(tmp_path, monkeypatch) -> None:
 
         connection = connect(app.state.database_path)
         try:
+            created_at = connection.execute(
+                "SELECT created_at FROM participant_invitations WHERE id = ?",
+                (created.json()["id"],),
+            ).fetchone()["created_at"]
+            expired_at = datetime.fromisoformat(created_at) + timedelta(microseconds=1)
             connection.execute(
                 "UPDATE participant_invitations SET expires_at = ? WHERE id = ?",
-                (
-                    (datetime.now(UTC) - timedelta(seconds=1)).isoformat(),
-                    created.json()["id"],
-                ),
+                (expired_at.isoformat(), created.json()["id"]),
             )
             connection.commit()
         finally:
