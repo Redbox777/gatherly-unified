@@ -104,11 +104,13 @@
     }
     setStatus(telegramStatus, "Проверяем Telegram-аккаунт и переносим данные…");
     try {
-      const { response } = await request("/account/link/telegram", {
-        id: String(user.id),
-        auth_date: String(user.auth_date),
-        hash: String(user.hash)
-      });
+      const signedPayload = Object.fromEntries(
+        Object.entries(user)
+          .filter(([key, value]) => key !== "hash" && value !== undefined && value !== null)
+          .map(([key, value]) => [key, String(value)])
+      );
+      signedPayload.hash = String(user.hash);
+      const { response } = await request("/account/link/telegram", signedPayload);
       if (!response.ok) {
         setStatus(telegramStatus, friendlyError(response.status));
         return;
