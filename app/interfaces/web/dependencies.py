@@ -16,6 +16,7 @@ from app.application.password_reset_service import PasswordResetService
 from app.infrastructure.database.auth_email_tokens_repository import AuthEmailTokensRepository
 from app.infrastructure.database.auth_identities_repository import AuthIdentitiesRepository
 from app.infrastructure.database.auth_sessions_repository import AuthSessionsRepository
+from app.infrastructure.database.account_linking_repository import AccountLinkingRepository
 from app.infrastructure.database.events_repository import EventsRepository
 from app.infrastructure.database.event_tasks_repository import EventTasksRepository
 from app.infrastructure.database.event_expenses_repository import EventExpensesRepository
@@ -92,6 +93,7 @@ class Dependencies:
         self.event_expense_splits = EventExpenseSplitsRepository(connection)
         self.event_finance = EventFinanceRepository(connection)
         self.privacy = PrivacyRepository(connection)
+        self.account_linking = AccountLinkingRepository(connection)
         self.reset_requests = PasswordResetRequestService(
             identities=self.identities,
             resets=self.resets,
