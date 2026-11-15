@@ -34,7 +34,7 @@ def decode_subscription_encryption_key(encoded: str) -> bytes:
     try:
         padded = value + "=" * ((4 - len(value) % 4) % 4)
         key = base64.b64decode(padded.encode("ascii"), altchars=b"-_", validate=True)
-    except (binascii.Error, UnicodeEncodeError, ValueError) as error:
+    except ValueError as error:
         raise ValueError("Web Push subscription key must be base64url encoded") from error
     if len(key) != 32:
         raise ValueError("Web Push subscription key must decode to exactly 32 bytes")
@@ -45,7 +45,7 @@ def _decode_browser_key(value: str, *, expected_length: int, name: str) -> bytes
     try:
         padded = value + "=" * ((4 - len(value) % 4) % 4)
         decoded = base64.b64decode(padded.encode("ascii"), altchars=b"-_", validate=True)
-    except (binascii.Error, UnicodeEncodeError, ValueError) as error:
+    except ValueError as error:
         raise ValueError(f"Invalid Web Push {name} key") from error
     if len(decoded) != expected_length:
         raise ValueError(f"Invalid Web Push {name} key length")
@@ -229,7 +229,7 @@ class PushSubscriptionsRepository:
                     user_id.encode("utf-8"),
                 )
                 subscription_info = json.loads(plaintext)
-            except (InvalidTag, ValueError, json.JSONDecodeError):
+            except (InvalidTag, ValueError):
                 invalid_subscriptions.add(subscription_id)
                 continue
             pending.append(
