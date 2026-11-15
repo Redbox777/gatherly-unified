@@ -2,7 +2,11 @@
 
 from datetime import datetime
 
-from app.domain.passwords import hash_password, verify_password
+from app.domain.passwords import (
+    hash_password,
+    password_hash_needs_rehash,
+    verify_password,
+)
 from app.infrastructure.database.auth_identities_repository import (
     AuthIdentitiesRepository,
     AuthIdentity,
@@ -68,6 +72,12 @@ class AuthIdentitiesService:
             return None
         if not verify_password(password, identity.password_hash):
             return None
+        if password_hash_needs_rehash(identity.password_hash):
+            self._repository.upgrade_password_hash(
+                user_id=identity.user_id,
+                current_password_hash=identity.password_hash,
+                new_password_hash=hash_password(password),
+            )
         return identity
 
     def change_email_password(
