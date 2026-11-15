@@ -28,6 +28,11 @@ def test_linking_telegram_merges_verified_account_and_rotates_session(
     tmp_path, monkeypatch
 ) -> None:
     monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setenv("GATHERLY_ERASURE_LEDGER_PATH", str(tmp_path / "erasure-ledger"))
+    monkeypatch.setenv(
+        "GATHERLY_ERASURE_LEDGER_KEY",
+        "bW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW0=",
+    )
     bot_token = "test-telegram-bot-token"
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", bot_token)
     database_path = tmp_path / "account-linking-http.sqlite3"
@@ -116,6 +121,11 @@ def test_linking_email_merges_verified_account_and_rotates_session(
     tmp_path, monkeypatch
 ) -> None:
     monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setenv("GATHERLY_ERASURE_LEDGER_PATH", str(tmp_path / "erasure-ledger"))
+    monkeypatch.setenv(
+        "GATHERLY_ERASURE_LEDGER_KEY",
+        "bW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW0=",
+    )
     bot_token = "test-telegram-bot-token"
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", bot_token)
     database_path = tmp_path / "account-linking-email-http.sqlite3"

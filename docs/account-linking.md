@@ -58,3 +58,10 @@ Email verification and password-reset tokens remain attached to their identity I
 ## Current scope
 
 This increment supports merging two existing accounts where their provider sets do not overlap. The main dashboard includes a linked-accounts dialog for the Email/password and Telegram Login Widget flows. Attaching a brand-new unregistered provider identity and resolving conflicts where both accounts already have Email or both already have Telegram remain out of scope. Those cases are deliberately rejected rather than guessed.
+
+
+## Recovery after account merging
+
+Every account merge first writes and replicates a signed, pseudonymous merge-intent record. After the transactional transfer succeeds, a signed commit marker is appended. If the operation fails or its commit outcome is uncertain, startup or the backup command reconciles the pending intent against live identity ownership before appending a commit or abort marker. The ledger stores keyed hashes of the source account, destination account, and proof identity; it does not store raw account or provider identifiers.
+
+A committed merge marker is replayed during startup and restore, so an older SQLite backup cannot resurrect the merged source account as a second login. An unresolved intent is never guessed: application startup and the backup command reconcile it against the authoritative live database. Restore refuses to proceed while any intent remains unresolved; start the authoritative database once so it can append a commit or abort marker, then retry the restore. If that evidence is unavailable or inconsistent, recovery stops rather than risk deleting a valid account or restoring a duplicate.

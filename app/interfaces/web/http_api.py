@@ -368,11 +368,25 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             # This also completes any deletion interrupted after the tombstone was
             # replicated but before the SQLite transaction committed.
             events = erasure_ledger.load_events()
+            identity_owners = {
+                str(row["id"]): str(row["user_id"])
+                for row in migration_connection.execute(
+                    "SELECT id, user_id FROM auth_identities"
+                ).fetchall()
+            }
+            erasure_ledger.resolve_pending_merge_intents(
+                identity_owners=identity_owners, events=events
+            )
+            events = erasure_ledger.load_events()
             user_ids = [
                 str(row["id"])
                 for row in migration_connection.execute("SELECT id FROM users").fetchall()
             ]
             privacy_repository = PrivacyRepository(migration_connection)
+            for merged_source_id in erasure_ledger.matching_merged_source_user_ids(
+                user_ids, events
+            ):
+                privacy_repository.apply_recorded_erasure(user_id=merged_source_id)
             for erased_user_id in erasure_ledger.matching_user_ids(user_ids, events):
                 privacy_repository.apply_recorded_erasure(user_id=erased_user_id)
     finally:
@@ -782,17 +796,31 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         )
         if identity is None or identity.verified_at is None or identity.password_hash is None:
             raise HTTPException(status_code=401, detail="Second account verification failed")
+        if deps.erasure_ledger is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Account linking is unavailable until the erasure ledger is configured",
+            )
         try:
-            deps.account_linking.merge_accounts(
+            ledger_synced = deps.account_linking.merge_accounts(
                 target_user_id=target_user_id,
                 source_user_id=identity.user_id,
                 proof_identity_id=identity.identity_id,
                 proof_provider="email",
                 expected_password_hash=identity.password_hash,
                 now=now,
+                erasure_ledger=deps.erasure_ledger,
             )
+        except ErasureLedgerError:
+            logger.error("Account linking blocked because merge intent replication failed")
+            raise HTTPException(
+                status_code=503,
+                detail="Account linking could not be durably recorded; please retry",
+            ) from None
         except AccountLinkConflict as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
+        if not ledger_synced:
+            logger.error("Account merge committed with remote ledger resolution pending")
 
         session = deps.sessions.create(user_id=target_user_id, now=now)
         response.set_cookie(
@@ -867,17 +895,31 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         )
         if identity is None or identity.verified_at is None:
             raise HTTPException(status_code=401, detail="No existing Telegram account was found")
+        if deps.erasure_ledger is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Account linking is unavailable until the erasure ledger is configured",
+            )
         try:
-            deps.account_linking.merge_accounts(
+            ledger_synced = deps.account_linking.merge_accounts(
                 target_user_id=target_user_id,
                 source_user_id=identity.user_id,
                 proof_identity_id=identity.identity_id,
                 proof_provider="telegram",
                 expected_password_hash=None,
                 now=now,
+                erasure_ledger=deps.erasure_ledger,
             )
+        except ErasureLedgerError:
+            logger.error("Account linking blocked because merge intent replication failed")
+            raise HTTPException(
+                status_code=503,
+                detail="Account linking could not be durably recorded; please retry",
+            ) from None
         except AccountLinkConflict as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
+        if not ledger_synced:
+            logger.error("Account merge committed with remote ledger resolution pending")
 
         session = deps.sessions.create(user_id=target_user_id, now=now)
         response.set_cookie(
