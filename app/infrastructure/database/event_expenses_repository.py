@@ -203,6 +203,19 @@ class EventExpensesRepository:
         get_currency(currency)
         return normalized_title, normalized_description
 
+    def _owned_expense(
+        self, *, expense_id: str, event_id: str, owner_id: str
+    ) -> dict[str, object] | None:
+        row = self._connection.execute(
+            """SELECT expense.amount_minor_units, expense.currency
+               FROM event_expenses AS expense
+               JOIN events ON events.id = expense.event_id
+               WHERE expense.id = ? AND expense.event_id = ?
+                 AND events.owner_id = ?""",
+            (expense_id, event_id, owner_id.strip()),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
     def _event_exists(self, *, event_id: str, owner_id: str) -> bool:
         return self._connection.execute(
             "SELECT 1 FROM events WHERE id = ? AND owner_id = ?",
