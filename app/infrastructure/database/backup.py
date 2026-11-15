@@ -217,6 +217,25 @@ def restore_database(
         # database have all passed validation.
         _copy_database(source_path, staged_path)
         events = erasure_ledger.load_events()
+        if erasure_ledger.pending_merge_intents(events):
+            if not destination_path.is_file():
+                raise ValueError(
+                    "Cannot restore while account-merge intents are unresolved and no live database is available"
+                )
+            live_connection = connect(destination_path)
+            try:
+                live_identity_owners = {
+                    str(row["id"]): str(row["user_id"])
+                    for row in live_connection.execute(
+                        "SELECT id, user_id FROM auth_identities"
+                    ).fetchall()
+                }
+            finally:
+                live_connection.close()
+            erasure_ledger.resolve_pending_merge_intents(
+                identity_owners=live_identity_owners, events=events
+            )
+            events = erasure_ledger.load_events()
         connection = connect(staged_path)
         try:
             migrate(connection)
@@ -225,6 +244,10 @@ def restore_database(
                 for row in connection.execute("SELECT id FROM users").fetchall()
             ]
             repository = PrivacyRepository(connection)
+            for merged_source_id in erasure_ledger.matching_merged_source_user_ids(
+                user_ids, events
+            ):
+                repository.apply_recorded_erasure(user_id=merged_source_id)
             for user_id in erasure_ledger.matching_user_ids(user_ids, events):
                 repository.apply_recorded_erasure(user_id=user_id)
             _verify_database(connection)

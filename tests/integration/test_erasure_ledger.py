@@ -113,3 +113,55 @@ def test_matching_tombstones_only_select_deleted_account_ids(tmp_path) -> None:
     assert ledger.matching_user_ids(
         ["new-user", "old-user"], (event,)
     ) == ("old-user",)
+
+
+def test_merge_intent_is_not_replayed_until_commit_is_recorded(tmp_path) -> None:
+    ledger = AccountErasureLedger(tmp_path / "ledger", b"m" * 32)
+    intent = ledger.record_merge_intent(
+        source_user_id="source-user",
+        target_user_id="target-user",
+        proof_identity_id="source-proof-identity",
+        created_at=datetime.now(UTC),
+    )
+    events = ledger.load_events()
+    assert ledger.pending_merge_intents(events) == (intent,)
+    assert ledger.matching_merged_source_user_ids(
+        ["source-user", "target-user"], events
+    ) == ()
+
+    ledger.resolve_pending_merge_intents(
+        identity_owners={"source-proof-identity": "source-user"},
+        events=events,
+    )
+    resolved = ledger.load_events()
+    assert ledger.pending_merge_intents(resolved) == ()
+    assert ledger.matching_merged_source_user_ids(
+        ["source-user", "target-user"], resolved
+    ) == ()
+
+
+def test_committed_merge_tombstone_replays_against_pre_merge_backup(tmp_path) -> None:
+    ledger = AccountErasureLedger(tmp_path / "ledger", b"m" * 32)
+    intent = ledger.record_merge_intent(
+        source_user_id="source-user",
+        target_user_id="target-user",
+        proof_identity_id="source-proof-identity",
+        created_at=datetime.now(UTC),
+    )
+    assert ledger.record_merge_resolution(intent=intent, committed=True)
+    events = ledger.load_events()
+    assert ledger.matching_merged_source_user_ids(
+        ["source-user", "target-user"], events
+    ) == ("source-user",)
+
+
+def test_pending_merge_cannot_be_reconciled_without_proof_identity(tmp_path) -> None:
+    ledger = AccountErasureLedger(tmp_path / "ledger", b"m" * 32)
+    intent = ledger.record_merge_intent(
+        source_user_id="source-user",
+        target_user_id="target-user",
+        proof_identity_id="source-proof-identity",
+        created_at=datetime.now(UTC),
+    )
+    with pytest.raises(ErasureLedgerError, match="cannot be reconciled"):
+        ledger.resolve_pending_merge_intents(identity_owners={}, events=(intent,))
