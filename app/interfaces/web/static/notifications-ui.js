@@ -164,9 +164,13 @@
     button.disabled = true;
     try {
       await api("/push-subscriptions", { method: "DELETE", body: "{}" });
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      if (subscription) await subscription.unsubscribe();
+      if ("serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.ready;
+        if (registration.pushManager) {
+          const subscription = await registration.pushManager.getSubscription();
+          if (subscription) await subscription.unsubscribe();
+        }
+      }
       status.textContent = "Push-уведомления отключены.";
       await loadNotificationPreferences();
     } catch (error) {
