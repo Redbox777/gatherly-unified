@@ -1,6 +1,6 @@
 # S6.3 — Safe offline mutation queue
 
-**Status:** S6.3a/b server foundation and S6.3c IndexedDB outbox are merged. S6.3d foreground delivery, retry handling and conflict controls are implemented on the feature branch and awaiting CI/merge. No service-worker background sync is enabled.
+**Status (2026-11-15):** S6.3a, S6.3b, S6.3c and S6.3d are merged into `main` (PRs #91–#95). CI passed on the final main commit `ece32d90`. The implementation is a foreground, user-triggered sync foundation; it is not yet a production-validated offline experience. No service-worker background sync is enabled.
 
 ## Goal
 
@@ -77,8 +77,8 @@ Conflict policy:
 
 - Never overwrite newer server data automatically.
 - Mark the operation `conflict` and pause later commands for that event.
-- Show the local draft and current server version.
-- User may discard the local command, or explicitly reapply/edit it against the newly fetched revision. Reapplication creates a new operation ID.
+- Current UI shows the queued command summary and conflict state; it does not yet render a side-by-side local/server diff.
+- User may discard the local command, or explicitly reapply the unchanged payload against the newly fetched revision. Editing the draft and comparing server data are follow-up UX work. Reapplication creates a new operation ID.
 - Independent events may continue syncing while one event is blocked.
 
 This event-level revision is deliberately conservative: unrelated changes within the same event can cause a conflict, but they cannot silently overwrite each other.
@@ -127,21 +127,15 @@ Because IndexedDB is not application-encrypted, the UI must disclose that queued
 - Expired/revoked sessions cannot replay queued commands.
 
 ### Browser tests
-- Outbox survives reload and temporary offline/online transitions.
-- A timeout after server commit retries the same operation ID and does not duplicate.
-- Account A's queue is never rendered or sent under account B.
-- Logout locks the queue; re-authentication as A resumes it; account deletion purges it.
-- One conflict pauses only that event chain.
-- 401, 403, 404, 409, 422, 429, and 5xx each follow the documented state transition.
-- Two tabs do not produce independent conflicting queue workers.
-- Disabling local storage with pending operations requires an explicit discard decision.
+- **Covered in CI:** IndexedDB enqueue/validation, account namespace isolation, cache/revision retention, lease acquisition, recovery from `sending`, explicit discard on opt-out; API cache/revision and offline queue conversion; foreground success, event conflict pause, per-event continuation; server idempotent replay, same-key/different-payload rejection, stale revision, concurrent duplicate submission, rollback, revoked session, unauthenticated requests, and online revision triggers.
+- **Still needs dedicated coverage:** simulated lost response after server commit; all 401/403/404/422/429/5xx sender transitions; two real browser tabs and Web Locks behavior; account deletion purge integration; UI reapply/discard flows; real browser reload and offline/online transitions.
 
 ## Implementation sequence
 
 1. **S6.3a — server foundation: complete.** Migration 24 adds per-event revisions and a user-scoped idempotency ledger. The authenticated `/offline-sync/commands` endpoint validates the live session inside the same `BEGIN IMMEDIATE` transaction as authorization, revision check, domain mutation and replay receipt. The endpoint is not called by the PWA.
 2. **S6.3b — online-path consistency:** ensure every existing relevant mutation increments the same event revision; add endpoint and concurrency tests.
-3. **S6.3c — client outbox: complete.** IndexedDB outbox, strict command allowlist, account lock/unlock, revision cache and explicit discard safeguards.
-4. **S6.3d — foreground sync:** authenticated ordered sender, capped retries, Retry-After handling, event-level conflict pause, explicit reapply/discard controls and queue status. Browser automation coverage remains a release requirement.
-5. **S6.3e — controlled trial:** enable only for test accounts, inspect real-device behavior, then consider broader rollout.
+3. **S6.3c — client outbox: merged.** IndexedDB outbox, strict command allowlist, account lock/unlock, revision cache and explicit discard safeguards.
+4. **S6.3d — foreground sync: merged.** Authenticated ordered sender, bounded retries, Retry-After handling, event-level conflict pause, explicit reapply/discard controls and queue status.
+5. **S6.3e — controlled trial: next.** First run locally with a test account and exercise online/offline transitions. Then test on two browsers/devices and only afterward schedule the friend/tester trial.
 
-S6.3c is merged in PR #94. S6.3d is being developed against that merged base. The live PWA cannot synchronize until the updated backend is deployed; deployment remains deferred until controlled tester sessions are scheduled.
+PRs #94 and #95 are merged. The final CI run on `main` succeeded. Live synchronization still requires the updated backend to be deployed; deployment remains deferred until controlled tester sessions are scheduled.
