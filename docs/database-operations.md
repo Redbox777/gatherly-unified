@@ -130,3 +130,6 @@ There is no automatic destructive rollback path. For a faulty migration, stop wr
 ## Main-branch protection
 
 Before production, protect `main`: require pull requests, require the `quality` workflow on the latest commit, block force-push and branch deletion, and restrict bypass permissions. This repository change documents the desired policy; the actual GitHub branch-protection/ruleset settings must be enabled and verified by a repository administrator.
+
+
+Migration 24 adds event sync revisions, trigger-based revision tracking for events/participants/notes/tasks/venues, and the per-user idempotency ledger (30-day retention policy for application cleanup).

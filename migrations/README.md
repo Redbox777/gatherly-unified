@@ -6,7 +6,7 @@ append-only: never edit a migration that may already have been applied to an
 environment. Add a new numbered migration and test the upgrade from the immediately
 preceding schema, including rollback behavior if the migration fails.
 
-The current schema history (versions 1–21), migration policy, backup procedure,
+The current schema history (versions 1–24), migration policy, backup procedure,
 restore procedure, and health-check semantics are documented in
 [Database operations](../docs/database-operations.md).
 

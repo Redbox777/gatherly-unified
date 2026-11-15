@@ -563,6 +563,191 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON push_deliveries(sent_at, attempts, next_attempt_at);
         """,
     ),
+
+    (
+        24,
+        """
+        CREATE TABLE event_sync_state (
+            event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+            revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
+            updated_at TEXT NOT NULL
+        );
+
+        INSERT INTO event_sync_state(event_id, revision, updated_at)
+        SELECT id, 0, created_at FROM events;
+
+        CREATE TABLE sync_idempotency_records (
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            operation_id TEXT NOT NULL CHECK (length(operation_id) = 36),
+            event_id TEXT NOT NULL CHECK (length(trim(event_id)) > 0),
+            payload_hash TEXT NOT NULL CHECK (length(payload_hash) = 64),
+            response_status INTEGER NOT NULL CHECK (response_status BETWEEN 100 AND 599),
+            response_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY(user_id, operation_id)
+        );
+        CREATE INDEX idx_sync_idempotency_created
+            ON sync_idempotency_records(created_at);
+        CREATE INDEX idx_sync_idempotency_event
+            ON sync_idempotency_records(event_id, created_at);
+
+        CREATE TRIGGER sync_state_event_insert
+        AFTER INSERT ON events
+        BEGIN
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            VALUES (NEW.id, 0, NEW.created_at)
+            ON CONFLICT(event_id) DO NOTHING;
+        END;
+
+        CREATE TRIGGER sync_state_event_update
+        AFTER UPDATE OF owner_id, title, starts_at ON events
+        BEGIN
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            VALUES (NEW.id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+        END;
+
+        CREATE TRIGGER sync_state_participant_insert
+        AFTER INSERT ON event_participants
+        BEGIN
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            VALUES (NEW.event_id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+        END;
+
+        CREATE TRIGGER sync_state_participant_update
+        AFTER UPDATE OF event_id, linked_user_id, display_name ON event_participants
+        BEGIN
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            VALUES (NEW.event_id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            SELECT OLD.event_id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE OLD.event_id != NEW.event_id
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+        END;
+
+        CREATE TRIGGER sync_state_participant_delete
+        AFTER DELETE ON event_participants
+        BEGIN
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            VALUES (OLD.event_id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+        END;
+
+        CREATE TRIGGER sync_state_note_insert
+        AFTER INSERT ON event_notes
+        BEGIN
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            VALUES (NEW.event_id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+        END;
+
+        CREATE TRIGGER sync_state_note_update
+        AFTER UPDATE ON event_notes
+        BEGIN
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            VALUES (NEW.event_id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            SELECT OLD.event_id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE OLD.event_id != NEW.event_id
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+        END;
+
+        CREATE TRIGGER sync_state_note_delete
+        AFTER DELETE ON event_notes
+        BEGIN
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            VALUES (OLD.event_id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+        END;
+
+        CREATE TRIGGER sync_state_task_insert
+        AFTER INSERT ON event_tasks
+        BEGIN
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            VALUES (NEW.event_id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+        END;
+
+        CREATE TRIGGER sync_state_task_update
+        AFTER UPDATE ON event_tasks
+        BEGIN
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            VALUES (NEW.event_id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            SELECT OLD.event_id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE OLD.event_id != NEW.event_id
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+        END;
+
+        CREATE TRIGGER sync_state_task_delete
+        AFTER DELETE ON event_tasks
+        BEGIN
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            VALUES (OLD.event_id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+        END;
+
+        CREATE TRIGGER sync_state_venue_insert
+        AFTER INSERT ON event_venues
+        BEGIN
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            VALUES (NEW.event_id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+        END;
+
+        CREATE TRIGGER sync_state_venue_update
+        AFTER UPDATE ON event_venues
+        BEGIN
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            VALUES (NEW.event_id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+        END;
+
+        CREATE TRIGGER sync_state_venue_delete
+        AFTER DELETE ON event_venues
+        BEGIN
+            INSERT INTO event_sync_state(event_id, revision, updated_at)
+            VALUES (OLD.event_id, 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            ON CONFLICT(event_id) DO UPDATE SET
+                revision = event_sync_state.revision + 1,
+                updated_at = excluded.updated_at;
+        END;
+        """,
+    ),
 )
 
 
