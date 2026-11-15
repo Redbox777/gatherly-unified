@@ -288,10 +288,12 @@
       );
       existingRequest.onsuccess = () => {
         const existing = existingRequest.result || [];
-        const nextRevision = existing.reduce(
-          (revision, item) => Math.max(revision, item.baseRevision + 1),
-          command.baseRevision
-        );
+        const nextRevision = command.forceBaseRevision === true
+          ? command.baseRevision
+          : existing.reduce(
+            (revision, item) => Math.max(revision, item.baseRevision + 1),
+            command.baseRevision
+          );
         record.baseRevision = nextRevision;
         outbox.add(record);
       };
