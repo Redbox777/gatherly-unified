@@ -114,6 +114,41 @@ def validate_runtime_configuration(environ: Mapping[str, str]) -> None:
     if environment != "production":
         return
 
+    public_hostname = urlsplit(public_origin).hostname if public_origin else None
+    if (
+        not public_origin
+        or urlsplit(public_origin).scheme.casefold() != "https"
+        or public_hostname is None
+        or public_hostname.casefold() in _LOCAL_HOSTS
+    ):
+        raise ValueError("PUBLIC_ORIGIN must be a configured public HTTPS origin")
+
+    if environ.get("COOKIE_SECURE", "true").strip().casefold() != "true":
+        raise ValueError("COOKIE_SECURE must be true in production")
+
+    if not smtp_starttls:
+        raise ValueError("SMTP_STARTTLS must be true in production")
+
+    smtp_host = environ.get("SMTP_HOST", "").strip()
+    if not smtp_host or smtp_host.casefold() in _LOCAL_HOSTS:
+        raise ValueError("SMTP_HOST must name a configured production mail server")
+
+    smtp_sender = environ.get("SMTP_SENDER", "").strip()
+    if not smtp_sender or smtp_sender.casefold().endswith(
+        (".local", ".test", "@localhost")
+    ):
+        raise ValueError("SMTP_SENDER must be a real sender address in production")
+
+    for setting in _PUBLIC_URL_SETTINGS:
+        value = environ.get(setting, "").strip()
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.hostname.casefold() in _LOCAL_HOSTS
+        ):
+            raise ValueError(f"{setting} must be an absolute HTTPS URL in production")
+
     ledger_key = environ.get("GATHERLY_ERASURE_LEDGER_KEY", "").strip()
     ledger_path = environ.get("GATHERLY_ERASURE_LEDGER_PATH", "").strip()
     ledger_remote = environ.get("GATHERLY_ERASURE_LEDGER_REMOTE", "").strip()
@@ -158,37 +193,3 @@ def validate_runtime_configuration(environ: Mapping[str, str]) -> None:
             "GATHERLY_ERASURE_LEDGER_REMOTE must be separate from GATHERLY_BACKUP_REMOTE"
         )
 
-    public_hostname = urlsplit(public_origin).hostname if public_origin else None
-    if (
-        not public_origin
-        or urlsplit(public_origin).scheme.casefold() != "https"
-        or public_hostname is None
-        or public_hostname.casefold() in _LOCAL_HOSTS
-    ):
-        raise ValueError("PUBLIC_ORIGIN must be a configured public HTTPS origin")
-
-    if environ.get("COOKIE_SECURE", "true").strip().casefold() != "true":
-        raise ValueError("COOKIE_SECURE must be true in production")
-
-    if not smtp_starttls:
-        raise ValueError("SMTP_STARTTLS must be true in production")
-
-    smtp_host = environ.get("SMTP_HOST", "").strip()
-    if not smtp_host or smtp_host.casefold() in _LOCAL_HOSTS:
-        raise ValueError("SMTP_HOST must name a configured production mail server")
-
-    smtp_sender = environ.get("SMTP_SENDER", "").strip()
-    if not smtp_sender or smtp_sender.casefold().endswith(
-        (".local", ".test", "@localhost")
-    ):
-        raise ValueError("SMTP_SENDER must be a real sender address in production")
-
-    for setting in _PUBLIC_URL_SETTINGS:
-        value = environ.get(setting, "").strip()
-        parsed = urlsplit(value)
-        if (
-            parsed.scheme != "https"
-            or not parsed.hostname
-            or parsed.hostname.casefold() in _LOCAL_HOSTS
-        ):
-            raise ValueError(f"{setting} must be an absolute HTTPS URL in production")
