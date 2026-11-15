@@ -246,12 +246,17 @@ def test_merge_preserves_destination_preferences_moves_invitations_and_revokes_s
         "SELECT created_by_owner_id FROM participant_invitations WHERE id = 'invite-1'"
     ).fetchone()
     assert invitation["created_by_owner_id"] == target.user_id
-    sessions = database.execute(
-        "SELECT user_id, revoked_at FROM auth_sessions ORDER BY id"
-    ).fetchall()
-    assert len(sessions) == 2
-    assert all(row["user_id"] == target.user_id for row in sessions)
-    assert all(row["revoked_at"] is not None for row in sessions)
+    # The destination session is retained but revoked. The source user's
+    # session is removed by the users->auth_sessions ON DELETE CASCADE.
+    target_session = database.execute(
+        "SELECT user_id, revoked_at FROM auth_sessions WHERE id = 'target-session'"
+    ).fetchone()
+    assert target_session is not None
+    assert target_session["user_id"] == target.user_id
+    assert target_session["revoked_at"] is not None
+    assert database.execute(
+        "SELECT 1 FROM auth_sessions WHERE id = 'source-session'"
+    ).fetchone() is None
 
 
 def test_merge_rolls_back_all_prior_updates_when_later_data_move_fails(database) -> None:
