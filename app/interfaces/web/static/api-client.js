@@ -34,13 +34,13 @@
     if (body === null) return null;
     if (resource === "notes") {
       if (method === "POST" && !resourceId) return { eventId, kind: "note.create", payload: body };
-      if (method === "PUT" && resourceId) return { eventId, kind: "note.update", payload: { note_id: resourceId, ...body } };
+      if (method === "PUT" && resourceId) return { eventId, kind: "note.update", payload: { ...body, note_id: resourceId } };
       if (method === "DELETE" && resourceId) return { eventId, kind: "note.delete", payload: { note_id: resourceId } };
     }
     if (resource === "tasks") {
       if (method === "POST" && !resourceId) return { eventId, kind: "task.create", payload: body };
       if (method === "PUT" && resourceId && !parsed.pathname.endsWith("/completion")) {
-        return { eventId, kind: "task.update", payload: { task_id: resourceId, ...body } };
+        return { eventId, kind: "task.update", payload: { ...body, task_id: resourceId } };
       }
       if (method === "PATCH" && resourceId && parsed.pathname.endsWith("/completion")) {
         return { eventId, kind: "task.complete", payload: { task_id: resourceId, ...body } };
