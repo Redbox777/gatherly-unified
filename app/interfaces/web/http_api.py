@@ -248,6 +248,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         "/account/link/email",
         "/account/link/telegram",
         "/push-subscriptions",
+        "/offline-sync/commands",
     }
 
     @app.middleware("http")

@@ -107,6 +107,18 @@ class EventTaskCompletionRequest(BaseModel):
     completed: bool
 
 
+class OfflineSyncCommandRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: UUID
+    event_id: UUID
+    base_revision: int = Field(ge=1)
+    kind: str = Field(
+        pattern=r"^(note\.(create|update|delete)|task\.(create|update|delete|complete)|venue\.(set|delete))$"
+    )
+    payload: dict[str, object]
+
+
 class CreateNoteRequest(BaseModel):
     content: str = Field(min_length=1, max_length=5000)
     visibility: str = Field(default="private", pattern="^(private|shared)$")

@@ -6,16 +6,19 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 
 from app.application.events import EventNotFoundError
 from app.interfaces.web.constants import SESSION_COOKIE
 from app.interfaces.web.dependencies import Dependencies
+from app.infrastructure.database.offline_sync_repository import OfflineSyncError
 from app.interfaces.web.schemas import (
     CreateNoteRequest,
     EventTaskCompletionRequest,
     EventTaskRequest,
     EventVenueRequest,
     UpdateNoteRequest,
+    OfflineSyncCommandRequest,
 )
 
 
@@ -25,6 +28,33 @@ def create_event_tools_router(
     """Build event tools endpoints with the app's request-scoped dependency."""
     router = APIRouter()
     ServiceDependency = Annotated[Dependencies, Depends(services)]
+
+    @router.post("/offline-sync/commands")
+    def apply_offline_sync_command(
+        payload: OfflineSyncCommandRequest, request: Request, deps: ServiceDependency
+    ) -> JSONResponse:
+        """Apply a queued command using the current authenticated session only."""
+        user_id = deps.authentication.resolve_session(
+            raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        try:
+            response_status, body = deps.offline_sync.apply(
+                authenticated_user_id=user_id,
+                operation_id=str(payload.operation_id),
+                event_id=str(payload.event_id),
+                base_revision=payload.base_revision,
+                kind=payload.kind,
+                payload=payload.payload,
+            )
+        except OfflineSyncError as error:
+            detail: dict[str, object] = {"detail": error.detail}
+            if error.current_revision is not None:
+                detail["current_revision"] = error.current_revision
+            return JSONResponse(status_code=error.status_code, content=detail)
+        return JSONResponse(status_code=response_status, content=body)
+
 
     @router.get("/events/{event_id}/venue")
     def get_event_venue(
