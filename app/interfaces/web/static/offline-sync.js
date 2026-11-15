@@ -99,10 +99,10 @@
     const name = "gatherly-offline-sync:" + eventId;
     if (navigator.locks?.request) {
       return navigator.locks.request(name, { mode: "exclusive", ifAvailable: true }, lock =>
-        lock ? callback() : false
+        lock ? callback() : "locked"
       );
     }
-    if (!await store.acquireLease(eventId, ownerId)) return false;
+    if (!await store.acquireLease(eventId, ownerId)) return "locked";
     try { return await callback(); }
     finally { await store.releaseLease(eventId, ownerId); }
   };
