@@ -63,8 +63,13 @@
         if (!window.confirm("Удалить эту заметку?")) return;
         remove.disabled = true;
         try {
-          await api("/events/" + encodeURIComponent(eventId) + "/notes/" + encodeURIComponent(note.id), {method:"DELETE"});
-          await loadNotes(eventId);
+          const result = await api("/events/" + encodeURIComponent(eventId) + "/notes/" + encodeURIComponent(note.id), {method:"DELETE"});
+          if (result?.offline_queued) {
+            noteStatus.textContent = "Удаление сохранено в локальной очереди. Оно вступит в силу после синхронизации.";
+            window.GatherlyOfflineSync?.refresh();
+          } else {
+            await loadNotes(eventId);
+          }
         } catch (error) {
           noteStatus.textContent = error.message;
           remove.disabled = false;
@@ -83,7 +88,7 @@
     noteSave.disabled = true;
     noteStatus.textContent = noteId ? "Сохраняем изменения…" : "Сохраняем…";
     try {
-      await api(
+      const result = await api(
         "/events/" + encodeURIComponent(getActiveEvent().id) + "/notes" +
           (noteId ? "/" + encodeURIComponent(noteId) : ""),
         {
@@ -94,8 +99,13 @@
       noteForm.reset();
       delete noteForm.dataset.editingNote;
       noteSave.textContent = "Сохранить заметку";
-      noteStatus.textContent = "Заметка сохранена.";
-      await loadNotes(getActiveEvent().id);
+      if (result?.offline_queued) {
+        noteStatus.textContent = "Изменение сохранено на устройстве и ждёт синхронизации.";
+        window.GatherlyOfflineSync?.refresh();
+      } else {
+        noteStatus.textContent = "Заметка сохранена.";
+        await loadNotes(getActiveEvent().id);
+      }
     } catch (error) {
       noteStatus.textContent = error.message;
     } finally {
