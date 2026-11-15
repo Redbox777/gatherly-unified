@@ -72,12 +72,13 @@ class AccountErasureLedger:
             raise ValueError(
                 "GATHERLY_ERASURE_LEDGER_KEY must decode to exactly 32 bytes"
             )
-        directory = Path(
-            environ.get(
-                "GATHERLY_ERASURE_LEDGER_PATH",
-                "var/account-erasure-ledger",
-            )
-        )
+        directory_value = environ.get(
+            "GATHERLY_ERASURE_LEDGER_PATH",
+            "var/account-erasure-ledger",
+        ).strip()
+        if not directory_value:
+            raise ValueError("GATHERLY_ERASURE_LEDGER_PATH must not be blank")
+        directory = Path(directory_value)
         return cls(
             directory,
             key,
