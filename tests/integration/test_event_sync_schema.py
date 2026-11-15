@@ -52,57 +52,63 @@ def test_sync_migration_backfills_events_and_tracks_all_allowed_domain_writes(tm
             ("participant-1", "event-1", "Alex", now),
         )
         assert _revision(connection, "event-1") == 1
+        connection.execute("INSERT INTO users(id, created_at) VALUES (?, ?)", ("member", now))
         connection.execute(
             "UPDATE event_participants SET display_name = ? WHERE id = ?",
             ("Alexandra", "participant-1"),
         )
         assert _revision(connection, "event-1") == 2
-        connection.execute("DELETE FROM event_participants WHERE id = ?", ("participant-1",))
+        connection.execute(
+            "UPDATE event_participants SET linked_user_id = ? WHERE id = ?",
+            ("member", "participant-1"),
+        )
         assert _revision(connection, "event-1") == 3
+        connection.execute("DELETE FROM event_participants WHERE id = ?", ("participant-1",))
+        assert _revision(connection, "event-1") == 4
 
         connection.execute(
             "INSERT INTO event_notes(id, event_id, author_id, content, visibility, "
             "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             ("note-1", "event-1", "owner", "First", "private", now, now),
         )
-        assert _revision(connection, "event-1") == 4
+        assert _revision(connection, "event-1") == 5
         connection.execute(
             "UPDATE event_notes SET content = ? WHERE id = ?", ("Changed", "note-1")
         )
-        assert _revision(connection, "event-1") == 5
-        connection.execute("DELETE FROM event_notes WHERE id = ?", ("note-1",))
         assert _revision(connection, "event-1") == 6
+        connection.execute("DELETE FROM event_notes WHERE id = ?", ("note-1",))
+        assert _revision(connection, "event-1") == 7
 
         connection.execute(
             "INSERT INTO event_tasks(id, event_id, title, description, completed, "
             "created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)",
             ("task-1", "event-1", "Prepare", "", now, now),
         )
-        assert _revision(connection, "event-1") == 7
+        assert _revision(connection, "event-1") == 8
         connection.execute(
             "UPDATE event_tasks SET completed = 1 WHERE id = ?", ("task-1",)
         )
-        assert _revision(connection, "event-1") == 8
-        connection.execute("DELETE FROM event_tasks WHERE id = ?", ("task-1",))
         assert _revision(connection, "event-1") == 9
+        connection.execute("DELETE FROM event_tasks WHERE id = ?", ("task-1",))
+        assert _revision(connection, "event-1") == 10
 
         connection.execute(
             "INSERT INTO event_venues(event_id, venue_name, address) VALUES (?, ?, ?)",
             ("event-1", "Park", "Main street"),
         )
-        assert _revision(connection, "event-1") == 10
+        assert _revision(connection, "event-1") == 11
         connection.execute(
             "UPDATE event_venues SET venue_name = ? WHERE event_id = ?",
             ("Town Hall", "event-1"),
         )
-        assert _revision(connection, "event-1") == 11
-        connection.execute("DELETE FROM event_venues WHERE event_id = ?", ("event-1",))
         assert _revision(connection, "event-1") == 12
+        connection.execute("DELETE FROM event_venues WHERE event_id = ?", ("event-1",))
+        assert _revision(connection, "event-1") == 13
 
         connection.execute(
             "UPDATE events SET title = ? WHERE id = ?", ("Updated", "event-1")
         )
-        assert _revision(connection, "event-1") == 13
+        assert _revision(connection, "event-1") == 14
         connection.commit()
     finally:
         connection.close()
