@@ -2,7 +2,13 @@
 
 from datetime import UTC, datetime
 
-from app.infrastructure.database.connection import MIGRATIONS, _execute_migration, connect, migrate, transaction
+from app.infrastructure.database.connection import (
+    MIGRATIONS,
+    _execute_migration,
+    connect,
+    migrate,
+    transaction,
+)
 
 
 def _revision(connection, event_id: str) -> int:
