@@ -1,7 +1,7 @@
 """Persistence operations for server-managed authentication sessions."""
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import sqlite3
 from uuid import uuid4
 
@@ -120,6 +120,33 @@ class AuthSessionsRepository:
             (hash_token(raw_token), self._format(now)),
         ).fetchone()
         return str(row["user_id"]) if row is not None else None
+
+    def is_recently_authenticated(
+        self,
+        *,
+        raw_token: str,
+        now: datetime,
+        max_age_seconds: int = 600,
+    ) -> bool:
+        """Require a fresh active session for sensitive account operations."""
+        self._require_aware(now)
+        if max_age_seconds < 1:
+            raise ValueError("Recent authentication window must be positive")
+        if not raw_token or not raw_token.strip():
+            return False
+        cutoff = self._format(now - timedelta(seconds=max_age_seconds))
+        row = self._connection.execute(
+            """SELECT 1 FROM auth_sessions
+               WHERE token_hash = ? AND revoked_at IS NULL
+                 AND expires_at > ? AND created_at >= ? AND created_at <= ?""",
+            (
+                hash_token(raw_token),
+                self._format(now),
+                cutoff,
+                self._format(now),
+            ),
+        ).fetchone()
+        return row is not None
 
     def revoke(self, *, raw_token: str, now: datetime) -> bool:
         """Revoke a session once; return False for unknown or already revoked tokens."""
