@@ -6,7 +6,11 @@ const assert = require("node:assert/strict");
 
 const values = new Map();
 const diagnosticStates = [];
-global.GatherlyDiagnostics = { recordSyncState(state) { diagnosticStates.push(state); } };
+const diagnosticApiEvents = [];
+global.GatherlyDiagnostics = {
+  recordSyncState(state) { diagnosticStates.push(state); },
+  recordApiEvent(event) { diagnosticApiEvents.push(event); }
+};
 global.window = globalThis;
 global.localStorage = {
   getItem(key) { return values.has(key) ? values.get(key) : null; },
@@ -100,6 +104,7 @@ test("foreground sender applies in order and pauses only a conflicted event", as
   assert.ok(diagnosticStates.includes("sending"));
   assert.ok(diagnosticStates.includes("done"));
   assert.ok(diagnosticStates.includes("conflict"));
+  assert.ok(diagnosticApiEvents.some(event => event.status_code === 409 && event.path === "/offline-sync/commands"));
 });
 
 
