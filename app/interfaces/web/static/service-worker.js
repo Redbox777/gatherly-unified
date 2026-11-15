@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "gatherly-shell-v1";
+const CACHE_NAME = "gatherly-shell-v2";
 const SHELL_ASSETS = [
   "/",
   "/index.html",
@@ -9,6 +9,7 @@ const SHELL_ASSETS = [
   "/pwa.js",
   "/offline-store.js",
   "/api-client.js",
+  "/offline-sync.js",
   "/date-utils.js",
   "/participants-ui.js",
   "/notes-ui.js",
