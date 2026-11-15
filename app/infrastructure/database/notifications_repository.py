@@ -165,15 +165,12 @@ class NotificationsRepository:
         if now.tzinfo is None or now.utcoffset() is None:
             raise ValueError("now must be timezone-aware")
         now_utc = now.astimezone(UTC)
-        rows = self._connection.execute(
-            """SELECT reminder.event_id, reminder.owner_id, reminder.offset_minutes,
-                      event.title, event.starts_at
-               FROM event_reminder_preferences AS reminder
-               JOIN events AS event ON event.id = reminder.event_id
-               WHERE event.starts_at IS NOT NULL"""
-        ).fetchall()
         created = 0
         with transaction(self._connection):
+            # Read the current schedule only after acquiring SQLite's write lock.
+            # Otherwise a concurrent event edit can leave this worker holding a
+            # stale reminder snapshot and enqueue a notification for the old time.
+            rows = self._load_reminder_rows()
             for row in rows:
                 starts_at = datetime.fromisoformat(str(row["starts_at"]))
                 if starts_at.tzinfo is None or starts_at.utcoffset() is None:
@@ -334,6 +331,15 @@ class NotificationsRepository:
                    WHERE id = ? AND email_sent_at IS NULL""",
                 (self._format(now), notification_id),
             )
+
+    def _load_reminder_rows(self) -> list[sqlite3.Row]:
+        return self._connection.execute(
+            """SELECT reminder.event_id, reminder.owner_id, reminder.offset_minutes,
+                      event.title, event.starts_at
+               FROM event_reminder_preferences AS reminder
+               JOIN events AS event ON event.id = reminder.event_id
+               WHERE event.starts_at IS NOT NULL"""
+        ).fetchall()
 
     @staticmethod
     def _format(value: datetime) -> str:
