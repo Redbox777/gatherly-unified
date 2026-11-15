@@ -1,40 +1,32 @@
-# Progressive Web App shell
+# Progressive Web App
 
-Gatherly now exposes an installable PWA shell:
+Gatherly exposes an installable PWA shell:
 
 - `/manifest.webmanifest` provides the app name, standalone display mode, theme colors, start URL, and SVG app icon.
-- `/service-worker.js` registers at the root scope and pre-caches the static application shell.
+- `/service-worker.js` pre-caches the static application shell and does not cache authenticated API responses.
 - `/offline.html` provides a minimal offline fallback.
 - `/pwa.js` registers the service worker only in secure contexts (HTTPS or localhost).
-- When the browser exposes `beforeinstallprompt`, the app shows an explicit install action. Browsers that do not expose this event retain their native install/share menu.
-- A visible offline status warns that only the cached application shell is available and that event data and changes are not synchronized.
+- Where supported, the app exposes an install action and an online/offline status message.
 
-## Cache boundary
+## Private data cache boundary
 
-The service worker only handles same-origin GET requests. It does not cache requests marked as JSON, authentication routes, account routes, or notification routes. It does not intercept POST/PUT/PATCH/DELETE requests. The offline shell contains no account data, and the app's authenticated API remains server-backed.
+Private event data is stored only in the opt-in IndexedDB store described below. It is not placed in the service-worker Cache API. The service worker does not intercept POST/PUT/PATCH/DELETE requests and does not perform authenticated background synchronization.
 
-The static shell is cached for application startup. This is not offline-first data synchronization: event lists, participants, notes, finance records, and notifications still require a live server connection. Do not add private API responses or user-specific HTML to the service-worker cache.
+Successful GET responses are cached only for the event list/details, participants, notes, tasks, and venue. A cached response is used only after a network-level fetch failure. HTTP errors (including 401, 403, 404, 422, and 5xx) are not masked with stale cached data. Authentication, account management, notifications, and finance remain network-only.
 
-## Requirements and limitations
+## Account-scoped local storage (S6.2)
 
-- Installation requires HTTPS in deployed environments; localhost is accepted for development.
-- Browser support and installation UI differ by platform. The browser decides when to show its install prompt.
-- The current service worker provides a static shell and offline fallback only. Push notifications require a separate VAPID/subscription stage.
-- PWA installability does not mean the app is fully usable offline. No background sync or offline mutation queue is implemented.
-
-
-## Account-scoped local storage (S6.2 foundation)
-
-- The browser uses IndexedDB (`gatherly-private-cache`), not SQLite or localStorage, for structured offline records.
+- Browser structured storage uses IndexedDB (`gatherly-private-cache`); localStorage contains only the opt-in flag and last confirmed account namespace.
 - Offline storage is **off by default** and can be enabled explicitly in Account → “Локальное хранение на этом устройстве”.
-- Records are partitioned by the authenticated `user_id`; the ID is obtained from the live `/auth/me` response, never from a user-editable field.
-- Switching to another authenticated account clears the previous active account's IndexedDB records. A successful logout clears the current account's records. Disabling the option also clears the current account's records.
-- This foundation does not yet cache API responses or allow offline writes. That follows in the next S6.2 step after the account boundary is tested.
-- IndexedDB is browser-managed storage and is **not separately encrypted by this application**. Device access controls still matter. Do not enable this on shared devices.
+- The namespace comes from the authenticated `user_id` returned by the live `/auth/me` endpoint, never from a user-editable field.
+- Switching to another authenticated account clears the previous account's cached records. Logout and disabling the option clear the current cached records.
+- When the network is unavailable at startup, an explicitly opted-in app may read the last confirmed account's cache. This is a local read-only view, not proof of a live server session.
+- The application does not separately encrypt IndexedDB. Do not enable it on shared or untrusted devices.
 
+## Offline limitations before S6.3
 
-## Read-only offline event cache (S6.2)
-
-When a user has explicitly enabled local storage, successful GET responses are stored in IndexedDB for the event list and details, participants, shared notes, tasks, and venue details. The API client uses cached data only after a network-level fetch failure. HTTP responses such as 401, 403, 404, 422, and 5xx are not replaced with cached data. Authentication, account management, notifications, finance, and all mutation methods remain network-only. The service worker still never caches private API responses.
-
-If the app starts without a network connection, it can use the last account namespace previously confirmed by the live auth endpoint, provided local storage was explicitly enabled. This is a device-local offline view, not proof of a current server session. Cached information can be stale. Before an event-related write is sent, the current account cache is cleared so a later offline session cannot show a known-obsolete snapshot. Edits, deletions, and new records are not queued or synchronized.
+- Cached records may be stale.
+- Event-related writes are not queued. Before an online event-related write is sent, the current event cache is cleared to avoid later showing a known-obsolete snapshot.
+- Finance, notifications, invitations, participant management, and account operations are not available offline.
+- Installation requires HTTPS in deployed environments; localhost is accepted for development.
+- PWA installation does not imply that the backend is installed on the device. The API and SQLite database remain server-side.
