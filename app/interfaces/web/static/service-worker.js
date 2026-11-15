@@ -7,6 +7,7 @@ const SHELL_ASSETS = [
   "/offline.html",
   "/styles.css",
   "/pwa.js",
+  "/offline-store.js",
   "/api-client.js",
   "/date-utils.js",
   "/participants-ui.js",

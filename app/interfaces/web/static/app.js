@@ -90,6 +90,7 @@
   };
   const { dateValue, formatDate, formatTime, localInputValue, toIsoValue } = window.GatherlyDate;
   const api = window.GatherlyApiClient.request;
+  const offlineStore = window.GatherlyOfflineStore;
   const financeUI = window.GatherlyFinanceUI.create({
     api,
     formatDate,
@@ -389,6 +390,11 @@
         return;
       }
       if (!session.ok) throw new Error("Не удалось проверить вход. Обновите страницу.");
+      const identity = await session.json();
+      if (!identity || typeof identity.user_id !== "string" || !identity.user_id) {
+        throw new Error("Не удалось подтвердить аккаунт. Обновите страницу.");
+      }
+      await offlineStore?.setUser(identity.user_id);
       const list = await api("/events");
       if (!Array.isArray(list)) throw new Error("Сервер вернул неожиданный ответ.");
       list.sort((a,b) => !a.starts_at ? 1 : !b.starts_at ? -1 : new Date(a.starts_at)-new Date(b.starts_at));
@@ -482,6 +488,7 @@
     logout.disabled = true;
     try {
       await api("/auth/logout", {method:"POST",body:"{}"});
+      await offlineStore?.clearCurrentUser();
       window.location.replace("/auth.html");
     } catch (_) {
       logout.disabled = false;

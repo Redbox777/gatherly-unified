@@ -6,6 +6,8 @@ export default [
       sourceType: "script",
       globals: {
         window: "readonly",
+        indexedDB: "readonly",
+        IDBKeyRange: "readonly",
         document: "readonly",
         navigator: "readonly",
         fetch: "readonly",

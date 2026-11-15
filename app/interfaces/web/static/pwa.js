@@ -10,6 +10,26 @@
       : "Нет подключения к интернету. Сейчас доступна только оболочка приложения; данные встреч и изменения не синхронизируются.";
   };
 
+  const offlineSetting = document.getElementById("offline-storage-enabled");
+  const offlineSettingStatus = document.getElementById("offline-storage-status");
+  const offlineStore = window.GatherlyOfflineStore;
+  if (offlineSetting && offlineStore) {
+    offlineSetting.checked = offlineStore.isEnabled();
+    offlineSetting.addEventListener("change", async () => {
+      offlineSetting.disabled = true;
+      if (offlineSettingStatus) offlineSettingStatus.textContent = "Сохраняем настройку…";
+      try {
+        await offlineStore.setEnabled(offlineSetting.checked);
+        if (offlineSettingStatus) offlineSettingStatus.textContent = offlineSetting.checked
+          ? "Локальное хранение включено. Данные начнут сохраняться после следующего обновления встреч."
+          : "Локальное хранение выключено, локальные копии текущего аккаунта очищены.";
+      } catch (_) {
+        offlineSetting.checked = false;
+        if (offlineSettingStatus) offlineSettingStatus.textContent = "Не удалось изменить настройку. Попробуйте ещё раз.";
+      } finally { offlineSetting.disabled = false; }
+    });
+  }
+
   updateConnectionStatus();
   window.addEventListener("online", updateConnectionStatus);
   window.addEventListener("offline", updateConnectionStatus);
