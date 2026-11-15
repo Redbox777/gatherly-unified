@@ -16,6 +16,27 @@ class FakeConnection:
         self.closed = True
 
 
+class FakeWorkerLeaseRepository:
+    acquired = True
+    renew_result = True
+    renew_calls = 0
+    released: list[tuple[str, str]] = []
+
+    def __init__(self, _connection: FakeConnection) -> None:
+        pass
+
+    def acquire(self, **_kwargs: Any) -> bool:
+        return self.acquired
+
+    def renew(self, **_kwargs: Any) -> bool:
+        self.renew_calls += 1
+        return self.renew_result
+
+    def release(self, *, worker_name: str, owner_token: str) -> bool:
+        self.released.append((worker_name, owner_token))
+        return True
+
+
 class FakeBugReportsRepository:
     deleted = 0
     cutoffs: list[datetime] = []
@@ -182,6 +203,13 @@ def worker_fakes(monkeypatch: pytest.MonkeyPatch) -> FakeConnection:
     FakeWebPushSender.sent = []
     monkeypatch.setattr(worker, "connect", lambda _path: connection)
     monkeypatch.setattr(worker, "migrate", lambda _connection: None)
+    FakeWorkerLeaseRepository.acquired = True
+    FakeWorkerLeaseRepository.renew_result = True
+    FakeWorkerLeaseRepository.renew_calls = 0
+    FakeWorkerLeaseRepository.released = []
+    monkeypatch.setattr(
+        worker, "NotificationWorkerLeaseRepository", FakeWorkerLeaseRepository
+    )
     monkeypatch.setattr(worker, "BugReportsRepository", FakeBugReportsRepository)
     monkeypatch.setattr(worker, "NotificationsRepository", FakeNotificationsRepository)
     monkeypatch.setattr(worker, "SmtpRateLimitsRepository", FakeRateLimitsRepository)
@@ -423,3 +451,42 @@ def test_worker_revokes_expired_push_endpoint_without_logging_subscription_data(
     assert "private-endpoint" not in caplog.text
     assert "private-vapid-key" not in caplog.text
     assert worker_fakes.closed
+
+
+def test_worker_skips_when_another_process_holds_the_lease(
+    worker_fakes: FakeConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+    monkeypatch.delenv("SMTP_SENDER", raising=False)
+    FakeWorkerLeaseRepository.acquired = False
+
+    assert worker.run_once("worker.sqlite3") == (0, 0, 0, 0)
+    assert FakeBugReportsRepository.cutoffs == []
+    assert FakeWorkerLeaseRepository.released == []
+    assert worker_fakes.closed
+
+
+def test_worker_releases_lease_after_successful_run(
+    worker_fakes: FakeConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+    monkeypatch.delenv("SMTP_SENDER", raising=False)
+
+    assert worker.run_once("worker.sqlite3") == (2, 0, 0, 0)
+    assert len(FakeWorkerLeaseRepository.released) == 1
+    assert FakeWorkerLeaseRepository.released[0][0] == "notifications"
+
+
+def test_worker_stops_delivery_when_lease_is_lost(
+    worker_fakes: FakeConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SMTP_HOST", "mail.example.test")
+    monkeypatch.setenv("SMTP_SENDER", "gatherly@example.test")
+    FakeNotificationsRepository.messages = [
+        {"id": "one", "email": "one@example.test", "title": "Reminder", "body": "Body"},
+    ]
+    FakeWorkerLeaseRepository.renew_result = False
+
+    assert worker.run_once("worker.sqlite3") == (2, 0, 0, 0)
+    assert FakeSender.sent == []
+    assert FakeNotificationsRepository.sent_ids == []
