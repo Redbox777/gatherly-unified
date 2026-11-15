@@ -140,6 +140,10 @@
       throw error;
     }
     if (response.status === 204) {
+      if (method === "DELETE" && parsed?.pathname === "/account") {
+        try { await offlineStore?.purgeCurrentUser(); } catch (_) {}
+        window.GatherlyOfflineSync?.refresh();
+      }
       if (eventMutation && offlineStore?.isEnabled() && offlineStore.getUser()) {
         try { await offlineStore.clearCurrentCache(); } catch (_) {}
       }
