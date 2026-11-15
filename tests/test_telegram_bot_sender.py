@@ -49,7 +49,7 @@ def test_telegram_sender_posts_chat_id_and_plain_text(monkeypatch) -> None:
 def test_telegram_sender_rejects_provider_failure_without_exposing_token(
     monkeypatch,
 ) -> None:
-    def fake_urlopen(_request, _timeout):
+    def fake_urlopen(_request, timeout):
         return FakeResponse(b'{"ok":false,"description":"private provider response"}')
 
     monkeypatch.setattr(telegram_bot_sender, "urlopen", fake_urlopen)
