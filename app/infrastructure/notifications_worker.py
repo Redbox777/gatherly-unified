@@ -34,12 +34,12 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
     path = database_path or os.environ.get(
         "GATHERLY_DATABASE_PATH", "var/gatherly.sqlite3"
     )
+    lease_duration = _worker_lease_duration()
     connection = connect(path)
     lease_repository: NotificationWorkerLeaseRepository | None = None
     lease_acquired = False
     worker_name = "notifications"
     worker_token = str(uuid4())
-    lease_duration = _worker_lease_duration()
     try:
         migrate(connection)
         lease_repository = NotificationWorkerLeaseRepository(connection)
