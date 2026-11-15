@@ -22,6 +22,7 @@ def test_frontend_homepage_is_served_with_security_headers(tmp_path) -> None:
 def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     app = create_app(tmp_path / "frontend-assets.sqlite3")
     with TestClient(app) as client:
+        homepage = client.get("/")
         stylesheet = client.get("/styles.css")
         script = client.get("/app.js")
         account_linking = client.get("/account-linking-ui.js")
@@ -40,7 +41,7 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     assert script.status_code == 200
     assert account_linking.status_code == 200
     assert "GatherlyAccountLink" in account_linking.text
-    assert 'id="account-settings-open"' in response.text
+    assert 'id="account-settings-open"' in homepage.text
     assert notifications.status_code == 200
     assert finance.status_code == 200
     assert "GatherlyFinanceUI" in finance.text
