@@ -50,7 +50,12 @@ def test_online_backup_and_restore_preserve_database_contents(tmp_path) -> None:
     _create_database(source)
     backup_database(source, backup)
 
-    restore_database(backup, restored, confirm_application_stopped=True, erasure_ledger=_ledger(tmp_path))
+    restore_database(
+        backup,
+        restored,
+        confirm_application_stopped=True,
+        erasure_ledger=_ledger(tmp_path),
+    )
 
     assert _event_title(restored) == "Backed up event"
 
