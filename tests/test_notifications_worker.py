@@ -34,6 +34,9 @@ class FakeNotificationsRepository:
     created = 2
     sent_ids: list[str] = []
     failed: list[tuple[str, str]] = []
+    telegram_messages: list[dict[str, str]] = []
+    telegram_sent_ids: list[str] = []
+    telegram_failed: list[tuple[str, str]] = []
 
     def __init__(self, _connection: FakeConnection) -> None:
         pass
@@ -51,6 +54,34 @@ class FakeNotificationsRepository:
     def record_email_sent(self, *, notification_id: str, now: datetime) -> None:
         assert now.tzinfo is not None
         self.sent_ids.append(notification_id)
+
+    def pending_telegram(self, *, limit: int = 20) -> list[dict[str, str]]:
+        assert limit == 20
+        return self.telegram_messages
+
+    def record_telegram_failure(
+        self, *, notification_id: str, error_name: str
+    ) -> None:
+        self.telegram_failed.append((notification_id, error_name))
+
+    def record_telegram_sent(self, *, notification_id: str, now: datetime) -> None:
+        assert now.tzinfo is not None
+        self.telegram_sent_ids.append(notification_id)
+
+
+class FakeTelegramSender:
+    outcomes: dict[str, Exception | None] = {}
+    sent: list[str] = []
+
+    def __init__(self, **_kwargs: Any) -> None:
+        pass
+
+    def send_text(self, *, chat_id: str, text: str) -> None:
+        assert text
+        self.sent.append(chat_id)
+        error = self.outcomes.get(chat_id)
+        if error is not None:
+            raise error
 
 
 class FakeRateLimitsRepository:
@@ -92,16 +123,23 @@ def worker_fakes(monkeypatch: pytest.MonkeyPatch) -> FakeConnection:
     FakeNotificationsRepository.messages = []
     FakeNotificationsRepository.sent_ids = []
     FakeNotificationsRepository.failed = []
+    FakeNotificationsRepository.telegram_messages = []
+    FakeNotificationsRepository.telegram_sent_ids = []
+    FakeNotificationsRepository.telegram_failed = []
     FakeRateLimitsRepository.retry_values = []
     FakeSender.outcomes = {}
     FakeSender.sent = []
+    FakeTelegramSender.outcomes = {}
+    FakeTelegramSender.sent = []
     monkeypatch.setattr(worker, "connect", lambda _path: connection)
     monkeypatch.setattr(worker, "migrate", lambda _connection: None)
     monkeypatch.setattr(worker, "BugReportsRepository", FakeBugReportsRepository)
     monkeypatch.setattr(worker, "NotificationsRepository", FakeNotificationsRepository)
     monkeypatch.setattr(worker, "SmtpRateLimitsRepository", FakeRateLimitsRepository)
     monkeypatch.setattr(worker, "SmtpEmailSender", FakeSender)
+    monkeypatch.setattr(worker, "TelegramBotSender", FakeTelegramSender)
     monkeypatch.delenv("BUG_REPORT_RETENTION_DAYS", raising=False)
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
     return connection
 
 
@@ -111,7 +149,7 @@ def test_worker_materializes_reminders_without_smtp(
     monkeypatch.delenv("SMTP_HOST", raising=False)
     monkeypatch.delenv("SMTP_SENDER", raising=False)
 
-    assert worker.run_once("worker.sqlite3") == (2, 0)
+    assert worker.run_once("worker.sqlite3") == (2, 0, 0)
     assert len(FakeBugReportsRepository.cutoffs) == 1
     assert worker_fakes.closed
 
@@ -124,7 +162,7 @@ def test_worker_expires_diagnostic_reports_without_smtp(
     monkeypatch.setenv("BUG_REPORT_RETENTION_DAYS", "30")
     FakeBugReportsRepository.deleted = 4
 
-    assert worker.run_once("worker.sqlite3") == (2, 0)
+    assert worker.run_once("worker.sqlite3") == (2, 0, 0)
     assert len(FakeBugReportsRepository.cutoffs) == 1
     assert worker_fakes.closed
 
@@ -142,7 +180,7 @@ def test_worker_sends_pending_emails_and_records_failures(
     FakeRateLimitsRepository.retry_values = [30, None, None]
     FakeSender.outcomes = {"failed@example.test": TimeoutError()}
 
-    assert worker.run_once("worker.sqlite3") == (2, 1)
+    assert worker.run_once("worker.sqlite3") == (2, 1, 0)
     assert FakeSender.sent == ["sent@example.test", "failed@example.test"]
     assert FakeNotificationsRepository.sent_ids == ["sent"]
     assert FakeNotificationsRepository.failed == [("failed", "TimeoutError")]
@@ -160,7 +198,7 @@ def test_worker_uses_database_environment_fallback(
         worker, "connect", lambda path: connected.append(str(path)) or worker_fakes
     )
 
-    assert worker.run_once() == (2, 0)
+    assert worker.run_once() == (2, 0, 0)
     assert connected == ["from-env.sqlite3"]
 
 
@@ -169,7 +207,7 @@ def test_worker_main_configures_logging_and_reports_counts(
 ) -> None:
     configured: list[bool] = []
     monkeypatch.setattr(worker, "configure_application_logging", lambda: configured.append(True))
-    monkeypatch.setattr(worker, "run_once", lambda: (3, 2))
+    monkeypatch.setattr(worker, "run_once", lambda: (3, 2, 1))
 
     worker.main()
 
@@ -179,6 +217,7 @@ def test_worker_main_configures_logging_and_reports_counts(
     )
     assert record.notifications_created == 3
     assert record.emails_sent == 2
+    assert record.telegram_messages_sent == 1
 
 
 def test_worker_rejects_insecure_production_smtp_before_opening_database(
@@ -201,3 +240,50 @@ def test_worker_rejects_insecure_production_smtp_before_opening_database(
         worker.run_once("worker.sqlite3")
 
     assert not worker_fakes.closed
+
+
+
+def test_worker_sends_opted_in_telegram_messages_without_smtp(
+    worker_fakes: FakeConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+    monkeypatch.delenv("SMTP_SENDER", raising=False)
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-bot-token")
+    FakeNotificationsRepository.telegram_messages = [
+        {
+            "id": "telegram-1",
+            "chat_id": "123456",
+            "title": "Встреча скоро",
+            "body": "Начало через час",
+        }
+    ]
+
+    assert worker.run_once("worker.sqlite3") == (2, 0, 1)
+    assert FakeTelegramSender.sent == ["123456"]
+    assert FakeNotificationsRepository.telegram_sent_ids == ["telegram-1"]
+    assert worker_fakes.closed
+
+
+def test_worker_records_telegram_delivery_failures_without_leaking_details(
+    worker_fakes: FakeConnection, monkeypatch: pytest.MonkeyPatch, caplog
+) -> None:
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+    monkeypatch.delenv("SMTP_SENDER", raising=False)
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "private-test-token")
+    FakeNotificationsRepository.telegram_messages = [
+        {
+            "id": "telegram-failed",
+            "chat_id": "987654",
+            "title": "Встреча скоро",
+            "body": "Начало через час",
+        }
+    ]
+    FakeTelegramSender.outcomes = {"987654": TimeoutError("private provider detail")}
+
+    assert worker.run_once("worker.sqlite3") == (2, 0, 0)
+    assert FakeNotificationsRepository.telegram_failed == [
+        ("telegram-failed", "TimeoutError")
+    ]
+    assert "private provider detail" not in caplog.text
+    assert "private-test-token" not in caplog.text
+    assert worker_fakes.closed
