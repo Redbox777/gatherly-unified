@@ -135,6 +135,23 @@ def test_production_requires_external_erasure_ledger_settings() -> None:
     with pytest.raises(ValueError, match="GATHERLY_ERASURE_LEDGER_KEY"):
         validate_runtime_configuration(settings)
 
+def test_production_keeps_erasure_ledger_separate_from_backup_storage() -> None:
+    settings = production_settings()
+    settings["GATHERLY_ERASURE_LEDGER_PATH"] = "var/erasure-ledger"
+    with pytest.raises(ValueError, match="absolute persistent path"):
+        validate_runtime_configuration(settings)
+
+    settings = production_settings()
+    settings["GATHERLY_BACKUP_DIR"] = "/var/lib/gatherly"
+    with pytest.raises(ValueError, match="separate from GATHERLY_BACKUP_DIR"):
+        validate_runtime_configuration(settings)
+
+    settings = production_settings()
+    settings["GATHERLY_BACKUP_REMOTE"] = settings["GATHERLY_ERASURE_LEDGER_REMOTE"]
+    with pytest.raises(ValueError, match="separate from GATHERLY_BACKUP_REMOTE"):
+        validate_runtime_configuration(settings)
+
+
 def test_complete_production_configuration_is_accepted() -> None:
     validate_runtime_configuration(production_settings())
 
