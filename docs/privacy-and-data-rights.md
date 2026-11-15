@@ -41,7 +41,7 @@ If the user was linked to a participant record in another person's event, the li
 - Voluntary diagnostics: default 90 days; configure `BUG_REPORT_RETENTION_DAYS` from 1 to 3650. Expiry runs in the notification worker.
 - Local encrypted database backups: default 30 days in the documented backup script; configure `GATHERLY_BACKUP_RETENTION_DAYS`. Remote object-storage retention must be configured separately using the provider's lifecycle policy.
 - Security/rate-limit operational records are stored separately from voluntary bug reports and require their own reviewed retention period.
-- Backups are not edited in place after an account erasure. A deleted record may remain in an encrypted, access-restricted backup until that backup expires. If an older backup is restored, the operator must account for deletion requests made after that backup was created before returning the restored service to users. A durable off-database erasure ledger and automated replay are future operational work.
+- Backups are not edited in place after an account erasure. A deleted record may remain in an encrypted, access-restricted backup until that backup expires. If an older backup is restored, the operator must account for deletion requests made after that backup was created before returning the restored service to users. A durable off-database erasure ledger and automated replay are future operational work. The current restore command does not perform this reconciliation. Until an independent erasure ledger and tested replay mechanism exist, restoring a production snapshot must remain an isolated recovery exercise and must not be exposed to users or external delivery workers.
 
 ## Operator/legal release checklist
 

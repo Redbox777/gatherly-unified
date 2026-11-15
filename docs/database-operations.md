@@ -19,7 +19,7 @@ python -m app.infrastructure.database.backup backup \
   var/gatherly.sqlite3 backups/gatherly-$(date -u +%Y%m%dT%H%M%SZ).sqlite3.enc
 ```
 
-The backup command uses SQLite's online backup API, verifies the resulting database with `PRAGMA integrity_check`, then encrypts it with AES-256-GCM. The encrypted format authenticates its header and contents, uses a fresh random nonce, and is written atomically with owner-only permissions. Plaintext staging files are removed after use. The implementation streams data in bounded chunks rather than loading the whole database into memory.
+The backup command uses SQLite's online backup API, verifies the resulting database with `PRAGMA integrity_check` and `PRAGMA foreign_key_check`, then encrypts it with AES-256-GCM. The encrypted format authenticates its header and contents, uses a fresh random nonce, and is written atomically with owner-only permissions. Plaintext staging files are removed after use. The implementation streams data in bounded chunks rather than loading the whole database into memory.
 
 The encryption key must be backed up separately using the operator's secret-management/recovery process. If the key is lost, encrypted backups cannot be restored.
 
@@ -54,6 +54,8 @@ python -m app.infrastructure.database.backup restore \
 The restore command requires the same encryption key environment variable, authenticates/decrypts to a private temporary file, checks SQLite integrity, and atomically installs the restored database. A wrong key or modified backup is rejected before the destination is replaced. The explicit flag is a safety guard, not a process supervisor; the operator remains responsible for stopping all writers.
 
 At least monthly, copy a remote backup to a separate recovery environment, restore it, start the app against that restored copy, and verify `/health/ready` plus representative records. Record backup timestamp/age, integrity result, recovery time (RTO), and data-loss window (RPO). A backup is not operationally proven until this drill succeeds.
+
+**Erasure safety gate:** a database backup is a point-in-time snapshot and can contain accounts that were deleted after the snapshot was created. The current application does not maintain an independent, durable account-erasure ledger outside the backed-up database, and it does not automatically replay later erasure requests during restore. Therefore, do not restore an old production backup directly into a publicly accessible service. Keep the restored instance isolated (no public traffic and no outbound email, Telegram, or push delivery) until all erasure requests received after the backup timestamp have been reconciled and replayed using a verified procedure. If there is no authoritative record of those requests, stop and escalate; do not assume the restored database is GDPR-safe. Implementing and testing an off-database erasure ledger plus idempotent restore replay is a production-readiness requirement, not a feature delivered by the current backup commands.
 
 Local retention cleanup is available with:
 
