@@ -14,11 +14,12 @@ from app.interfaces.web.http_api import create_app
 P256DH = base64.urlsafe_b64encode(os.urandom(65)).decode("ascii").rstrip("=")
 AUTH = base64.urlsafe_b64encode(os.urandom(16)).decode("ascii").rstrip("=")
 SUBSCRIPTION_KEY = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii").rstrip("=")
+PUBLIC_VAPID_KEY = base64.urlsafe_b64encode(os.urandom(65)).decode("ascii").rstrip("=")
 
 
 def _authenticated_client(tmp_path, monkeypatch):
     monkeypatch.setenv("COOKIE_SECURE", "false")
-    monkeypatch.setenv("WEB_PUSH_VAPID_PUBLIC_KEY", "public-vapid-key")
+    monkeypatch.setenv("WEB_PUSH_VAPID_PUBLIC_KEY", PUBLIC_VAPID_KEY)
     monkeypatch.setenv("WEB_PUSH_VAPID_PRIVATE_KEY", "private-vapid-key")
     monkeypatch.setenv("WEB_PUSH_VAPID_SUBJECT", "mailto:ops@example.test")
     monkeypatch.setenv("WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY", SUBSCRIPTION_KEY)
@@ -52,7 +53,7 @@ def test_push_subscription_requires_auth_and_can_be_enabled_and_revoked(
     client, database_path = _authenticated_client(tmp_path, monkeypatch)
     public_key = client.get("/push/public-key")
     assert public_key.status_code == 200
-    assert public_key.json() == {"public_key": "public-vapid-key"}
+    assert public_key.json() == {"public_key": PUBLIC_VAPID_KEY}
 
     subscription = {
         "endpoint": "https://fcm.googleapis.com/send/private-endpoint",
@@ -105,7 +106,7 @@ def test_push_subscription_rejects_invalid_endpoint(tmp_path, monkeypatch) -> No
 
 def test_push_public_key_requires_authentication(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("COOKIE_SECURE", "false")
-    monkeypatch.setenv("WEB_PUSH_VAPID_PUBLIC_KEY", "public-vapid-key")
+    monkeypatch.setenv("WEB_PUSH_VAPID_PUBLIC_KEY", PUBLIC_VAPID_KEY)
     monkeypatch.setenv("WEB_PUSH_VAPID_PRIVATE_KEY", "private-vapid-key")
     monkeypatch.setenv("WEB_PUSH_VAPID_SUBJECT", "mailto:ops@example.test")
     monkeypatch.setenv("WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY", SUBSCRIPTION_KEY)
