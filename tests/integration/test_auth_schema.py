@@ -38,6 +38,7 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             "event_expenses",
             "event_settlements",
             "bug_reports",
+            "notification_preferences",
         } <= tables
 
         token_columns = {
@@ -61,6 +62,21 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             and row["from"] == "identity_id"
             and row["to"] == "id"
             for row in token_foreign_keys
+        )
+
+        preference_columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(notification_preferences)"
+            ).fetchall()
+        }
+        notification_columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(notifications)").fetchall()
+        }
+        assert "telegram_enabled" in preference_columns
+        assert {"telegram_sent_at", "telegram_attempts", "telegram_last_error"} <= (
+            notification_columns
         )
 
         versions = {
