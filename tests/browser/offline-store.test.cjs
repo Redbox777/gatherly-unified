@@ -54,7 +54,7 @@ test("IndexedDB outbox is durable, account-scoped and protected from accidental 
   assert.equal(task.payload.title, "Task");
   const datedTask = await store.enqueue({
     eventId, baseRevision: 6, kind: "task.create",
-    payload: { title: "Dated task", due_at: "2026-11-15T10:00:00+03:00" }, createdAt: 2500
+    payload: { title: "Dated task", due_at: "2026-11-15T10:00:00+03:00" }, createdAt: 2000
   });
   assert.equal(datedTask.payload.due_at, "2026-11-15T10:00:00+03:00");
 
@@ -78,7 +78,7 @@ test("IndexedDB outbox is durable, account-scoped and protected from accidental 
 
   const next = (await store.listOutbox()).find(item => item.operationId === task.operationId);
   const nextAfter = (await store.listOutbox()).find(item => item.operationId === datedTask.operationId);
-  await store.rebasePendingEvent(eventId, first.createdAt, 12);
+  await store.rebasePendingEvent(eventId, 12);
   const rebased = (await store.listOutbox()).find(item => item.operationId === next.operationId);
   const rebasedAfter = (await store.listOutbox()).find(item => item.operationId === nextAfter.operationId);
   assert.equal(rebased.baseRevision, 12);
