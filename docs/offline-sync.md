@@ -105,6 +105,7 @@ Because IndexedDB is not application-encrypted, queued drafts remain on the devi
 
 - Initially sync only while the app is open and online, with a visible pending count and an explicit “Синхронизировать” action. Automatic foreground resume may follow after the user has opted in.
 - Send one operation at a time per event, preserving creation order. A blocked/conflicting command pauses only its event chain.
+- The current UI does not yet project queued creates/updates/deletes into the cached event detail. It shows the queued command and status, while the visible event data may remain the last server snapshot until synchronization succeeds. Do not interpret this as a fully offline-first optimistic UI.
 - Use Web Locks where available, with a short IndexedDB lease fallback, to avoid multiple tabs acting as independent senders. Server idempotency remains the final duplicate protection.
 - Network errors and 5xx: retry with capped exponential backoff and jitter.
 - 429: respect `Retry-After`.
