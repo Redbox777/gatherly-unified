@@ -152,10 +152,26 @@ class NotificationsRepository:
     def clear_pending_event_reminders(self, *, event_id: str) -> int:
         """Discard unsent reminders when an owner changes the event schedule."""
         with transaction(self._connection):
+            # A schedule change must also cancel browser-push jobs. Otherwise a
+            # notification already sent by email can keep an unsent push job alive.
+            self._connection.execute(
+                """DELETE FROM push_deliveries
+                   WHERE sent_at IS NULL
+                     AND notification_id IN (
+                         SELECT id FROM notifications
+                         WHERE event_id = ? AND kind = 'event_reminder'
+                     )""",
+                (event_id,),
+            )
             cursor = self._connection.execute(
                 """DELETE FROM notifications
                    WHERE event_id = ? AND kind = 'event_reminder'
-                     AND email_sent_at IS NULL AND telegram_sent_at IS NULL""",
+                     AND email_sent_at IS NULL AND telegram_sent_at IS NULL
+                     AND NOT EXISTS (
+                         SELECT 1 FROM push_deliveries AS delivery
+                         WHERE delivery.notification_id = notifications.id
+                           AND delivery.sent_at IS NOT NULL
+                     )""",
                 (event_id,),
             )
         return cursor.rowcount

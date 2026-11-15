@@ -240,3 +240,106 @@ def test_reminder_schedule_is_loaded_after_write_transaction_begins(
         assert transaction_states == [True]
     finally:
         connection.close()
+
+
+
+def test_schedule_change_cancels_pending_push_even_after_email_was_sent(tmp_path) -> None:
+    connection = connect(tmp_path / "cancel-pending-push.sqlite3")
+    try:
+        migrate(connection)
+        now = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
+        connection.execute(
+            "INSERT INTO users(id, created_at) VALUES (?, ?)",
+            ("owner", now.isoformat()),
+        )
+        connection.execute(
+            "INSERT INTO events(id, owner_id, title, created_at) VALUES (?, ?, ?, ?)",
+            ("event-1", "owner", "Planning", now.isoformat()),
+        )
+        connection.execute(
+            """INSERT INTO notifications(
+                id, user_id, event_id, kind, title, body, dedupe_key,
+                created_at, email_sent_at
+            ) VALUES (?, ?, ?, 'event_reminder', ?, ?, ?, ?, ?)""",
+            (
+                "notification-1", "owner", "event-1", "Reminder", "Old schedule",
+                "reminder:event-1:old", now.isoformat(), now.isoformat(),
+            ),
+        )
+        connection.execute(
+            """INSERT INTO push_subscriptions(
+                id, user_id, endpoint_hash, subscription_ciphertext,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)""",
+            ("subscription-1", "owner", "endpoint-hash", b"encrypted", now.isoformat(), now.isoformat()),
+        )
+        connection.execute(
+            """INSERT INTO push_deliveries(
+                id, notification_id, subscription_id, attempts,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, 0, ?, ?)""",
+            ("delivery-1", "notification-1", "subscription-1", now.isoformat(), now.isoformat()),
+        )
+        connection.commit()
+
+        repository = NotificationsRepository(connection)
+        assert repository.clear_pending_event_reminders(event_id="event-1") == 0
+
+        assert connection.execute(
+            "SELECT COUNT(*) FROM push_deliveries WHERE id = 'delivery-1'"
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM notifications WHERE id = 'notification-1'"
+        ).fetchone()[0] == 1
+    finally:
+        connection.close()
+
+
+def test_schedule_change_preserves_notification_with_already_sent_push(tmp_path) -> None:
+    connection = connect(tmp_path / "preserve-sent-push.sqlite3")
+    try:
+        migrate(connection)
+        now = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
+        connection.execute(
+            "INSERT INTO users(id, created_at) VALUES (?, ?)",
+            ("owner", now.isoformat()),
+        )
+        connection.execute(
+            "INSERT INTO events(id, owner_id, title, created_at) VALUES (?, ?, ?, ?)",
+            ("event-1", "owner", "Planning", now.isoformat()),
+        )
+        connection.execute(
+            """INSERT INTO notifications(
+                id, user_id, event_id, kind, title, body, dedupe_key, created_at
+            ) VALUES (?, ?, ?, 'event_reminder', ?, ?, ?, ?)""",
+            ("notification-1", "owner", "event-1", "Reminder", "Old schedule",
+             "reminder:event-1:old", now.isoformat()),
+        )
+        connection.execute(
+            """INSERT INTO push_subscriptions(
+                id, user_id, endpoint_hash, subscription_ciphertext,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)""",
+            ("subscription-1", "owner", "endpoint-hash", b"encrypted", now.isoformat(), now.isoformat()),
+        )
+        connection.execute(
+            """INSERT INTO push_deliveries(
+                id, notification_id, subscription_id, attempts,
+                sent_at, created_at, updated_at
+            ) VALUES (?, ?, ?, 1, ?, ?, ?)""",
+            ("delivery-1", "notification-1", "subscription-1",
+             now.isoformat(), now.isoformat(), now.isoformat()),
+        )
+        connection.commit()
+
+        repository = NotificationsRepository(connection)
+        assert repository.clear_pending_event_reminders(event_id="event-1") == 0
+
+        assert connection.execute(
+            "SELECT COUNT(*) FROM notifications WHERE id = 'notification-1'"
+        ).fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT COUNT(*) FROM push_deliveries WHERE id = 'delivery-1'"
+        ).fetchone()[0] == 1
+    finally:
+        connection.close()
