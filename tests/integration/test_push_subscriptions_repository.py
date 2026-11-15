@@ -16,7 +16,7 @@ NOW = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
 ENCRYPTION_KEY = os.urandom(32)
 P256DH = base64.urlsafe_b64encode(os.urandom(65)).decode("ascii").rstrip("=")
 AUTH = base64.urlsafe_b64encode(os.urandom(16)).decode("ascii").rstrip("=")
-ENDPOINT = "https://push.example.test/send/opaque-secret"
+ENDPOINT = "https://fcm.googleapis.com/send/opaque-secret"
 
 
 def _setup(connection):
