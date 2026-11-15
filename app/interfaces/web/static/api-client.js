@@ -98,6 +98,19 @@
     const eventMutation = Boolean(eventId && method !== "GET" &&
       /^\/events\/[0-9a-f-]+\/(?:participants|notes|tasks|venue)?(?:\/|$)/i.test(parsed.pathname));
     let response;
+    const requestStartedAt = Date.now();
+    const recordApiFailure = (networkError, failedResponse = null) => {
+      try {
+        window.GatherlyDiagnostics?.recordApiEvent({
+          network_error: networkError,
+          path: parsed?.pathname || "",
+          method,
+          status_code: failedResponse?.status,
+          duration_ms: Date.now() - requestStartedAt,
+          request_id: failedResponse?.headers?.get("X-Request-ID") || null
+        });
+      } catch (_) {}
+    };
     try {
       response = await fetch(url, {
         credentials: "same-origin",
@@ -105,6 +118,7 @@
         headers: {"Content-Type":"application/json", ...(options.headers || {})}
       });
     } catch (networkError) {
+      recordApiFailure(true);
       if (cacheKey && offlineStore?.isEnabled() && offlineStore.getUser()) {
         try {
           const cached = await offlineStore.get(cacheKey);
@@ -124,6 +138,7 @@
       }
       throw networkError;
     }
+    if (!response.ok) recordApiFailure(false, response);
     if (response.status === 401) {
       window.location.replace("/auth.html?next=%2F");
       throw new Error("Требуется войти в аккаунт.");
