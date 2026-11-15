@@ -57,4 +57,4 @@ Email verification and password-reset tokens remain attached to their identity I
 
 ## Current scope
 
-This API-level increment supports merging two existing accounts where their provider sets do not overlap. It does not yet provide a settings screen, attach a brand-new unregistered provider identity, or resolve conflicts where both accounts already have Email or both already have Telegram. Those cases are deliberately rejected rather than guessed.
+This increment supports merging two existing accounts where their provider sets do not overlap. The main dashboard includes a linked-accounts dialog for the Email/password and Telegram Login Widget flows. Attaching a brand-new unregistered provider identity and resolving conflicts where both accounts already have Email or both already have Telegram remain out of scope. Those cases are deliberately rejected rather than guessed.
