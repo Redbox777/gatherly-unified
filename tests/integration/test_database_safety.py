@@ -412,7 +412,7 @@ def test_finance_migration_17_backfills_and_preserves_legacy_payer_name(
                 "SELECT version FROM schema_migrations ORDER BY version"
             ).fetchall()
         ]
-        assert applied_versions == list(range(1, 22))
+        assert applied_versions == list(range(1, 23))
     finally:
         connection.close()
 
