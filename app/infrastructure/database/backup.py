@@ -185,6 +185,11 @@ def restore_database(
         raise ValueError("Stop the application and pass explicit restore confirmation")
     if erasure_ledger is None:
         raise ValueError("A verified account-erasure ledger is required for restore")
+    if (
+        os.environ.get("APP_ENV", "development").strip().casefold() == "production"
+        and erasure_ledger.remote is None
+    ):
+        raise ValueError("Production restore requires the off-host account-erasure ledger")
     backup_path = backup.expanduser().resolve()
     destination_path = destination.expanduser().resolve()
     if backup_path == destination_path:
@@ -331,6 +336,8 @@ def main() -> None:
         if os.environ.get("APP_ENV", "development").strip().casefold() == "production":
             if ledger is None or ledger.remote is None:
                 raise ValueError("Production backups require the off-host account-erasure ledger")
+            if not os.environ.get("GATHERLY_ERASURE_LEDGER_PATH", "").strip():
+                raise ValueError("Production backups require GATHERLY_ERASURE_LEDGER_PATH")
         if ledger is not None:
             ledger.load_events()
         backup_database_encrypted(
@@ -348,6 +355,8 @@ def main() -> None:
         if os.environ.get("APP_ENV", "development").strip().casefold() == "production":
             if ledger.remote is None:
                 raise ValueError("Production restore requires the off-host account-erasure ledger")
+            if not os.environ.get("GATHERLY_ERASURE_LEDGER_PATH", "").strip():
+                raise ValueError("Production restore requires GATHERLY_ERASURE_LEDGER_PATH")
         restore_database(
             arguments.backup,
             arguments.destination,
@@ -364,6 +373,8 @@ def main() -> None:
         )
         if ledger.remote is None:
             raise ValueError("GATHERLY_ERASURE_LEDGER_REMOTE is required")
+        if not os.environ.get("GATHERLY_ERASURE_LEDGER_PATH", "").strip():
+            raise ValueError("GATHERLY_ERASURE_LEDGER_PATH is required")
         ledger.load_events()
     else:
         prune_backups(arguments.directory, retention_days=arguments.retention_days)
