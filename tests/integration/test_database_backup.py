@@ -340,11 +340,12 @@ def test_restore_replays_committed_account_merge_against_pre_merge_backup(tmp_pa
             ("target-identity", "target-user", "telegram", "123456789"),
             ("source-identity", "source-user", "email", "source@example.test"),
         ):
+            password_hash = "password-hash" if provider == "email" else None
             connection.execute(
                 "INSERT INTO auth_identities(id, user_id, provider, provider_subject, "
                 "password_hash, verified_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
-                    identity_id, user_id, provider, subject, "password-hash",
+                    identity_id, user_id, provider, subject, password_hash,
                     "2026-11-14T00:00:00Z", "2026-11-14T00:00:00Z",
                 ),
             )
