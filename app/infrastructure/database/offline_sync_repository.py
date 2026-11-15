@@ -72,21 +72,6 @@ class OfflineSyncRepository:
         timestamp = self._timestamp(now or datetime.now(UTC))
 
         with transaction(self._connection):
-            previous = self._connection.execute(
-                """SELECT payload_hash, response_status, response_json
-                   FROM offline_sync_idempotency
-                   WHERE user_id = ? AND operation_id = ?""",
-                (user_id, normalized_operation_id),
-            ).fetchone()
-            if previous is not None:
-                if previous["payload_hash"] != payload_hash:
-                    raise OfflineSyncError(
-                        409, "Idempotency key was already used with another payload"
-                    )
-                return int(previous["response_status"]), json.loads(
-                    str(previous["response_json"])
-                )
-
             authorization = self._connection.execute(
                 """SELECT events.owner_id, state.revision
                    FROM events
@@ -111,6 +96,21 @@ class OfflineSyncRepository:
                 raise OfflineSyncError(404, "Event not found")
             if not kind.startswith(("note.", "task.", "venue.")):
                 raise OfflineSyncError(422, "Unsupported command kind")
+
+            previous = self._connection.execute(
+                """SELECT payload_hash, response_status, response_json
+                   FROM offline_sync_idempotency
+                   WHERE user_id = ? AND operation_id = ?""",
+                (user_id, normalized_operation_id),
+            ).fetchone()
+            if previous is not None:
+                if previous["payload_hash"] != payload_hash:
+                    raise OfflineSyncError(
+                        409, "Idempotency key was already used with another payload"
+                    )
+                return int(previous["response_status"]), json.loads(
+                    str(previous["response_json"])
+                )
 
             current_revision = int(authorization["revision"])
             if current_revision != base_revision:
