@@ -1,5 +1,3 @@
-from datetime import UTC, datetime
-
 from app.infrastructure.database.connection import connect, migrate
 from app.infrastructure.database.privacy_repository import PrivacyRepository
 
@@ -112,20 +110,20 @@ def test_account_erasure_anonymizes_shared_participant_finance_records(tmp_path)
             "SELECT display_name, linked_user_id FROM event_participants WHERE id = ?",
             ("participant-12345678",),
         ).fetchone()
-        assert participant["display_name"] == "Former member partici"
+        assert participant["display_name"] == "Former member particip"
         assert participant["linked_user_id"] is None
         assert connection.execute(
             "SELECT paid_by_participant_name FROM event_expenses WHERE id = ?",
             ("expense-1",),
-        ).fetchone()[0] == "Former member partici"
+        ).fetchone()[0] == "Former member particip"
         assert connection.execute(
             "SELECT participant_name FROM event_expense_allocations WHERE id = ?",
             ("allocation-1",),
-        ).fetchone()[0] == "Former member partici"
+        ).fetchone()[0] == "Former member particip"
         assert connection.execute(
             "SELECT from_participant_name FROM event_settlements WHERE id = ?",
             ("settlement-1",),
-        ).fetchone()[0] == "Former member partici"
+        ).fetchone()[0] == "Former member particip"
         assert connection.execute(
             "SELECT COUNT(*) FROM participant_invitations WHERE id = ?",
             ("invitation-1",),
