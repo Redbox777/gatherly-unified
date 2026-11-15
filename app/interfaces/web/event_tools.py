@@ -34,14 +34,9 @@ def create_event_tools_router(
         payload: OfflineSyncCommandRequest, request: Request, deps: ServiceDependency
     ) -> JSONResponse:
         """Apply a queued command using the current authenticated session only."""
-        user_id = deps.authentication.resolve_session(
-            raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
-        )
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Authentication required")
         try:
             response_status, body = deps.offline_sync.apply(
-                authenticated_user_id=user_id,
+                session_token=request.cookies.get(SESSION_COOKIE, ""),
                 operation_id=str(payload.operation_id),
                 event_id=str(payload.event_id),
                 base_revision=payload.base_revision,
