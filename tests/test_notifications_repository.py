@@ -67,6 +67,7 @@ def test_notification_preferences_default_to_enabled_and_can_be_disabled(tmp_pat
             "event_updates_enabled": True,
             "participant_added_enabled": True,
             "reminders_enabled": True,
+            "telegram_enabled": False,
         }
         result = repository.set_preferences(
             user_id="user-1",
