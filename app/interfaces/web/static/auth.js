@@ -60,6 +60,34 @@
     return response;
   }
 
+  const demoButton = $("#demo-login-button");
+  if (demoButton) {
+    fetch("/auth/demo/status", { credentials: "same-origin" })
+      .then((response) => response.ok ? response.json() : { enabled: false })
+      .then((config) => { demoButton.hidden = config.enabled !== true; })
+      .catch(() => { demoButton.hidden = true; });
+
+    demoButton.addEventListener("click", async () => {
+      demoButton.disabled = true;
+      demoButton.dataset.originalLabel = demoButton.textContent;
+      demoButton.textContent = "Открываем демо…";
+      setStatus("");
+      try {
+        const response = await request("/auth/demo/login", {});
+        if (!response.ok) {
+          setStatus("Демо-вход сейчас недоступен. Проверьте настройки среды разработки.", "error");
+          return;
+        }
+        window.location.replace("/");
+      } catch (_) {
+        setStatus("Нет соединения с сервером. Попробуйте ещё раз.", "error");
+      } finally {
+        demoButton.disabled = false;
+        demoButton.textContent = demoButton.dataset.originalLabel || "Войти в демо без пароля →";
+      }
+    });
+  }
+
   function friendlyFailure(response, fallback) {
     if (response.status === 429) return "Слишком много попыток. Подождите немного и попробуйте снова.";
     if (response.status === 422) return "Проверьте введённые данные и требования к паролю.";
