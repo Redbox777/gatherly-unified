@@ -64,7 +64,7 @@ class AccountErasureLedger:
             return None
         try:
             key = base64.urlsafe_b64decode(encoded.encode("ascii"))
-        except (ValueError, UnicodeEncodeError) as error:
+        except ValueError as error:
             raise ValueError(
                 "GATHERLY_ERASURE_LEDGER_KEY must be a base64-encoded key"
             ) from error
@@ -212,7 +212,7 @@ class AccountErasureLedger:
             if not hmac.compare_digest(expected, supplied):
                 raise ValueError("Invalid event signature")
             return ErasureEvent(event_id, user_id_hash, timestamp)
-        except (OSError, UnicodeError, KeyError, TypeError, ValueError) as error:
+        except (OSError, KeyError, TypeError, ValueError) as error:
             raise ErasureLedgerError(
                 f"Erasure ledger event {path.name} failed verification"
             ) from error
