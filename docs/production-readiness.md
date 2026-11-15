@@ -11,8 +11,9 @@ This checklist separates repository-level implementation from deployment and ope
 - [ ] Set public HTTPS verification, password-reset, and participant-invitation URLs.
 - [x] New passwords use bounded Argon2id parameters; existing scrypt hashes are upgraded after successful login without forcing password resets.
 - [ ] Benchmark Argon2id latency and memory use on the intended production host under expected concurrent logins.
-- [ ] Configure `TELEGRAM_BOT_TOKEN` and `TELEGRAM_BOT_USERNAME` in both the web and worker environments if Telegram notifications are enabled. Users must start the bot and explicitly opt in.
-- [ ] Remember that Telegram and email/password currently create separate internal accounts. Do not promise cross-provider account linking.
+- [ ] Configure `TELEGRAM_BOT_TOKEN` and `TELEGRAM_BOT_USERNAME` in the web environment for Telegram login/account linking. Configure them in the worker environment as well if Telegram notifications are enabled. Notification delivery still requires users to start the bot and explicitly opt in.
+- [ ] On the deployed HTTPS origin, verify Email-to-Telegram and Telegram-to-Email account merges with test accounts, including provider-collision rejection, data transfer, and old-session revocation.
+- [ ] Account linking merges two existing accounts only when their provider sets do not overlap. It requires recent destination authentication and independent source-account proof; it does not attach a new provider identity or support unlinking.
 
 ## Reverse proxy and network boundary
 
