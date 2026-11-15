@@ -11,7 +11,6 @@ global.localStorage = {
   setItem(key, value) { storage.set(key, String(value)); },
   removeItem(key) { storage.delete(key); }
 };
-global.crypto = require("node:crypto").webcrypto;
 require("../../app/interfaces/web/static/offline-store.js");
 
 const store = global.GatherlyOfflineStore;
