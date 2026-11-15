@@ -175,3 +175,132 @@ def test_merge_rejects_unknown_or_same_user(database) -> None:
             expected_password_hash=None,
             now=NOW,
         )
+
+def test_merge_preserves_destination_preferences_moves_invitations_and_revokes_sessions(
+    database,
+) -> None:
+    target = create_identity(database, provider="telegram", subject="telegram-target")
+    source = create_identity(
+        database,
+        provider="email",
+        subject="source@example.test",
+        user_email_hash="argon2id$source",
+    )
+    database.execute(
+        "INSERT INTO notification_preferences(user_id, email_enabled, updated_at) VALUES (?, ?, ?)",
+        (target.user_id, 0, NOW.isoformat()),
+    )
+    database.execute(
+        "INSERT INTO notification_preferences(user_id, email_enabled, updated_at) VALUES (?, ?, ?)",
+        (source.user_id, 1, NOW.isoformat()),
+    )
+    database.execute(
+        "INSERT INTO events(id, owner_id, title, starts_at, created_at) VALUES (?, ?, ?, ?, ?)",
+        ("invite-event", source.user_id, "Invitation event", None, NOW.isoformat()),
+    )
+    database.execute(
+        """INSERT INTO event_participants(id, event_id, display_name, added_at)
+           VALUES (?, ?, ?, ?)""",
+        ("invite-participant", "invite-event", "Guest", NOW.isoformat()),
+    )
+    database.execute(
+        """INSERT INTO participant_invitations(
+               id, participant_id, target_email, token_hash, created_by_owner_id,
+               created_at, expires_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (
+            "invite-1", "invite-participant", "guest@example.test", "token-hash",
+            source.user_id, NOW.isoformat(), "2026-11-16T12:00:00+00:00",
+        ),
+    )
+    for session_id, user_id in (("target-session", target.user_id), ("source-session", source.user_id)):
+        database.execute(
+            """INSERT INTO auth_sessions(id, user_id, token_hash, created_at, expires_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (
+                session_id, user_id, f"hash-{session_id}", NOW.isoformat(),
+                "2026-11-16T12:00:00+00:00",
+            ),
+        )
+    database.commit()
+
+    AccountLinkingRepository(database).merge_accounts(
+        target_user_id=target.user_id,
+        source_user_id=source.user_id,
+        proof_identity_id=source.identity_id,
+        proof_provider="email",
+        expected_password_hash="argon2id$source",
+        now=NOW,
+    )
+
+    preference = database.execute(
+        "SELECT email_enabled FROM notification_preferences WHERE user_id = ?",
+        (target.user_id,),
+    ).fetchone()
+    assert preference["email_enabled"] == 0
+    invitation = database.execute(
+        "SELECT created_by_owner_id FROM participant_invitations WHERE id = 'invite-1'"
+    ).fetchone()
+    assert invitation["created_by_owner_id"] == target.user_id
+    sessions = database.execute(
+        "SELECT user_id, revoked_at FROM auth_sessions ORDER BY id"
+    ).fetchall()
+    assert len(sessions) == 2
+    assert all(row["user_id"] == target.user_id for row in sessions)
+    assert all(row["revoked_at"] is not None for row in sessions)
+
+
+def test_merge_rolls_back_all_prior_updates_when_later_data_move_fails(database) -> None:
+    target = create_identity(database, provider="telegram", subject="telegram-target")
+    source = create_identity(
+        database,
+        provider="email",
+        subject="source@example.test",
+        user_email_hash="argon2id$source",
+    )
+    database.execute(
+        "INSERT INTO events(id, owner_id, title, starts_at, created_at) VALUES (?, ?, ?, ?, ?)",
+        ("rollback-event", source.user_id, "Rollback event", None, NOW.isoformat()),
+    )
+    database.execute(
+        """INSERT INTO notifications(
+               id, user_id, event_id, kind, title, body, dedupe_key, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            "rollback-notification", source.user_id, "rollback-event",
+            "event_updated", "Updated", "Changed", "rollback-key", NOW.isoformat(),
+        ),
+    )
+    database.execute(
+        """CREATE TRIGGER reject_notification_account_move
+           BEFORE UPDATE OF user_id ON notifications
+           BEGIN
+               SELECT RAISE(ABORT, 'injected account-move failure');
+           END"""
+    )
+    database.commit()
+
+    import sqlite3
+
+    with pytest.raises(sqlite3.IntegrityError, match="injected account-move failure"):
+        AccountLinkingRepository(database).merge_accounts(
+            target_user_id=target.user_id,
+            source_user_id=source.user_id,
+            proof_identity_id=source.identity_id,
+            proof_provider="email",
+            expected_password_hash="argon2id$source",
+            now=NOW,
+        )
+
+    assert database.execute(
+        "SELECT user_id FROM auth_identities WHERE id = ?", (source.identity_id,)
+    ).fetchone()["user_id"] == source.user_id
+    assert database.execute(
+        "SELECT owner_id FROM events WHERE id = 'rollback-event'"
+    ).fetchone()["owner_id"] == source.user_id
+    assert database.execute(
+        "SELECT user_id FROM notifications WHERE id = 'rollback-notification'"
+    ).fetchone()["user_id"] == source.user_id
+    assert database.execute(
+        "SELECT 1 FROM users WHERE id = ?", (source.user_id,)
+    ).fetchone() is not None
