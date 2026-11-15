@@ -164,6 +164,7 @@ class PushSubscriptionsRepository:
                      ON subscription.user_id = notification.user_id
                     AND subscription.revoked_at IS NULL
                    WHERE notification.created_at >= preference.push_consent_at
+                     AND notification.created_at >= subscription.created_at
                    ORDER BY notification.created_at, notification.id""",
             ).fetchall()
             for candidate in candidates:
