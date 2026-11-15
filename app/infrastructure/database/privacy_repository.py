@@ -170,18 +170,17 @@ class PrivacyRepository:
         """Record a durable tombstone before erasing the account transactionally."""
         if not user_id.strip():
             raise ValueError("User ID must not be blank")
+        user = self._connection.execute(
+            "SELECT 1 FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        if user is None:
+            return False
+        # Do not hold SQLite's global writer lock while waiting for off-host
+        # storage. The tombstone is durable before the destructive transaction.
+        erasure_ledger.record_deletion(
+            user_id=user_id, deleted_at=datetime.now(UTC)
+        )
         with transaction(self._connection):
-            user = self._connection.execute(
-                "SELECT 1 FROM users WHERE id = ?", (user_id,)
-            ).fetchone()
-            if user is None:
-                return False
-            # The independent ledger is durably written and replicated before the
-            # SQLite transaction can commit. If the process crashes after this
-            # point, startup replay completes the erasure.
-            erasure_ledger.record_deletion(
-                user_id=user_id, deleted_at=datetime.now(UTC)
-            )
             return self._erase_user_account_in_transaction(user_id)
 
     def apply_recorded_erasure(self, *, user_id: str) -> bool:
