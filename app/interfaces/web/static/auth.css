@@ -69,3 +69,5 @@ button:focus-visible,a:focus-visible{outline:3px solid #2bbdb1;outline-offset:3p
 .demo-submit{margin-top:10px;background:linear-gradient(110deg,#e8f7f2,#d7f1e9);color:#08756f;box-shadow:none;border:1px solid #ccebe1}
 .demo-submit span{color:#078b83}
 .demo-submit:hover{filter:brightness(.98)}
+
+#demo-login-button[hidden]{display:none}
