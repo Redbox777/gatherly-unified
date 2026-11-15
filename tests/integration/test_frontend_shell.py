@@ -52,6 +52,9 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     assert "activeEvent?.id !== eventId" in script.text
     assert "loadEventFinance" in finance.text
     assert "settlements" in finance.text
+    assert "currentFinanceEventId = null;" in finance.text
+    assert "getActiveEvent()?.id !== eventId" in finance.text
+    assert "await loadEventFinance(eventId);" in finance.text
     assert "renderExpenseSplitEditor" in finance.text
     assert "Распределить" in finance.text
     assert "weighted" in finance.text

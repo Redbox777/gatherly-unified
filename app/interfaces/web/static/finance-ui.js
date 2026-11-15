@@ -504,8 +504,19 @@
   };
 
   const loadEventFinance = async eventId => {
+    currentFinanceBalances = [];
+    currentFinanceEventId = null;
     balancesList.replaceChildren();
     settlementsList.replaceChildren();
+    settlementForm.querySelectorAll("select, input, button").forEach(control => {
+      control.disabled = true;
+    });
+    settlementCurrency.replaceChildren();
+    settlementFrom.replaceChildren();
+    settlementTo.replaceChildren();
+    settlementAmount.value = "";
+    settlementNote.value = "";
+    settlementStatus.textContent = "";
     try {
       const [balances, settlements] = await Promise.all([
         api("/events/" + encodeURIComponent(eventId) + "/balances"),
@@ -522,7 +533,13 @@
 
   settlementForm.addEventListener("submit", async event => {
     event.preventDefault();
-    if (!currentFinanceEventId || !settlementFrom.value || !settlementTo.value) {
+    const eventId = currentFinanceEventId;
+    if (
+      !eventId ||
+      getActiveEvent()?.id !== eventId ||
+      !settlementFrom.value ||
+      !settlementTo.value
+    ) {
       settlementStatus.textContent = "Выберите должника и получателя.";
       return;
     }
@@ -530,7 +547,7 @@
     settlementStatus.textContent = "Сохраняем перевод…";
     try {
       await api(
-        "/events/" + encodeURIComponent(currentFinanceEventId) + "/settlements",
+        "/events/" + encodeURIComponent(eventId) + "/settlements",
         {
           method: "POST",
           body: JSON.stringify({
@@ -543,13 +560,16 @@
           })
         }
       );
+      if (getActiveEvent()?.id !== eventId) return;
       settlementAmount.value = "";
       settlementNote.value = "";
       settlementStatus.textContent = "Перевод записан.";
-      await loadEventFinance(currentFinanceEventId);
+      await loadEventFinance(eventId);
     } catch (error) {
-      settlementStatus.textContent = error.message;
-      settlementSave.disabled = false;
+      if (getActiveEvent()?.id === eventId) {
+        settlementStatus.textContent = error.message;
+        settlementSave.disabled = false;
+      }
     }
   });
 
