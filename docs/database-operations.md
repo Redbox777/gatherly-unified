@@ -1,31 +1,67 @@
 # Database operations, backups, and migrations
 
-## SQLite backup
+## Encrypted SQLite backup
 
 Do not copy the live SQLite database file with a plain filesystem copy. The application uses SQLite connections and may use a write-ahead log (WAL); a raw copy can omit committed WAL pages or capture an inconsistent state.
 
-Create an online backup using SQLite's backup API:
+Generate a 32-byte random key once and store it in a secret manager, separate from the database host and backup destination:
+
+```bash
+python -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
+```
+
+Set `GATHERLY_BACKUP_ENCRYPTION_KEY` to that base64-encoded value in the backup job's secret environment. Do not put the key in source control, a backup directory, shell history, or the same object-storage bucket as the backups.
+
+Create an authenticated, encrypted online backup:
 
 ```bash
 python -m app.infrastructure.database.backup backup \
-  var/gatherly.sqlite3 backups/gatherly-$(date -u +%F).sqlite3
+  var/gatherly.sqlite3 backups/gatherly-$(date -u +%Y%m%dT%H%M%SZ).sqlite3.enc
 ```
 
-The command writes to a temporary file, uses SQLite's online backup API, runs `PRAGMA integrity_check`, applies owner-only file permissions where supported, and atomically replaces the destination. Store backups outside the application host as well, encrypt them at rest, restrict access, and define a retention schedule appropriate to the data held in Gatherly.
+The backup command uses SQLite's online backup API, verifies the resulting database with `PRAGMA integrity_check`, then encrypts it with AES-256-GCM. The encrypted format authenticates its header and contents, uses a fresh random nonce, and is written atomically with owner-only permissions. Plaintext staging files are removed after use. The implementation streams data in bounded chunks rather than loading the whole database into memory.
 
-## Restore
+The encryption key must be backed up separately using the operator's secret-management/recovery process. If the key is lost, encrypted backups cannot be restored.
 
-Stop every application process that can open the target database before restoring. Then restore to the configured database path:
+## Schedule and off-host copy
+
+Run the backup job at least daily, preferably during a low-traffic period. Example crontab entry (adjust absolute paths and service account):
+
+```cron
+17 2 * * * cd /srv/gatherly && /usr/bin/env bash scripts/backup-gatherly.sh >> /var/log/gatherly-backup.log 2>&1
+```
+
+The script creates an encrypted backup, copies it to a dedicated off-host remote using `rclone`, then prunes expired local copies. Install and configure `rclone` for an S3-compatible or other supported object-storage destination. Set:
+
+- `GATHERLY_DB_PATH`: live SQLite path.
+- `GATHERLY_BACKUP_DIR`: local backup directory.
+- `GATHERLY_BACKUP_REMOTE`: dedicated remote directory, e.g. `s3:gatherly-backups/production`.
+- `GATHERLY_BACKUP_ENCRYPTION_KEY`: secret key described above.
+- `GATHERLY_BACKUP_RETENTION_DAYS`: local retention in days (default 30).
+
+Configure object-storage bucket versioning and a lifecycle/retention policy independently. Restrict remote access to the backup service identity. Keep at least one backup outside the application host and preferably outside the hosting account/region. Do not expose the remote bucket publicly.
+
+## Restore and recovery drill
+
+Stop every application process that can open the target database before restoring. Then restore an encrypted backup:
 
 ```bash
 python -m app.infrastructure.database.backup restore \
-  backups/gatherly-YYYY-MM-DD.sqlite3 var/gatherly.sqlite3 \
+  backups/gatherly-YYYYMMDDTHHMMSSZ.sqlite3.enc var/gatherly.sqlite3 \
   --confirm-application-stopped
 ```
 
-Restore uses the same online backup API and integrity check. The explicit flag is a safety guard, not a process supervisor; the operator remains responsible for stopping all writers. After restore, start the application and verify `/health/ready`.
+The restore command requires the same encryption key environment variable, authenticates/decrypts to a private temporary file, checks SQLite integrity, and atomically installs the restored database. A wrong key or modified backup is rejected before the destination is replaced. The explicit flag is a safety guard, not a process supervisor; the operator remains responsible for stopping all writers.
 
-A backup is not considered operationally proven until a restore has been exercised in a separate path/environment and the restored data has been checked. Repeat restore drills periodically and record the date, backup age, integrity result, and recovery time.
+At least monthly, copy a remote backup to a separate recovery environment, restore it, start the app against that restored copy, and verify `/health/ready` plus representative records. Record backup timestamp/age, integrity result, recovery time (RTO), and data-loss window (RPO). A backup is not operationally proven until this drill succeeds.
+
+Local retention cleanup is available with:
+
+```bash
+python -m app.infrastructure.database.backup prune backups --retention-days 30
+```
+
+It deletes only regular, non-symlink files matching `gatherly-*.sqlite3.enc` in the selected directory. Remote retention should be enforced with the storage provider's lifecycle policy.
 
 ## Health checks
 

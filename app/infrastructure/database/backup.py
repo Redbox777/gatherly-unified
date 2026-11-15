@@ -1,14 +1,31 @@
-"""Safe SQLite online backup and controlled restore helpers.
-
-Backups use SQLite's online backup API so committed WAL content is included.
-Restore is intentionally gated because the application must be stopped first.
-"""
+"""Safe SQLite online backups, authenticated encryption, and retention."""
 
 import argparse
+from datetime import UTC, datetime
 import os
 from pathlib import Path
+import secrets
 import sqlite3
 import tempfile
+
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+
+_ENCRYPTED_BACKUP_MAGIC = b"GATHERLY-ENC-BACKUP-V1\n"
+_NONCE_BYTES = 12
+_TAG_BYTES = 16
+_CHUNK_BYTES = 1024 * 1024
+_COPY_CHUNK_BYTES = 1024 * 1024
+_BACKUP_PATTERN_PREFIX = "gatherly-"
+_BACKUP_PATTERN_SUFFIX = ".sqlite3.enc"
+
+
+def _temporary_path(directory: Path, prefix: str) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    descriptor, name = tempfile.mkstemp(prefix=prefix, suffix=".tmp", dir=directory)
+    os.close(descriptor)
+    return Path(name)
 
 
 def _copy_database(
@@ -22,13 +39,9 @@ def _copy_database(
         raise FileNotFoundError(source_path)
 
     destination_path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix="." + destination_path.name + ".",
-        suffix=".tmp",
-        dir=destination_path.parent,
+    temporary_path = _temporary_path(
+        destination_path.parent, "." + destination_path.name + "."
     )
-    os.close(descriptor)
-    temporary_path = Path(temporary_name)
     source_connection: sqlite3.Connection | None = None
     destination_connection: sqlite3.Connection | None = None
     try:
@@ -45,6 +58,8 @@ def _copy_database(
         source_connection.close()
         source_connection = None
         os.chmod(temporary_path, 0o600)
+        with temporary_path.open("rb") as stream:
+            os.fsync(stream.fileno())
         if clear_destination_sidecars:
             Path(str(destination_path) + "-wal").unlink(missing_ok=True)
             Path(str(destination_path) + "-shm").unlink(missing_ok=True)
@@ -57,9 +72,94 @@ def _copy_database(
         temporary_path.unlink(missing_ok=True)
 
 
+def _encrypt_file(source: Path, destination: Path, key: bytes) -> None:
+    if len(key) != 32:
+        raise ValueError("Backup encryption key must be exactly 32 bytes")
+    destination_path = destination.expanduser().resolve()
+    temporary_path = _temporary_path(
+        destination_path.parent, "." + destination_path.name + "."
+    )
+    nonce = secrets.token_bytes(_NONCE_BYTES)
+    encryptor = Cipher(algorithms.AES(key), modes.GCM(nonce)).encryptor()
+    encryptor.authenticate_additional_data(_ENCRYPTED_BACKUP_MAGIC)
+    try:
+        with source.open("rb") as input_stream, temporary_path.open("wb") as output_stream:
+            output_stream.write(_ENCRYPTED_BACKUP_MAGIC)
+            output_stream.write(nonce)
+            while chunk := input_stream.read(_CHUNK_BYTES):
+                output_stream.write(encryptor.update(chunk))
+            output_stream.write(encryptor.finalize())
+            output_stream.write(encryptor.tag)
+            output_stream.flush()
+            os.fsync(output_stream.fileno())
+        os.chmod(temporary_path, 0o600)
+        os.replace(temporary_path, destination_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def _decrypt_file(source: Path, destination: Path, key: bytes) -> None:
+    if len(key) != 32:
+        raise ValueError("Backup encryption key must be exactly 32 bytes")
+    source_path = source.expanduser().resolve()
+    destination_path = destination.expanduser().resolve()
+    minimum_size = len(_ENCRYPTED_BACKUP_MAGIC) + _NONCE_BYTES + _TAG_BYTES
+    if source_path.stat().st_size < minimum_size:
+        raise ValueError("Encrypted backup is truncated")
+    temporary_path = _temporary_path(
+        destination_path.parent, "." + destination_path.name + "."
+    )
+    try:
+        with source_path.open("rb") as input_stream:
+            if input_stream.read(len(_ENCRYPTED_BACKUP_MAGIC)) != _ENCRYPTED_BACKUP_MAGIC:
+                raise ValueError("Backup encryption format is not recognized")
+            nonce = input_stream.read(_NONCE_BYTES)
+            input_stream.seek(-_TAG_BYTES, os.SEEK_END)
+            tag = input_stream.read(_TAG_BYTES)
+            ciphertext_end = source_path.stat().st_size - _TAG_BYTES
+            input_stream.seek(len(_ENCRYPTED_BACKUP_MAGIC) + _NONCE_BYTES)
+            ciphertext_remaining = (
+                ciphertext_end - len(_ENCRYPTED_BACKUP_MAGIC) - _NONCE_BYTES
+            )
+            decryptor = Cipher(
+                algorithms.AES(key), modes.GCM(nonce, tag)
+            ).decryptor()
+            decryptor.authenticate_additional_data(_ENCRYPTED_BACKUP_MAGIC)
+            with temporary_path.open("wb") as output_stream:
+                while ciphertext_remaining:
+                    chunk = input_stream.read(min(_CHUNK_BYTES, ciphertext_remaining))
+                    if not chunk:
+                        raise ValueError("Encrypted backup is truncated")
+                    ciphertext_remaining -= len(chunk)
+                    output_stream.write(decryptor.update(chunk))
+                output_stream.write(decryptor.finalize())
+                output_stream.flush()
+                os.fsync(output_stream.fileno())
+        os.chmod(temporary_path, 0o600)
+        os.replace(temporary_path, destination_path)
+    except InvalidTag as error:
+        raise ValueError("Backup authentication failed; key or file is invalid") from error
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
 def backup_database(source: Path, destination: Path) -> None:
-    """Create and integrity-check an atomic SQLite backup."""
+    """Create and integrity-check an atomic, unencrypted SQLite backup."""
     _copy_database(source, destination)
+
+
+def backup_database_encrypted(source: Path, destination: Path, key: bytes) -> None:
+    """Create an online SQLite backup and encrypt it before publishing the file."""
+    source_path = source.expanduser().resolve()
+    destination_path = destination.expanduser().resolve()
+    if source_path == destination_path:
+        raise ValueError("Source and destination must be different files")
+    plaintext_path = _temporary_path(destination_path.parent, ".gatherly-plain-")
+    try:
+        _copy_database(source, plaintext_path)
+        _encrypt_file(plaintext_path, destination_path, key)
+    finally:
+        plaintext_path.unlink(missing_ok=True)
 
 
 def restore_database(
@@ -67,35 +167,122 @@ def restore_database(
     destination: Path,
     *,
     confirm_application_stopped: bool,
+    encryption_key: bytes | None = None,
 ) -> None:
-    """Restore atomically; caller must stop every app process first."""
+    """Restore an atomic backup; caller must stop every app process first."""
     if not confirm_application_stopped:
         raise ValueError("Stop the application and pass explicit restore confirmation")
-    _copy_database(backup, destination, clear_destination_sidecars=True)
+    backup_path = backup.expanduser().resolve()
+    destination_path = destination.expanduser().resolve()
+    if backup_path == destination_path:
+        raise ValueError("Backup and destination must be different files")
+    with backup_path.open("rb") as stream:
+        is_encrypted = stream.read(len(_ENCRYPTED_BACKUP_MAGIC)) == _ENCRYPTED_BACKUP_MAGIC
+    if is_encrypted:
+        if encryption_key is None:
+            raise ValueError("Encrypted backup requires the backup encryption key")
+        plaintext_path = _temporary_path(
+            destination.expanduser().resolve().parent, ".gatherly-restore-"
+        )
+        try:
+            _decrypt_file(backup_path, plaintext_path, encryption_key)
+            _copy_database(
+                plaintext_path,
+                destination,
+                clear_destination_sidecars=True,
+            )
+        finally:
+            plaintext_path.unlink(missing_ok=True)
+    else:
+        _copy_database(
+            backup_path,
+            destination,
+            clear_destination_sidecars=True,
+        )
+
+
+def prune_backups(
+    directory: Path, *, retention_days: int, now: datetime | None = None
+) -> list[Path]:
+    """Delete only expired Gatherly encrypted backup files in one directory."""
+    if retention_days < 1:
+        raise ValueError("Backup retention must be at least one day")
+    current_time = now or datetime.now(UTC)
+    if current_time.tzinfo is None or current_time.utcoffset() is None:
+        raise ValueError("Current time must include a timezone")
+    cutoff = current_time.timestamp() - retention_days * 86_400
+    removed: list[Path] = []
+    root = directory.expanduser().resolve()
+    if not root.is_dir():
+        return removed
+    for candidate in root.iterdir():
+        if (
+            candidate.is_symlink()
+            or not candidate.is_file()
+            or not candidate.name.startswith(_BACKUP_PATTERN_PREFIX)
+            or not candidate.name.endswith(_BACKUP_PATTERN_SUFFIX)
+        ):
+            continue
+        if candidate.stat().st_mtime < cutoff:
+            candidate.unlink()
+            removed.append(candidate)
+    return removed
+
+
+def _key_from_environment(variable_name: str) -> bytes:
+    import base64
+
+    encoded = os.environ.get(variable_name, "").strip()
+    if not encoded:
+        raise ValueError(f"Environment variable {variable_name} is required")
+    try:
+        key = base64.urlsafe_b64decode(encoded.encode("ascii"))
+    except (ValueError, UnicodeEncodeError) as error:
+        raise ValueError(f"{variable_name} must contain a base64-encoded key") from error
+    if len(key) != 32:
+        raise ValueError(f"{variable_name} must decode to exactly 32 bytes")
+    return key
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Gatherly SQLite backup and restore")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    backup_parser = subparsers.add_parser("backup", help="Create an online backup")
+    backup_parser = subparsers.add_parser("backup", help="Create an encrypted online backup")
     backup_parser.add_argument("source", type=Path)
     backup_parser.add_argument("destination", type=Path)
+    backup_parser.add_argument(
+        "--key-env", default="GATHERLY_BACKUP_ENCRYPTION_KEY"
+    )
 
     restore_parser = subparsers.add_parser("restore", help="Restore a verified backup")
     restore_parser.add_argument("backup", type=Path)
     restore_parser.add_argument("destination", type=Path)
     restore_parser.add_argument("--confirm-application-stopped", action="store_true")
+    restore_parser.add_argument(
+        "--key-env", default="GATHERLY_BACKUP_ENCRYPTION_KEY"
+    )
+
+    prune_parser = subparsers.add_parser("prune", help="Remove expired local encrypted backups")
+    prune_parser.add_argument("directory", type=Path)
+    prune_parser.add_argument("--retention-days", type=int, default=30)
 
     arguments = parser.parse_args()
     if arguments.command == "backup":
-        backup_database(arguments.source, arguments.destination)
-    else:
+        backup_database_encrypted(
+            arguments.source,
+            arguments.destination,
+            _key_from_environment(arguments.key_env),
+        )
+    elif arguments.command == "restore":
         restore_database(
             arguments.backup,
             arguments.destination,
             confirm_application_stopped=arguments.confirm_application_stopped,
+            encryption_key=_key_from_environment(arguments.key_env),
         )
+    else:
+        prune_backups(arguments.directory, retention_days=arguments.retention_days)
 
 
 if __name__ == "__main__":
