@@ -80,15 +80,15 @@ def test_remote_ledger_can_recover_tombstones_after_local_copy_is_lost(
     )
 
     def fake_rclone(arguments, **kwargs):
-        if arguments[2] == "mock:account-erasure":
-            source = Path(arguments[1])
+        if arguments[3] == "mock:account-erasure":
+            source = Path(arguments[2])
             for source_file in source.glob("*.json"):
                 target = remote_directory / source_file.name
                 if target.exists() and target.read_bytes() != source_file.read_bytes():
                     raise subprocess.CalledProcessError(1, arguments)
                 target.write_bytes(source_file.read_bytes())
-        elif arguments[1] == "mock:account-erasure":
-            destination = Path(arguments[2])
+        elif arguments[2] == "mock:account-erasure":
+            destination = Path(arguments[3])
             for source_file in remote_directory.glob("*.json"):
                 (destination / source_file.name).write_bytes(source_file.read_bytes())
         return subprocess.CompletedProcess(arguments, 0)
