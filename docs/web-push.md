@@ -16,7 +16,7 @@ Never commit either private key. Do not store the subscription-encryption key be
 
 ## User opt-in and lifecycle
 
-The browser requests Notification permission, waits for the active root-scoped service worker, obtains a PushManager subscription using the public VAPID key, and posts the endpoint and browser keys to `POST /push-subscriptions`. The server validates HTTPS endpoints and expected key sizes, encrypts the endpoint and keys with AES-256-GCM, and stores only the ciphertext plus a SHA-256 endpoint identifier.
+The browser requests Notification permission, waits for the active root-scoped service worker, obtains a PushManager subscription using the public VAPID key, and posts the endpoint and browser keys to `POST /push-subscriptions`. The server validates HTTPS endpoints, restricts destination hosts to supported browser push providers (Google FCM, Mozilla, Apple, and Windows Push), checks expected key sizes, encrypts the endpoint and keys with AES-256-GCM, and stores only the ciphertext plus a SHA-256 endpoint identifier. This provider allowlist prevents the worker from becoming a general-purpose SSRF proxy.
 
 A successful subscription records `push_enabled`, the consent timestamp, and policy version `push-v1`. The user can revoke the channel using `DELETE /push-subscriptions`; this deletes all account subscriptions and clears the consent metadata. Account deletion cascades the encrypted subscriptions and delivery records.
 
