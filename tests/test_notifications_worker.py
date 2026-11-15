@@ -70,23 +70,31 @@ class FakeNotificationsRepository:
         assert now.tzinfo is not None
         return self.created
 
-    def pending_email(self) -> list[dict[str, str]]:
+    def pending_email(self, *, now: datetime) -> list[dict[str, str]]:
+        assert now.tzinfo is not None
         return self.messages
 
-    def record_email_failure(self, *, notification_id: str, error_name: str) -> None:
+    def record_email_failure(
+        self, *, notification_id: str, error_name: str, now: datetime
+    ) -> None:
+        assert now.tzinfo is not None
         self.failed.append((notification_id, error_name))
 
     def record_email_sent(self, *, notification_id: str, now: datetime) -> None:
         assert now.tzinfo is not None
         self.sent_ids.append(notification_id)
 
-    def pending_telegram(self, *, limit: int = 20) -> list[dict[str, str]]:
+    def pending_telegram(
+        self, *, limit: int = 20, now: datetime
+    ) -> list[dict[str, str]]:
         assert limit == 20
+        assert now.tzinfo is not None
         return self.telegram_messages
 
     def record_telegram_failure(
-        self, *, notification_id: str, error_name: str
+        self, *, notification_id: str, error_name: str, now: datetime
     ) -> None:
+        assert now.tzinfo is not None
         self.telegram_failed.append((notification_id, error_name))
 
     def record_telegram_sent(self, *, notification_id: str, now: datetime) -> None:
