@@ -129,6 +129,23 @@ def test_note_member_can_create_but_nonmember_and_nonowner_cannot_create_tasks(d
     assert error.value.status_code == 404
 
 
+
+def test_replay_rechecks_live_membership_after_participant_removal(database) -> None:
+    _, connection = database
+    repository = OfflineSyncRepository(connection)
+    operation_id = str(uuid4())
+    original = _command(repository, user="guest", operation_id=operation_id)
+    assert original[0] == 201
+    connection.execute(
+        "DELETE FROM event_participants WHERE id = ?",
+        ("22222222-2222-4222-8222-222222222222",),
+    )
+    connection.commit()
+    with pytest.raises(OfflineSyncError) as error:
+        _command(repository, user="guest", operation_id=operation_id)
+    assert error.value.status_code == 404
+
+
 def test_task_assignee_must_belong_to_same_event(database) -> None:
     _, connection = database
     repository = OfflineSyncRepository(connection)
