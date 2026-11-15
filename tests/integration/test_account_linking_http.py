@@ -97,7 +97,7 @@ def test_linking_telegram_merges_verified_account_and_rotates_session(
         connection.close()
 
 
-def test_linking_requires_recent_destination_authentication(tmp_path, monkeypatch) -> None:
+def test_linking_requires_authenticated_destination_session(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("COOKIE_SECURE", "false")
     database_path = tmp_path / "account-linking-recent-auth.sqlite3"
     app = create_app(database_path)
