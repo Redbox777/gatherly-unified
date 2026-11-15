@@ -84,6 +84,7 @@ test("IndexedDB outbox is durable, account-scoped and protected from accidental 
 
   const next = (await store.listOutbox()).find(item => item.operationId === task.operationId);
   const nextAfter = (await store.listOutbox()).find(item => item.operationId === datedTask.operationId);
+  await store.removeOutboxItem(first.operationId);
   await store.rebasePendingEvent(eventId, 12);
   const rebased = (await store.listOutbox()).find(item => item.operationId === next.operationId);
   const rebasedAfter = (await store.listOutbox()).find(item => item.operationId === nextAfter.operationId);
