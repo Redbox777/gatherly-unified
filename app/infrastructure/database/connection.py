@@ -707,6 +707,14 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             WHERE event_id = OLD.event_id;
         END;
         """,
+    ),,
+    (
+        25,
+        """
+        ALTER TABLE bug_reports
+        ADD COLUMN diagnostics_json TEXT NOT NULL DEFAULT '[]'
+            CHECK (length(diagnostics_json) <= 16000);
+        """,
     ),
 )
 
