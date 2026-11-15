@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+import base64
 import json
 
 from fastapi.testclient import TestClient
@@ -19,6 +20,11 @@ class FakeEmailSender:
 
 def _verified_client(tmp_path, monkeypatch):
     monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setenv("GATHERLY_ERASURE_LEDGER_PATH", str(tmp_path / "erasure-ledger"))
+    monkeypatch.setenv(
+        "GATHERLY_ERASURE_LEDGER_KEY",
+        base64.urlsafe_b64encode(b"e" * 32).decode("ascii"),
+    )
     sender = FakeEmailSender()
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     database_path = tmp_path / "privacy-api.sqlite3"
@@ -103,6 +109,7 @@ def test_account_deletion_erases_owned_data_and_revokes_cookie(
     event = client.post("/events", json={"title": "Account-owned event"})
     assert event.status_code == 201
     assert client.get("/account/export").status_code == 200
+    user_id = client.get("/auth/me").json()["user_id"]
 
     deletion = client.delete(
         "/account",
@@ -112,6 +119,11 @@ def test_account_deletion_erases_owned_data_and_revokes_cookie(
     assert deletion.status_code == 204
     assert client.get("/auth/me").status_code == 401
     assert client.cookies.get(SESSION_COOKIE) is None
+    tombstones = list((tmp_path / "erasure-ledger").glob("*.json"))
+    assert len(tombstones) == 1
+    tombstone_text = tombstones[0].read_text(encoding="utf-8")
+    assert user_id not in tombstone_text
+    assert "user_id_hash" in tombstone_text
 
     connection = connect(database_path)
     try:
