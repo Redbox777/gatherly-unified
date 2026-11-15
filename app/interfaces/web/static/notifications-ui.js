@@ -71,6 +71,24 @@
       } else {
         telegramStatus.textContent = "Telegram-уведомления пока не настроены на сервере.";
       }
+      const pushEnable = document.getElementById("push-enable");
+      const pushDisable = document.getElementById("push-disable");
+      const pushStatus = document.getElementById("push-preference-status");
+      pushEnable.hidden = preferences.push_enabled;
+      pushDisable.hidden = !preferences.push_enabled;
+      pushEnable.disabled = !preferences.push_available ||
+        !("serviceWorker" in navigator) ||
+        !("PushManager" in window) ||
+        !("Notification" in window);
+      if (preferences.push_enabled) {
+        pushStatus.textContent = "Push включён для этого аккаунта.";
+      } else if (!preferences.push_available) {
+        pushStatus.textContent = "Push пока не настроен на сервере.";
+      } else if ("Notification" in window && Notification.permission === "denied") {
+        pushStatus.textContent = "Разрешение заблокировано в настройках браузера.";
+      } else {
+        pushStatus.textContent = "Уведомления можно включить отдельно для этого устройства.";
+      }
     } catch (error) {
       status.textContent = error.message;
     }
@@ -94,6 +112,65 @@
       status.textContent = "Настройки сохранены.";
     } catch (error) {
       status.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  const decodeVapidKey = value => {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+    const raw = window.atob(padded);
+    return Uint8Array.from(raw, character => character.charCodeAt(0));
+  };
+
+  document.getElementById("push-enable").addEventListener("click", async () => {
+    const button = document.getElementById("push-enable");
+    const status = document.getElementById("push-preference-status");
+    button.disabled = true;
+    status.textContent = "Запрашиваем разрешение браузера…";
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        status.textContent = "Разрешение на уведомления не выдано.";
+        return;
+      }
+      const keyResult = await api("/push/public-key");
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: decodeVapidKey(keyResult.public_key)
+        });
+      }
+      const serialized = subscription.toJSON();
+      await api("/push-subscriptions", {
+        method: "POST",
+        body: JSON.stringify({ endpoint: serialized.endpoint, keys: serialized.keys })
+      });
+      status.textContent = "Push-уведомления включены на этом устройстве.";
+      await loadNotificationPreferences();
+    } catch (error) {
+      status.textContent = error.message || "Не удалось включить push.";
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.getElementById("push-disable").addEventListener("click", async () => {
+    const button = document.getElementById("push-disable");
+    const status = document.getElementById("push-preference-status");
+    button.disabled = true;
+    try {
+      await api("/push-subscriptions", { method: "DELETE", body: "{}" });
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) await subscription.unsubscribe();
+      status.textContent = "Push-уведомления отключены.";
+      await loadNotificationPreferences();
+    } catch (error) {
+      status.textContent = error.message || "Не удалось отключить push.";
     } finally {
       button.disabled = false;
     }
