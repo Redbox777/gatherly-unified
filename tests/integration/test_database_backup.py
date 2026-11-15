@@ -216,6 +216,7 @@ def test_restore_rejects_foreign_key_violations_without_overwriting_target(
             invalid_backup,
             destination,
             confirm_application_stopped=True,
+            erasure_ledger=_ledger(tmp_path),
         )
 
     assert _event_title(destination) == "Keep this data"
