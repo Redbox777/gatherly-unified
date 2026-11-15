@@ -56,13 +56,12 @@ class EventExpensesRepository:
             amount_minor_units=amount_minor_units,
             currency=currency,
         )
-        if not self._event_exists(event_id=event_id, owner_id=owner_id):
-            return None
-        if not self._participant_exists(event_id, paid_by_participant_id):
-            raise ValueError("Payer must be a participant in this event")
-
         expense_id = str(uuid4())
         with transaction(self._connection):
+            if not self._event_exists(event_id=event_id, owner_id=owner_id):
+                return None
+            if not self._participant_exists(event_id, paid_by_participant_id):
+                raise ValueError("Payer must be a participant in this event")
             self._connection.execute(
                 """INSERT INTO event_expenses(
                     id, event_id, title, description, amount_minor_units,
@@ -105,34 +104,28 @@ class EventExpensesRepository:
             amount_minor_units=amount_minor_units,
             currency=currency,
         )
-        if not self._event_exists(event_id=event_id, owner_id=owner_id):
-            return None
-        if not self._participant_exists(event_id, paid_by_participant_id):
-            raise ValueError("Payer must be a participant in this event")
-
         with transaction(self._connection):
-            self._connection.execute(
-                """DELETE FROM event_expense_allocations
-                   WHERE expense_id = ?
-                     AND EXISTS (
-                         SELECT 1 FROM event_expenses
-                         WHERE id = ? AND (
-                             amount_minor_units != ? OR currency != ?
-                         )
-                     )""",
-                (expense_id, expense_id, amount_minor_units, currency),
+            if not self._event_exists(event_id=event_id, owner_id=owner_id):
+                return None
+            if not self._participant_exists(event_id, paid_by_participant_id):
+                raise ValueError("Payer must be a participant in this event")
+            current_expense = self._owned_expense(
+                expense_id=expense_id, event_id=event_id, owner_id=owner_id
             )
-            self._connection.execute(
-                """DELETE FROM event_expense_splits
-                   WHERE expense_id = ?
-                     AND EXISTS (
-                         SELECT 1 FROM event_expenses
-                         WHERE id = ? AND (
-                             amount_minor_units != ? OR currency != ?
-                         )
-                     )""",
-                (expense_id, expense_id, amount_minor_units, currency),
-            )
+            if current_expense is None:
+                return None
+            if (
+                current_expense["amount_minor_units"] != amount_minor_units
+                or current_expense["currency"] != currency
+            ):
+                self._connection.execute(
+                    "DELETE FROM event_expense_allocations WHERE expense_id = ?",
+                    (expense_id,),
+                )
+                self._connection.execute(
+                    "DELETE FROM event_expense_splits WHERE expense_id = ?",
+                    (expense_id,),
+                )
             cursor = self._connection.execute(
                 """UPDATE event_expenses
                    SET title = ?, description = ?, amount_minor_units = ?,
@@ -158,9 +151,9 @@ class EventExpensesRepository:
         )
 
     def delete(self, *, expense_id: str, event_id: str, owner_id: str) -> bool:
-        if not self._event_exists(event_id=event_id, owner_id=owner_id):
-            return False
         with transaction(self._connection):
+            if not self._event_exists(event_id=event_id, owner_id=owner_id):
+                return False
             cursor = self._connection.execute(
                 "DELETE FROM event_expenses WHERE id = ? AND event_id = ?",
                 (expense_id, event_id),
@@ -209,6 +202,19 @@ class EventExpensesRepository:
             raise ValueError("Expense amount must be greater than zero")
         get_currency(currency)
         return normalized_title, normalized_description
+
+    def _owned_expense(
+        self, *, expense_id: str, event_id: str, owner_id: str
+    ) -> dict[str, object] | None:
+        row = self._connection.execute(
+            """SELECT expense.amount_minor_units, expense.currency
+               FROM event_expenses AS expense
+               JOIN events ON events.id = expense.event_id
+               WHERE expense.id = ? AND expense.event_id = ?
+                 AND events.owner_id = ?""",
+            (expense_id, event_id, owner_id.strip()),
+        ).fetchone()
+        return dict(row) if row is not None else None
 
     def _event_exists(self, *, event_id: str, owner_id: str) -> bool:
         return self._connection.execute(
