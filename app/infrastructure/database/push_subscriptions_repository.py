@@ -1,7 +1,6 @@
 """Encrypted Web Push subscription persistence and delivery queue."""
 
 import base64
-import binascii
 from datetime import UTC, datetime
 import hashlib
 import json
