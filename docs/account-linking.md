@@ -17,26 +17,26 @@ Gatherly keeps Email and Telegram as separate login identities. The account-link
 
 ### Link a verified Email account
 
-\`POST /account/link/email\`
+`POST /account/link/email`
 
 Requires the destination account's authenticated session cookie and same-origin request headers.
 
 Request body:
 
-\`\`\`json
+```json
 {
   "email": "second-account@example.com",
   "password": "the second account password"
 }
-\`\`\`
+```
 
 The email identity must already be verified. The password is checked against the currently stored Argon2id hash; the hash is re-read after authentication and compared again inside the merge transaction to prevent a password-change race.
 
 ### Link a Telegram account
 
-\`POST /account/link/telegram\`
+`POST /account/link/telegram`
 
-Requires the destination account's authenticated session cookie and same-origin request headers. The request body is the unmodified Telegram Login Widget payload (\`id\`, \`auth_date\`, \`hash\`, plus any other signed fields). The bot token must be configured using \`TELEGRAM_BOT_TOKEN\`.
+Requires the destination account's authenticated session cookie and same-origin request headers. The request body is the unmodified Telegram Login Widget payload (`id`, `auth_date`, `hash`, plus any other signed fields). The bot token must be configured using `TELEGRAM_BOT_TOKEN`.
 
 Telegram Login Widget data is checked cryptographically, restricted to a five-minute age window, and recorded in the existing one-time-payload table to prevent replay.
 
