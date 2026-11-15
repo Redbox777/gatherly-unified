@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 
 class RegisterRequest(BaseModel):
@@ -164,9 +164,33 @@ class PasswordResetConfirmRequest(BaseModel):
     new_password: str = Field(min_length=12, max_length=1024)
 
 
+class BugReportEvent(BaseModel):
+    """One minimized technical event; arbitrary strings and payloads are forbidden."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    occurred_at: AwareDatetime
+    subsystem: str = Field(pattern=r"^(ui|api|network|offline_sync)$")
+    event_code: str = Field(
+        pattern=r"^(window_error|unhandled_rejection|api_network_error|api_http_error|network_offline|network_online|offline_sync_state)$"
+    )
+    route_category: str | None = Field(
+        default=None,
+        pattern=r"^(events|event_detail|auth|account|offline_sync|other)$",
+    )
+    method: str | None = Field(default=None, pattern=r"^(GET|POST|PUT|PATCH|DELETE)$")
+    status_code: int | None = Field(default=None, ge=100, le=599)
+    duration_ms: int | None = Field(default=None, ge=0, le=60000)
+    request_id: str | None = Field(default=None, pattern=r"^[A-Fa-f0-9-]{8,64}$")
+    state: str | None = Field(
+        default=None, pattern=r"^(pending|sending|done|conflict|blocked)$"
+    )
+
+
 class BugReportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     consent: bool
+    diagnostics: list[BugReportEvent] = Field(default_factory=list, max_length=40)
     app_version: str = Field(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9._+-]+$")
     browser: str = Field(pattern=r"^(Chrome|Firefox|Safari|Edge|Other)$")
     operating_system: str = Field(pattern=r"^(Windows|macOS|Linux|Android|iOS|Other)$")
