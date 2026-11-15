@@ -157,7 +157,7 @@ def _consume_http_rate_limit(
             requester=requester,
             route=route,
             now=datetime.now(UTC),
-            limit=5,
+            limit=60 if route == "/offline-sync/commands" else 5,
             window_seconds=60,
         )
     finally:
