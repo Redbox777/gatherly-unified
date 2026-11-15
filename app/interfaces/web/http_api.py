@@ -3,7 +3,7 @@
 from collections.abc import Awaitable, Callable, Iterator
 from datetime import UTC, datetime
 from time import perf_counter
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 import hashlib
 import logging
 import os
@@ -244,6 +244,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     )
     rate_limit_paths = {
         "/auth/login",
+        "/auth/demo/login",
         "/auth/telegram/login",
         "/auth/register",
         "/auth/password-reset/request",
@@ -662,25 +663,17 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Not found")
 
         now = datetime.now(UTC)
-        demo_subject = "gatherly-codespaces-demo-v1"
-        identity = deps.identities.find_identity(
-            provider="telegram", provider_subject=demo_subject
+        demo_user_id = str(
+            uuid5(NAMESPACE_URL, "https://gatherly.local/system/codespaces-demo-user/v1")
         )
-        if identity is None:
-            try:
-                identity = deps.identities.register_telegram(
-                    telegram_subject=demo_subject, now=now, verified_at=now
-                )
-            except ValueError:
-                identity = deps.identities.find_identity(
-                    provider="telegram", provider_subject=demo_subject
-                )
-                if identity is None:
-                    raise HTTPException(
-                        status_code=503, detail="Demo account is unavailable"
-                    ) from None
+        with transaction(deps.connection):
+            deps.connection.execute(
+                "INSERT INTO users(id, created_at) VALUES (?, ?) "
+                "ON CONFLICT(id) DO NOTHING",
+                (demo_user_id, now.isoformat()),
+            )
 
-        session = deps.sessions.create(user_id=identity.user_id, now=now)
+        session = deps.sessions.create(user_id=demo_user_id, now=now)
         response.set_cookie(
             key=SESSION_COOKIE,
             value=session.raw_token,
