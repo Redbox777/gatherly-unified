@@ -55,6 +55,9 @@ def test_offline_sync_endpoint_uses_session_and_replays_same_command(tmp_path, m
         event = client.post("/events", json={"title": "Offline test"})
         assert event.status_code == 201
         event_id = event.json()["id"]
+        sync_state = client.get(f"/events/{event_id}/sync-state")
+        assert sync_state.status_code == 200
+        assert sync_state.json() == {"event_id": event_id, "revision": 1}
         operation_id = str(uuid4())
         command = {
             "operation_id": operation_id,
