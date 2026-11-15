@@ -707,7 +707,7 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             WHERE event_id = OLD.event_id;
         END;
         """,
-    ),,
+    ),
     (
         25,
         """
