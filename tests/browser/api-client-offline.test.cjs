@@ -62,7 +62,7 @@ test("API client caches the initial revision and queues supported writes without
 test("successful account deletion purges the account-scoped offline cache and outbox", async () => {
   await store.setEnabled(true);
   await store.setUser("deleted-api-account");
-  await store.set("GET:/events", [{ id: eventId }]);
+  await store.put("GET:/events", [{ id: eventId }]);
   await store.setEventRevision(eventId, 3);
   await store.enqueue({
     eventId,
