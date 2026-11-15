@@ -41,7 +41,7 @@ def _command(
     *,
     user: str = "owner",
     operation_id: str | None = None,
-    revision: int = 1,
+    revision: int = 2,
     kind: str = "note.create",
     payload: dict[str, object] | None = None,
 ):
@@ -69,7 +69,7 @@ def test_same_operation_and_payload_replays_stored_result_once(database) -> None
     assert connection.execute(
         "SELECT revision FROM event_sync_state WHERE event_id = ?",
         ("11111111-1111-4111-8111-111111111111",),
-    ).fetchone()[0] == 2
+    ).fetchone()[0] == 3
 
 
 def test_reusing_operation_id_with_different_payload_is_rejected(database) -> None:
@@ -94,12 +94,12 @@ def test_stale_revision_is_rejected_without_mutation(database) -> None:
     with pytest.raises(OfflineSyncError, match="revision conflict") as error:
         _command(
             repository,
-            revision=1,
+            revision=2,
             kind="task.create",
             payload={"title": "Do work"},
         )
     assert error.value.status_code == 409
-    assert error.value.current_revision == 2
+    assert error.value.current_revision == 3
     assert connection.execute("SELECT COUNT(*) FROM event_tasks").fetchone()[0] == 0
 
 
@@ -113,7 +113,7 @@ def test_note_member_can_create_but_nonmember_and_nonowner_cannot_create_tasks(d
         _command(
             repository,
             user="guest",
-            revision=2,
+            revision=3,
             kind="task.create",
             payload={"title": "Owner only"},
         )
@@ -123,7 +123,7 @@ def test_note_member_can_create_but_nonmember_and_nonowner_cannot_create_tasks(d
         _command(
             repository,
             user="intruder",
-            revision=2,
+            revision=3,
             payload={"content": "No access"},
         )
     assert error.value.status_code == 404
@@ -156,7 +156,7 @@ def test_task_and_venue_commands_use_owner_rules_and_increment_revision(database
     task_id = str(task["result"]["id"])
     complete_status, completed = _command(
         repository,
-        revision=2,
+        revision=3,
         kind="task.complete",
         payload={"task_id": task_id, "completed": True},
     )
@@ -166,7 +166,7 @@ def test_task_and_venue_commands_use_owner_rules_and_increment_revision(database
 
     venue_status, venue = _command(
         repository,
-        revision=3,
+        revision=4,
         kind="venue.set",
         payload={"venue_name": "Workshop", "address": "Main Street"},
     )
@@ -224,7 +224,7 @@ def test_concurrent_duplicate_requests_apply_once(tmp_path) -> None:
     def submit():
         connection = connect(path)
         try:
-            return _command(OfflineSyncRepository(connection), operation_id=operation_id)
+            return _command(OfflineSyncRepository(connection), operation_id=operation_id, revision=1)
         finally:
             connection.close()
 
