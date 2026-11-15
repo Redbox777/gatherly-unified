@@ -30,6 +30,9 @@
         <input id="login-password" name="password" type="password" autocomplete="current-password" maxlength="1024" placeholder="Ваш пароль" required>
         <button class="auth-submit" type="submit">Войти в Gatherly <span aria-hidden="true">→</span></button>
       </form>
+      <button id="demo-login-button" class="auth-submit demo-submit" type="button" hidden>
+        Войти в демо без пароля <span aria-hidden="true">→</span>
+      </button>
       <form id="register-form" class="auth-form" hidden>
         <label for="register-email">Электронная почта</label><input id="register-email" name="email" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required>
         <label for="register-password">Пароль</label><input id="register-password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" placeholder="Не менее 12 символов" required>
