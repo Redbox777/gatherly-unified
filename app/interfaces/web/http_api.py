@@ -782,7 +782,9 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             verified_timestamp = int(payload.auth_date)
             verified_at = datetime.fromtimestamp(verified_timestamp, tz=UTC)
         except (ValueError, OverflowError):
-            raise HTTPException(status_code=401, detail="Second account verification failed") from None
+            raise HTTPException(
+                status_code=401, detail="Second account verification failed"
+            ) from None
         age_seconds = (now - verified_at).total_seconds()
         if age_seconds < 0 or age_seconds > 300:
             raise HTTPException(status_code=401, detail="Telegram confirmation has expired")
@@ -795,11 +797,14 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                     (datetime.fromtimestamp(now.timestamp() - 600, tz=UTC).isoformat(),),
                 )
                 deps.connection.execute(
-                    "INSERT INTO auth_telegram_login_payloads(payload_hash, consumed_at) VALUES (?, ?)",
+                    """INSERT INTO auth_telegram_login_payloads(payload_hash, consumed_at)
+                       VALUES (?, ?)""",
                     (signature_hash, now.isoformat()),
                 )
         except sqlite3.IntegrityError:
-            raise HTTPException(status_code=401, detail="Second account verification failed") from None
+            raise HTTPException(
+                status_code=401, detail="Second account verification failed"
+            ) from None
 
         identity = deps.identities.find_identity(
             provider="telegram", provider_subject=payload.id
