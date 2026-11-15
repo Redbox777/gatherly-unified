@@ -144,6 +144,10 @@
     if (cacheKey && offlineStore?.isEnabled() && offlineStore.getUser()) {
       try { await offlineStore.put(cacheKey, data); } catch (_) {}
     }
+    if (parsed && /\/sync-state$/i.test(parsed.pathname) &&
+        Number.isSafeInteger(data?.revision) && offlineStore?.isEnabled() && offlineStore.getUser()) {
+      try { await offlineStore.setEventRevision(eventId, data.revision); } catch (_) {}
+    }
     if (eventMutation && offlineStore?.isEnabled() && offlineStore.getUser()) {
       try { await offlineStore.clearCurrentCache(); } catch (_) {}
     }
