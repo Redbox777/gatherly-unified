@@ -10,6 +10,7 @@ from app.infrastructure.database.push_subscriptions_repository import (
     PushSubscriptionsRepository,
     decode_subscription_encryption_key,
 )
+from app.infrastructure.database.privacy_repository import PrivacyRepository
 
 
 NOW = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
@@ -64,6 +65,12 @@ def test_push_subscription_is_encrypted_and_delivery_is_materialized(tmp_path) -
         assert P256DH.encode() not in ciphertext
         assert AUTH.encode() not in ciphertext
         assert repository.has_active_subscription(user_id="push-user")
+        notifications.set_preferences(
+            user_id="push-user",
+            values={"email_enabled": False},
+            now=NOW + timedelta(seconds=30),
+        )
+        assert notifications.get_preferences(user_id="push-user")["push_enabled"] is True
 
         pending = repository.pending_deliveries(
             encryption_key=ENCRYPTION_KEY,
@@ -214,3 +221,41 @@ def test_subscription_encryption_key_requires_32_decoded_bytes() -> None:
     assert decode_subscription_encryption_key(encoded) == ENCRYPTION_KEY
     with pytest.raises(ValueError, match="32 bytes"):
         decode_subscription_encryption_key("c2hvcnQ")
+
+
+
+def test_account_erasure_cascades_encrypted_push_subscriptions_and_deliveries(
+    tmp_path,
+) -> None:
+    connection = connect(tmp_path / "push-account-erasure.sqlite3")
+    try:
+        _setup(connection)
+        notifications = NotificationsRepository(connection)
+        notifications.set_push_enabled(user_id="push-user", enabled=True, now=NOW)
+        repository = PushSubscriptionsRepository(connection)
+        repository.upsert_subscription(
+            user_id="push-user",
+            endpoint=ENDPOINT,
+            p256dh=P256DH,
+            auth=AUTH,
+            encryption_key=ENCRYPTION_KEY,
+            now=NOW,
+        )
+        assert len(
+            repository.pending_deliveries(
+                encryption_key=ENCRYPTION_KEY,
+                now=NOW + timedelta(minutes=1),
+            )
+        ) == 1
+
+        assert PrivacyRepository(connection).delete_user_account(
+            user_id="push-user"
+        )
+        assert connection.execute(
+            "SELECT COUNT(*) FROM push_subscriptions"
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM push_deliveries"
+        ).fetchone()[0] == 0
+    finally:
+        connection.close()
