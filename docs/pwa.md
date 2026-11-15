@@ -21,3 +21,13 @@ The static shell is cached for application startup. This is not offline-first da
 - Browser support and installation UI differ by platform. The browser decides when to show its install prompt.
 - The current service worker provides a static shell and offline fallback only. Push notifications require a separate VAPID/subscription stage.
 - PWA installability does not mean the app is fully usable offline. No background sync or offline mutation queue is implemented.
+
+
+## Account-scoped local storage (S6.2 foundation)
+
+- The browser uses IndexedDB (`gatherly-private-cache`), not SQLite or localStorage, for structured offline records.
+- Offline storage is **off by default** and can be enabled explicitly in Account → “Локальное хранение на этом устройстве”.
+- Records are partitioned by the authenticated `user_id`; the ID is obtained from the live `/auth/me` response, never from a user-editable field.
+- Switching to another authenticated account clears the previous active account's IndexedDB records. A successful logout clears the current account's records. Disabling the option also clears the current account's records.
+- This foundation does not yet cache API responses or allow offline writes. That follows in the next S6.2 step after the account boundary is tested.
+- IndexedDB is browser-managed storage and is **not separately encrypted by this application**. Device access controls still matter. Do not enable this on shared devices.
