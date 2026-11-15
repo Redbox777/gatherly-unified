@@ -97,7 +97,8 @@ def test_encrypted_backup_rejects_tampering(tmp_path) -> None:
     backup = tmp_path / "backups" / "gatherly-20261115.sqlite3.enc"
     restored = tmp_path / "restore" / "gatherly.sqlite3"
     _create_database(source)
-    backup_database_encrypted(source, backup, os.urandom(32))
+    key = os.urandom(32)
+    backup_database_encrypted(source, backup, key)
     contents = bytearray(backup.read_bytes())
     contents[-20] ^= 0x01
     backup.write_bytes(contents)
@@ -107,7 +108,7 @@ def test_encrypted_backup_rejects_tampering(tmp_path) -> None:
             backup,
             restored,
             confirm_application_stopped=True,
-            encryption_key=os.urandom(32),
+            encryption_key=key,
         )
 
 
