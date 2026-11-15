@@ -39,6 +39,7 @@ class NotificationPreferencesRequest(BaseModel):
     event_updates_enabled: bool = True
     participant_added_enabled: bool = True
     reminders_enabled: bool = True
+    telegram_enabled: bool = False
 
 
 class EventReminderRequest(BaseModel):
