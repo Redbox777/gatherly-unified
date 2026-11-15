@@ -30,6 +30,7 @@ from app.infrastructure.database.participant_invitations_repository import (
 )
 from app.infrastructure.database.participants_repository import ParticipantsRepository
 from app.infrastructure.database.privacy_repository import PrivacyRepository
+from app.infrastructure.database.erasure_ledger import AccountErasureLedger
 from app.infrastructure.database.push_subscriptions_repository import (
     PushSubscriptionsRepository,
 )
@@ -59,6 +60,7 @@ class Dependencies:
         connection: sqlite3.Connection,
         smtp_rate_limit_settings: SmtpRateLimitSettings,
         email_sender_factory: Callable[[], SmtpEmailSender] | None = None,
+        erasure_ledger: AccountErasureLedger | None = None,
     ) -> None:
         self.connection = connection
         self.smtp_rate_limits = SmtpRateLimitsRepository(
@@ -96,6 +98,7 @@ class Dependencies:
         self.event_expense_splits = EventExpenseSplitsRepository(connection)
         self.event_finance = EventFinanceRepository(connection)
         self.privacy = PrivacyRepository(connection)
+        self.erasure_ledger = erasure_ledger
         self.account_linking = AccountLinkingRepository(connection)
         self.push_subscriptions = PushSubscriptionsRepository(connection)
         self.reset_requests = PasswordResetRequestService(
