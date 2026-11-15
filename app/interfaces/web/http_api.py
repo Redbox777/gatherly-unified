@@ -717,6 +717,13 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         identity = deps.identities.authenticate_email(
             email=payload.email, password=payload.password
         )
+        if identity is None:
+            raise HTTPException(status_code=401, detail="Second account verification failed")
+        # Authentication may transparently upgrade a legacy password hash. Re-read
+        # the identity so the transactional merge compares against the current hash.
+        identity = deps.identities.find_identity(
+            provider="email", provider_subject=identity.provider_subject
+        )
         if identity is None or identity.verified_at is None or identity.password_hash is None:
             raise HTTPException(status_code=401, detail="Second account verification failed")
         try:
