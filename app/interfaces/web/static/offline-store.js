@@ -1,7 +1,7 @@
 (() => {
   "use strict";
   const DB_NAME = "gatherly-private-cache";
-  const DB_VERSION = 2;
+  const DB_VERSION = 3;
   const OPT_IN_KEY = "gatherly.offline-storage.enabled";
   const LAST_USER_KEY = "gatherly.offline-storage.last-user";
   const QUEUE_STATES = new Set(["pending", "sending", "done", "conflict", "blocked"]);
@@ -47,6 +47,9 @@
           outbox.createIndex("by-user", "userId", { unique: false });
           outbox.createIndex("by-user-event-created", ["userId", "eventId", "createdAt"], { unique: false });
           outbox.createIndex("by-user-state", ["userId", "state"], { unique: false });
+        }
+        if (!db.objectStoreNames.contains("leases")) {
+          db.createObjectStore("leases", { keyPath: ["userId", "eventId"] });
         }
       };
       request.onsuccess = () => {
@@ -201,7 +204,22 @@
       } catch (_) { return null; }
     },
     async clearCurrentCache() {
-      if (activeUserId) await clearUser(activeUserId);
+      const userId = activeUserId;
+      if (!userId) return;
+      const db = await openDatabase();
+      const tx = db.transaction("records", "readwrite");
+      const store = tx.objectStore("records");
+      const request = store.index("by-user").openCursor(IDBKeyRange.only(userId));
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+          if (typeof cursor.value.key !== "string" || !cursor.value.key.startsWith("sync-revision:")) {
+            cursor.delete();
+          }
+          cursor.continue();
+        }
+      };
+      await transactionDone(tx);
     },
     async clearCurrentUser() {
       const previous = activeUserId;
@@ -268,7 +286,62 @@
       return { ...record };
     },
     async listOutbox() {
-      return readOutbox(requireActive());
+      const items = await readOutbox(requireActive());
+      return items.sort((a, b) => a.createdAt - b.createdAt);
+    },
+    async getEventRevision(eventId) {
+      if (!isUuid(eventId)) return null;
+      const value = await this.get("sync-revision:" + eventId);
+      return value && Number.isSafeInteger(value.revision) && value.revision >= 1
+        ? value.revision : null;
+    },
+    async setEventRevision(eventId, revision) {
+      if (!isUuid(eventId) || !Number.isSafeInteger(revision) || revision < 1) return false;
+      return this.put("sync-revision:" + eventId, { revision, updatedAt: Date.now() });
+    },
+    async recoverSending() {
+      const items = await this.listOutbox();
+      for (const item of items) {
+        if (item.state === "sending") {
+          await this.updateOutboxState(item.operationId, "pending", {
+            error: "Отправка была прервана; безопасно повторим ту же операцию."
+          });
+        }
+      }
+    },
+    async acquireLease(eventId, ownerId, ttlMs = 45000) {
+      const userId = requireActive();
+      if (!isUuid(eventId) || !isUuid(ownerId)) return false;
+      const db = await openDatabase();
+      const tx = db.transaction("leases", "readwrite");
+      const done = transactionDone(tx);
+      const store = tx.objectStore("leases");
+      const request = store.get([userId, eventId]);
+      let acquired = false;
+      request.onsuccess = () => {
+        const lease = request.result;
+        const now = Date.now();
+        if (!lease || lease.expiresAt <= now || lease.ownerId === ownerId) {
+          store.put({ userId, eventId, ownerId, expiresAt: now + ttlMs });
+          acquired = true;
+        }
+      };
+      await done;
+      return acquired;
+    },
+    async releaseLease(eventId, ownerId) {
+      const userId = requireActive();
+      if (!isUuid(eventId) || !isUuid(ownerId)) return false;
+      const db = await openDatabase();
+      const tx = db.transaction("leases", "readwrite");
+      const done = transactionDone(tx);
+      const store = tx.objectStore("leases");
+      const request = store.get([userId, eventId]);
+      request.onsuccess = () => {
+        if (request.result?.ownerId === ownerId) store.delete([userId, eventId]);
+      };
+      await done;
+      return true;
     },
     async updateOutboxState(operationId, state, details = {}) {
       const userId = requireActive();
@@ -285,6 +358,11 @@
         item.updatedAt = Date.now();
         if (state === "sending") item.attempts += 1;
         item.lastError = typeof details.error === "string" ? details.error.slice(0, 500) : null;
+        if (Number.isFinite(details.retryAt)) item.retryAt = details.retryAt;
+        else if (state !== "pending") delete item.retryAt;
+        if (Number.isSafeInteger(details.serverRevision) && details.serverRevision >= 1) {
+          item.serverRevision = details.serverRevision;
+        }
         store.put(item);
       };
       await transactionDone(tx);
