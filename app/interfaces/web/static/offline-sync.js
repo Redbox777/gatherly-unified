@@ -122,6 +122,7 @@
       if (item.state === "conflict" || item.state === "blocked") break;
       if (item.state !== "pending") break;
       if (item.retryAt && item.retryAt > Date.now()) break;
+      if (!navigator.locks?.request && !await store.acquireLease(eventId, ownerId)) return false;
 
       let completed = false;
       for (let attempt = 0; attempt < 3 && !completed; attempt += 1) {
