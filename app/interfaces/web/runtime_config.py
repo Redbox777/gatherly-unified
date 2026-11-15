@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import base64
 import math
 from urllib.parse import urlsplit
 
@@ -111,6 +112,30 @@ def validate_runtime_configuration(environ: Mapping[str, str]) -> None:
             raise ValueError("PUBLIC_ORIGIN must be an absolute origin without a path")
     if environment != "production":
         return
+
+    ledger_key = environ.get("GATHERLY_ERASURE_LEDGER_KEY", "").strip()
+    ledger_path = environ.get("GATHERLY_ERASURE_LEDGER_PATH", "").strip()
+    ledger_remote = environ.get("GATHERLY_ERASURE_LEDGER_REMOTE", "").strip()
+    if not ledger_key:
+        raise ValueError("GATHERLY_ERASURE_LEDGER_KEY is required in production")
+    try:
+        decoded_ledger_key = base64.b64decode(
+            ledger_key.encode("ascii"), altchars=b"-_", validate=True
+        )
+    except (ValueError, UnicodeEncodeError) as error:
+        raise ValueError(
+            "GATHERLY_ERASURE_LEDGER_KEY must be a base64-encoded key"
+        ) from error
+    if len(decoded_ledger_key) != 32:
+        raise ValueError(
+            "GATHERLY_ERASURE_LEDGER_KEY must decode to exactly 32 bytes"
+        )
+    if not ledger_path:
+        raise ValueError("GATHERLY_ERASURE_LEDGER_PATH is required in production")
+    if not ledger_remote or ":" not in ledger_remote or ledger_remote.startswith(":"):
+        raise ValueError(
+            "GATHERLY_ERASURE_LEDGER_REMOTE must name a configured off-host rclone remote"
+        )
 
     public_hostname = urlsplit(public_origin).hostname if public_origin else None
     if (
