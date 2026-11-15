@@ -156,8 +156,8 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                     push_sender.send(
                         subscription_info=subscription_info,
                         payload={
-                            "title": str(delivery["title"]),
-                            "body": str(delivery["body"]),
+                            "title": "Gatherly",
+                            "body": "У вас новое уведомление. Откройте приложение.",
                             "url": "/",
                         },
                     )
