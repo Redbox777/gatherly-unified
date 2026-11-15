@@ -160,6 +160,15 @@ def test_telegram_notifications_require_verified_identity_and_explicit_opt_in(
             values={"telegram_enabled": True},
             now=now,
         )
+        consent = connection.execute(
+            """SELECT telegram_enabled, telegram_consent_at,
+                      telegram_consent_version
+               FROM notification_preferences WHERE user_id = ?""",
+            ("telegram-user",),
+        ).fetchone()
+        assert consent["telegram_enabled"] == 1
+        assert consent["telegram_consent_at"] is not None
+        assert consent["telegram_consent_version"] == "telegram-v1"
         pending = repository.pending_telegram()
 
         assert len(pending) == 1
@@ -171,5 +180,19 @@ def test_telegram_notifications_require_verified_identity_and_explicit_opt_in(
             now=now + timedelta(minutes=1),
         )
         assert repository.pending_telegram() == []
+        repository.set_preferences(
+            user_id="telegram-user",
+            values={"telegram_enabled": False},
+            now=now + timedelta(minutes=2),
+        )
+        revoked_consent = connection.execute(
+            """SELECT telegram_enabled, telegram_consent_at,
+                      telegram_consent_version
+               FROM notification_preferences WHERE user_id = ?""",
+            ("telegram-user",),
+        ).fetchone()
+        assert revoked_consent["telegram_enabled"] == 0
+        assert revoked_consent["telegram_consent_at"] is None
+        assert revoked_consent["telegram_consent_version"] is None
     finally:
         connection.close()
