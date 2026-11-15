@@ -12,7 +12,10 @@ This checklist separates repository-level implementation from deployment and ope
 - [x] New passwords use bounded Argon2id parameters; existing scrypt hashes are upgraded after successful login without forcing password resets.
 - [ ] Benchmark Argon2id latency and memory use on the intended production host under expected concurrent logins.
 - [ ] Configure `TELEGRAM_BOT_TOKEN` and `TELEGRAM_BOT_USERNAME` in both the web and worker environments if Telegram notifications are enabled. Users must start the bot and explicitly opt in.
+- [ ] If Web Push is enabled, configure the VAPID public/private keys, VAPID subject, and separate subscription-encryption key in both web and worker environments. Keep private keys in the secret manager and verify the push provider/transfer review.
 - [ ] Remember that Telegram and email/password currently create separate internal accounts. Do not promise cross-provider account linking.
+- [x] PWA manifest, root service worker, static shell cache, and offline fallback are implemented; private API data is not cached.
+- [ ] Verify PWA installability and Web Push delivery on the actual HTTPS domain and supported target browsers/devices.
 
 ## Reverse proxy and network boundary
 
