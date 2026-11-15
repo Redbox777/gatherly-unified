@@ -28,6 +28,16 @@ def _temporary_path(directory: Path, prefix: str) -> Path:
     return Path(name)
 
 
+def _verify_database(connection: sqlite3.Connection) -> None:
+    """Reject structurally corrupt databases and broken foreign-key references."""
+    integrity_rows = connection.execute("PRAGMA integrity_check").fetchall()
+    if not integrity_rows or any(row[0] != "ok" for row in integrity_rows):
+        raise sqlite3.DatabaseError("SQLite integrity check failed")
+    foreign_key_violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+    if foreign_key_violations:
+        raise sqlite3.DatabaseError("SQLite foreign key check failed")
+
+
 def _copy_database(
     source: Path, destination: Path, *, clear_destination_sidecars: bool = False
 ) -> None:
@@ -48,11 +58,7 @@ def _copy_database(
         source_connection = sqlite3.connect(source_path)
         destination_connection = sqlite3.connect(temporary_path)
         source_connection.backup(destination_connection)
-        integrity = destination_connection.execute(
-            "PRAGMA integrity_check"
-        ).fetchone()
-        if integrity is None or integrity[0] != "ok":
-            raise sqlite3.DatabaseError("SQLite integrity check failed")
+        _verify_database(destination_connection)
         destination_connection.close()
         destination_connection = None
         source_connection.close()

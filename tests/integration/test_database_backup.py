@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 import os
+import sqlite3
 
 import pytest
 
@@ -160,3 +161,52 @@ def test_prune_requires_timezone_aware_clock(tmp_path) -> None:
             retention_days=30,
             now=datetime(2026, 11, 15),
         )
+
+
+
+def _create_database_with_foreign_key_violation(path):
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.executescript(
+            """
+            CREATE TABLE parent (id TEXT PRIMARY KEY);
+            CREATE TABLE child (
+                id TEXT PRIMARY KEY,
+                parent_id TEXT NOT NULL REFERENCES parent(id)
+            );
+            INSERT INTO child(id, parent_id) VALUES ('orphan', 'missing-parent');
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def test_backup_rejects_database_with_foreign_key_violations(tmp_path) -> None:
+    source = tmp_path / "invalid.sqlite3"
+    backup = tmp_path / "backups" / "gatherly.sqlite3"
+    _create_database_with_foreign_key_violation(source)
+
+    with pytest.raises(sqlite3.DatabaseError, match="foreign key check failed"):
+        backup_database(source, backup)
+
+    assert not backup.exists()
+
+
+def test_restore_rejects_foreign_key_violations_without_overwriting_target(
+    tmp_path,
+) -> None:
+    invalid_backup = tmp_path / "invalid.sqlite3"
+    destination = tmp_path / "restore" / "gatherly.sqlite3"
+    _create_database_with_foreign_key_violation(invalid_backup)
+    _create_database(destination, title="Keep this data")
+
+    with pytest.raises(sqlite3.DatabaseError, match="foreign key check failed"):
+        restore_database(
+            invalid_backup,
+            destination,
+            confirm_application_stopped=True,
+        )
+
+    assert _event_title(destination) == "Keep this data"
