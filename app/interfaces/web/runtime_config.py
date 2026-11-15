@@ -122,7 +122,7 @@ def validate_runtime_configuration(environ: Mapping[str, str]) -> None:
         decoded_ledger_key = base64.b64decode(
             ledger_key.encode("ascii"), altchars=b"-_", validate=True
         )
-    except (ValueError, UnicodeEncodeError) as error:
+    except ValueError as error:
         raise ValueError(
             "GATHERLY_ERASURE_LEDGER_KEY must be a base64-encoded key"
         ) from error
