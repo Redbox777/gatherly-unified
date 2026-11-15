@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from app.infrastructure.database.connection import connect, migrate
+from app.infrastructure.database.connection import MIGRATIONS, _execute_migration, connect, migrate, transaction
 
 
 def _revision(connection, event_id: str) -> int:
@@ -16,8 +16,19 @@ def _revision(connection, event_id: str) -> int:
 def test_sync_migration_backfills_events_and_tracks_all_allowed_domain_writes(tmp_path):
     connection = connect(tmp_path / "sync-schema.sqlite3")
     try:
-        # Upgrade from the current pre-sync schema with an existing event.
-        migrate(connection)
+        # Apply only migrations 1–23, then seed a legacy event before migration 24.
+        connection.execute(
+            "CREATE TABLE schema_migrations "
+            "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
+        )
+        connection.commit()
+        for version, script in MIGRATIONS[:-1]:
+            with transaction(connection):
+                _execute_migration(connection, script)
+                connection.execute(
+                    "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
+                    (version, "2026-11-14T00:00:00Z"),
+                )
         now = datetime.now(UTC).isoformat()
         connection.execute("INSERT INTO users(id, created_at) VALUES (?, ?)", ("owner", now))
         connection.execute(
@@ -26,6 +37,7 @@ def test_sync_migration_backfills_events_and_tracks_all_allowed_domain_writes(tm
             ("event-1", "owner", "Planning", None, now),
         )
         connection.commit()
+        migrate(connection)
         assert _revision(connection, "event-1") == 0
 
         connection.execute(

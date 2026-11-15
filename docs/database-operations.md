@@ -124,6 +124,9 @@ Current migration history:
 | 19 | Opt-in Telegram notification delivery state |
 | 20 | Telegram consent timestamp and text version |
 | 21 | Encrypted Web Push subscriptions, deliveries, and consent |
+| 22 | Notification worker concurrency leases |
+| 23 | Notification delivery retry scheduling |
+| 24 | Event sync revisions, mutation triggers, and per-user idempotency ledger |
 
 There is no automatic destructive rollback path. For a faulty migration, stop writes, restore a verified backup when data recovery is required, or add a forward-only corrective migration after assessing data impact.
 
