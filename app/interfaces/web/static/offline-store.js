@@ -122,7 +122,7 @@
       }
       if (payload.due_at !== undefined && payload.due_at !== null) {
         if (typeof payload.due_at !== "string" || !Number.isFinite(Date.parse(payload.due_at)) ||
-            !/(Z|[+-]\\d{2}:?\\d{2})$/i.test(payload.due_at)) {
+            !/(Z|[+-]\d{2}:?\d{2})$/i.test(payload.due_at)) {
           throw new Error("Срок задачи должен содержать дату, время и часовой пояс.");
         }
       }
