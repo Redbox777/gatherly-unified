@@ -1,10 +1,13 @@
 from datetime import UTC, datetime, timedelta
+import base64
 import json
+import subprocess
 
 from fastapi.testclient import TestClient
 
 import app.interfaces.web.http_api as http_api
-from app.infrastructure.database.connection import connect
+from app.infrastructure.database.connection import connect, migrate
+from app.infrastructure.database.erasure_ledger import AccountErasureLedger
 from app.interfaces.web.constants import SESSION_COOKIE
 from app.interfaces.web.http_api import create_app
 
@@ -19,6 +22,11 @@ class FakeEmailSender:
 
 def _verified_client(tmp_path, monkeypatch):
     monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setenv("GATHERLY_ERASURE_LEDGER_PATH", str(tmp_path / "erasure-ledger"))
+    monkeypatch.setenv(
+        "GATHERLY_ERASURE_LEDGER_KEY",
+        base64.urlsafe_b64encode(b"e" * 32).decode("ascii"),
+    )
     sender = FakeEmailSender()
     monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
     database_path = tmp_path / "privacy-api.sqlite3"
@@ -103,6 +111,7 @@ def test_account_deletion_erases_owned_data_and_revokes_cookie(
     event = client.post("/events", json={"title": "Account-owned event"})
     assert event.status_code == 201
     assert client.get("/account/export").status_code == 200
+    user_id = client.get("/auth/me").json()["user_id"]
 
     deletion = client.delete(
         "/account",
@@ -112,6 +121,11 @@ def test_account_deletion_erases_owned_data_and_revokes_cookie(
     assert deletion.status_code == 204
     assert client.get("/auth/me").status_code == 401
     assert client.cookies.get(SESSION_COOKIE) is None
+    tombstones = list((tmp_path / "erasure-ledger").glob("*.json"))
+    assert len(tombstones) == 1
+    tombstone_text = tombstones[0].read_text(encoding="utf-8")
+    assert user_id not in tombstone_text
+    assert "user_id_hash" in tombstone_text
 
     connection = connect(database_path)
     try:
@@ -128,6 +142,91 @@ def test_account_deletion_erases_owned_data_and_revokes_cookie(
             assert connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0
     finally:
         connection.close()
+
+
+def test_account_deletion_fails_closed_when_off_host_ledger_is_unavailable(
+    tmp_path, monkeypatch
+) -> None:
+    client, database_path = _verified_client(tmp_path, monkeypatch)
+    user_id = client.get("/auth/me").json()["user_id"]
+    client.app.state.erasure_ledger.remote = "backup:erasure-ledger"
+
+    def fail_remote(*args, **kwargs):
+        raise subprocess.CalledProcessError(1, "rclone")
+
+    monkeypatch.setattr(
+        "app.infrastructure.database.erasure_ledger.subprocess.run",
+        fail_remote,
+    )
+    response = client.delete(
+        "/account",
+        headers={"x-account-deletion-confirmation": "DELETE"},
+    )
+
+    assert response.status_code == 503
+    assert client.get("/auth/me").status_code == 200
+    connection = connect(database_path)
+    try:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM users WHERE id = ?", (user_id,)
+        ).fetchone()[0] == 1
+    finally:
+        connection.close()
+    assert len(list((tmp_path / "erasure-ledger").glob("*.json"))) == 1
+
+
+def test_app_startup_replays_external_erasure_before_serving_requests(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("GATHERLY_ERASURE_LEDGER_PATH", str(tmp_path / "erasure-ledger"))
+    monkeypatch.setenv(
+        "GATHERLY_ERASURE_LEDGER_KEY",
+        base64.urlsafe_b64encode(b"e" * 32).decode("ascii"),
+    )
+    database_path = tmp_path / "restored-old-snapshot.sqlite3"
+    connection = connect(database_path)
+    try:
+        migrate(connection)
+        connection.execute(
+            "INSERT INTO users(id, created_at) VALUES (?, ?)",
+            ("deleted-before-restore", "2026-11-14T00:00:00Z"),
+        )
+        connection.execute(
+            "INSERT INTO auth_identities(id, user_id, provider, provider_subject, "
+            "password_hash, verified_at, created_at) VALUES (?, ?, 'email', ?, ?, ?, ?)",
+            (
+                "restored-identity",
+                "deleted-before-restore",
+                "deleted@example.test",
+                "password-hash",
+                "2026-11-14T00:00:00Z",
+                "2026-11-14T00:00:00Z",
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    ledger = AccountErasureLedger(tmp_path / "erasure-ledger", b"e" * 32)
+    ledger.record_deletion(
+        user_id="deleted-before-restore",
+        deleted_at=datetime.now(UTC),
+    )
+    app = create_app(database_path)
+
+    connection = connect(database_path)
+    try:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM users WHERE id = ?",
+            ("deleted-before-restore",),
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM auth_identities WHERE id = ?",
+            ("restored-identity",),
+        ).fetchone()[0] == 0
+    finally:
+        connection.close()
+    assert app.state.erasure_ledger is not None
 
 
 def test_account_export_requires_authentication(tmp_path, monkeypatch) -> None:

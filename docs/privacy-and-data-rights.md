@@ -41,7 +41,7 @@ If the user was linked to a participant record in another person's event, the li
 - Voluntary diagnostics: default 90 days; configure `BUG_REPORT_RETENTION_DAYS` from 1 to 3650. Expiry runs in the notification worker.
 - Local encrypted database backups: default 30 days in the documented backup script; configure `GATHERLY_BACKUP_RETENTION_DAYS`. Remote object-storage retention must be configured separately using the provider's lifecycle policy.
 - Security/rate-limit operational records are stored separately from voluntary bug reports and require their own reviewed retention period.
-- Backups are not edited in place after an account erasure. A deleted record may remain in an encrypted, access-restricted backup until that backup expires. If an older backup is restored, the operator must account for deletion requests made after that backup was created before returning the restored service to users. A durable off-database erasure ledger and automated replay are future operational work. The current restore command does not perform this reconciliation. Until an independent erasure ledger and tested replay mechanism exist, restoring a production snapshot must remain an isolated recovery exercise and must not be exposed to users or external delivery workers.
+- Backups are not edited in place after an account erasure. A deleted record may remain in an encrypted, access-restricted backup until that backup expires. Gatherly now records a signed, pseudonymous tombstone in an independent erasure ledger before an account deletion can commit. Production requires replication to an off-host rclone remote. Startup and restore synchronize and verify the ledger, then replay matching tombstones before serving traffic or publishing a restored database. If the ledger cannot be verified or retrieved, startup/restore fails closed. The ledger is not pruned with database backups and must be retained at least as long as any backup that could predate a deletion remains recoverable. Remote object-lock/versioning and lifecycle settings remain operator responsibilities and must be tested before production.
 
 ## Operator/legal release checklist
 
@@ -53,6 +53,6 @@ Before production:
 5. Define and test a process for access, correction, export, deletion, restriction, objection, and any applicable portability requests.
 6. Review cookie/session behavior, analytics (if later added), email delivery, Telegram, and push providers before enabling them.
 7. Define incident/breach handling, access control, operator access logging, and backup key recovery.
-8. Verify deletion behavior and backup restore/replay procedure in a non-production environment.
+8. Verify deletion behavior and backup restore/replay procedure in a non-production environment, including off-host rclone access, immutable/object-locked ledger retention, and recovery with a deleted account in an older snapshot.
 
 Do not advertise the implementation as “GDPR compliant” solely because export, deletion, or consent controls exist. Compliance depends on the actual organization, purposes, contracts, configuration, notice, and operating procedures.

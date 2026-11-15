@@ -11,6 +11,10 @@ import tempfile
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+from app.infrastructure.database.connection import connect, migrate
+from app.infrastructure.database.erasure_ledger import AccountErasureLedger
+from app.infrastructure.database.privacy_repository import PrivacyRepository
+
 
 _ENCRYPTED_BACKUP_MAGIC = b"GATHERLY-ENC-BACKUP-V1\n"
 _NONCE_BYTES = 12
@@ -173,38 +177,71 @@ def restore_database(
     destination: Path,
     *,
     confirm_application_stopped: bool,
+    erasure_ledger: AccountErasureLedger,
     encryption_key: bytes | None = None,
 ) -> None:
-    """Restore an atomic backup; caller must stop every app process first."""
+    """Restore a backup, replay all durable erasures, then atomically publish it."""
     if not confirm_application_stopped:
         raise ValueError("Stop the application and pass explicit restore confirmation")
+    if erasure_ledger is None:
+        raise ValueError("A verified account-erasure ledger is required for restore")
+    if (
+        os.environ.get("APP_ENV", "development").strip().casefold() == "production"
+        and erasure_ledger.remote is None
+    ):
+        raise ValueError("Production restore requires the off-host account-erasure ledger")
     backup_path = backup.expanduser().resolve()
     destination_path = destination.expanduser().resolve()
     if backup_path == destination_path:
         raise ValueError("Backup and destination must be different files")
     with backup_path.open("rb") as stream:
         is_encrypted = stream.read(len(_ENCRYPTED_BACKUP_MAGIC)) == _ENCRYPTED_BACKUP_MAGIC
-    if is_encrypted:
-        if encryption_key is None:
-            raise ValueError("Encrypted backup requires the backup encryption key")
-        plaintext_path = _temporary_path(
-            destination.expanduser().resolve().parent, ".gatherly-restore-"
-        )
-        try:
-            _decrypt_file(backup_path, plaintext_path, encryption_key)
-            _copy_database(
-                plaintext_path,
-                destination,
-                clear_destination_sidecars=True,
+    if is_encrypted and encryption_key is None:
+        raise ValueError("Encrypted backup requires the backup encryption key")
+
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    staged_path = _temporary_path(
+        destination_path.parent, ".gatherly-restore-staged-"
+    )
+    plaintext_path: Path | None = None
+    try:
+        source_path = backup_path
+        if is_encrypted:
+            plaintext_path = _temporary_path(
+                destination_path.parent, ".gatherly-restore-plain-"
             )
+            _decrypt_file(backup_path, plaintext_path, encryption_key or b"")
+            source_path = plaintext_path
+
+        # Never replace the live target until the snapshot, ledger, and replayed
+        # database have all passed validation.
+        _copy_database(source_path, staged_path)
+        events = erasure_ledger.load_events()
+        connection = connect(staged_path)
+        try:
+            migrate(connection)
+            user_ids = [
+                str(row["id"])
+                for row in connection.execute("SELECT id FROM users").fetchall()
+            ]
+            repository = PrivacyRepository(connection)
+            for user_id in erasure_ledger.matching_user_ids(user_ids, events):
+                repository.apply_recorded_erasure(user_id=user_id)
+            _verify_database(connection)
         finally:
+            connection.close()
+
+        os.chmod(staged_path, 0o600)
+        with staged_path.open("rb") as stream:
+            os.fsync(stream.fileno())
+        Path(str(destination_path) + "-wal").unlink(missing_ok=True)
+        Path(str(destination_path) + "-shm").unlink(missing_ok=True)
+        os.replace(staged_path, destination_path)
+        AccountErasureLedger._fsync_directory(destination_path.parent)
+    finally:
+        staged_path.unlink(missing_ok=True)
+        if plaintext_path is not None:
             plaintext_path.unlink(missing_ok=True)
-    else:
-        _copy_database(
-            backup_path,
-            destination,
-            clear_destination_sidecars=True,
-        )
 
 
 def prune_backups(
@@ -268,6 +305,26 @@ def main() -> None:
     restore_parser.add_argument(
         "--key-env", default="GATHERLY_BACKUP_ENCRYPTION_KEY"
     )
+    restore_parser.add_argument(
+        "--erasure-ledger-key-env", default="GATHERLY_ERASURE_LEDGER_KEY"
+    )
+    restore_parser.add_argument(
+        "--erasure-ledger-dir",
+        type=Path,
+        default=Path(os.environ.get("GATHERLY_ERASURE_LEDGER_PATH", "var/account-erasure-ledger")),
+    )
+
+    ledger_parser = subparsers.add_parser(
+        "ledger-sync", help="Replicate the account-erasure ledger to off-host storage"
+    )
+    ledger_parser.add_argument(
+        "--erasure-ledger-key-env", default="GATHERLY_ERASURE_LEDGER_KEY"
+    )
+    ledger_parser.add_argument(
+        "--erasure-ledger-dir",
+        type=Path,
+        default=Path(os.environ.get("GATHERLY_ERASURE_LEDGER_PATH", "var/account-erasure-ledger")),
+    )
 
     prune_parser = subparsers.add_parser("prune", help="Remove expired local encrypted backups")
     prune_parser.add_argument("directory", type=Path)
@@ -275,18 +332,50 @@ def main() -> None:
 
     arguments = parser.parse_args()
     if arguments.command == "backup":
+        ledger = AccountErasureLedger.from_environment(os.environ)
+        if os.environ.get("APP_ENV", "development").strip().casefold() == "production":
+            if ledger is None or ledger.remote is None:
+                raise ValueError("Production backups require the off-host account-erasure ledger")
+            if not os.environ.get("GATHERLY_ERASURE_LEDGER_PATH", "").strip():
+                raise ValueError("Production backups require GATHERLY_ERASURE_LEDGER_PATH")
+        if ledger is not None:
+            ledger.load_events()
         backup_database_encrypted(
             arguments.source,
             arguments.destination,
             _key_from_environment(arguments.key_env),
         )
     elif arguments.command == "restore":
+        ledger_key = _key_from_environment(arguments.erasure_ledger_key_env)
+        ledger = AccountErasureLedger(
+            arguments.erasure_ledger_dir,
+            ledger_key,
+            remote=os.environ.get("GATHERLY_ERASURE_LEDGER_REMOTE"),
+        )
+        if os.environ.get("APP_ENV", "development").strip().casefold() == "production":
+            if ledger.remote is None:
+                raise ValueError("Production restore requires the off-host account-erasure ledger")
+            if not os.environ.get("GATHERLY_ERASURE_LEDGER_PATH", "").strip():
+                raise ValueError("Production restore requires GATHERLY_ERASURE_LEDGER_PATH")
         restore_database(
             arguments.backup,
             arguments.destination,
             confirm_application_stopped=arguments.confirm_application_stopped,
             encryption_key=_key_from_environment(arguments.key_env),
+            erasure_ledger=ledger,
         )
+    elif arguments.command == "ledger-sync":
+        ledger_key = _key_from_environment(arguments.erasure_ledger_key_env)
+        ledger = AccountErasureLedger(
+            arguments.erasure_ledger_dir,
+            ledger_key,
+            remote=os.environ.get("GATHERLY_ERASURE_LEDGER_REMOTE"),
+        )
+        if ledger.remote is None:
+            raise ValueError("GATHERLY_ERASURE_LEDGER_REMOTE is required")
+        if not os.environ.get("GATHERLY_ERASURE_LEDGER_PATH", "").strip():
+            raise ValueError("GATHERLY_ERASURE_LEDGER_PATH is required")
+        ledger.load_events()
     else:
         prune_backups(arguments.directory, retention_days=arguments.retention_days)
 

@@ -29,6 +29,11 @@ from app.infrastructure.database.connection import (
 from app.infrastructure.database.http_rate_limits_repository import (
     HttpRateLimitsRepository,
 )
+from app.infrastructure.database.erasure_ledger import (
+    AccountErasureLedger,
+    ErasureLedgerError,
+)
+from app.infrastructure.database.privacy_repository import PrivacyRepository
 from app.infrastructure.observability import (
     bind_request_id,
     configure_application_logging,
@@ -354,12 +359,26 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         finally:
             reset_request_id(context_token)
     path = database_path or os.environ.get("GATHERLY_DATABASE_PATH", "var/gatherly.sqlite3")
+    erasure_ledger = AccountErasureLedger.from_environment(os.environ)
     migration_connection = connect(path)
     try:
         migrate(migration_connection)
+        if erasure_ledger is not None:
+            # Startup is gated on the external ledger being readable and verified.
+            # This also completes any deletion interrupted after the tombstone was
+            # replicated but before the SQLite transaction committed.
+            events = erasure_ledger.load_events()
+            user_ids = [
+                str(row["id"])
+                for row in migration_connection.execute("SELECT id FROM users").fetchall()
+            ]
+            privacy_repository = PrivacyRepository(migration_connection)
+            for erased_user_id in erasure_ledger.matching_user_ids(user_ids, events):
+                privacy_repository.apply_recorded_erasure(user_id=erased_user_id)
     finally:
         migration_connection.close()
     app.state.database_path = path
+    app.state.erasure_ledger = erasure_ledger
 
     def services(request: Request) -> Iterator[Dependencies]:
         # A connection is never shared across HTTP requests. SQLite still
@@ -371,6 +390,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                 connection,
                 smtp_rate_limit_settings,
                 email_sender_factory=_email_sender,
+                erasure_ledger=request.app.state.erasure_ledger,
             )
         finally:
             connection.close()
@@ -916,7 +936,23 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                 status_code=403,
                 detail="Sign in again before deleting your account",
             )
-        if not deps.privacy.delete_user_account(user_id=user_id):
+        if deps.erasure_ledger is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Account deletion is unavailable until the erasure ledger is configured",
+            )
+        try:
+            deleted = deps.privacy.delete_user_account(
+                user_id=user_id,
+                erasure_ledger=deps.erasure_ledger,
+            )
+        except ErasureLedgerError:
+            logger.error("Account deletion blocked because erasure ledger replication failed")
+            raise HTTPException(
+                status_code=503,
+                detail="Account deletion could not be durably recorded; please retry",
+            ) from None
+        if not deleted:
             raise HTTPException(status_code=404, detail="Account not found")
         response.delete_cookie(
             key=SESSION_COOKIE,

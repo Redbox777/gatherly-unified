@@ -11,6 +11,10 @@ from app.infrastructure.database.backup import (
     restore_database,
 )
 from app.infrastructure.database.connection import connect, migrate
+from app.infrastructure.database.erasure_ledger import (
+    AccountErasureLedger,
+    ErasureLedgerError,
+)
 
 
 def _create_database(path, title="Backed up event"):
@@ -25,6 +29,10 @@ def _create_database(path, title="Backed up event"):
         connection.commit()
     finally:
         connection.close()
+
+
+def _ledger(tmp_path):
+    return AccountErasureLedger(tmp_path / "erasure-ledger", b"l" * 32)
 
 
 def _event_title(path):
@@ -45,7 +53,12 @@ def test_online_backup_and_restore_preserve_database_contents(tmp_path) -> None:
     _create_database(source)
     backup_database(source, backup)
 
-    restore_database(backup, restored, confirm_application_stopped=True)
+    restore_database(
+        backup,
+        restored,
+        confirm_application_stopped=True,
+        erasure_ledger=_ledger(tmp_path),
+    )
 
     assert _event_title(restored) == "Backed up event"
 
@@ -65,6 +78,7 @@ def test_encrypted_backup_round_trip_and_permissions(tmp_path) -> None:
         backup,
         restored,
         confirm_application_stopped=True,
+        erasure_ledger=_ledger(tmp_path),
         encryption_key=key,
     )
     assert _event_title(restored) == "Backed up event"
@@ -81,13 +95,19 @@ def test_encrypted_backup_rejects_missing_or_wrong_key_without_overwriting_targe
     _create_database(restored, title="Keep this data")
 
     with pytest.raises(ValueError, match="requires the backup encryption key"):
-        restore_database(backup, restored, confirm_application_stopped=True)
+        restore_database(
+            backup,
+            restored,
+            confirm_application_stopped=True,
+            erasure_ledger=_ledger(tmp_path),
+        )
 
     with pytest.raises(ValueError, match="authentication failed"):
         restore_database(
             backup,
             restored,
             confirm_application_stopped=True,
+            erasure_ledger=_ledger(tmp_path),
             encryption_key=os.urandom(32),
         )
     assert _event_title(restored) == "Keep this data"
@@ -109,6 +129,7 @@ def test_encrypted_backup_rejects_tampering(tmp_path) -> None:
             backup,
             restored,
             confirm_application_stopped=True,
+            erasure_ledger=_ledger(tmp_path),
             encryption_key=key,
         )
 
@@ -119,6 +140,7 @@ def test_restore_requires_explicit_application_stopped_confirmation(tmp_path) ->
             tmp_path / "missing.sqlite3",
             tmp_path / "restored.sqlite3",
             confirm_application_stopped=False,
+            erasure_ledger=_ledger(tmp_path),
         )
 
 
@@ -207,6 +229,92 @@ def test_restore_rejects_foreign_key_violations_without_overwriting_target(
             invalid_backup,
             destination,
             confirm_application_stopped=True,
+            erasure_ledger=_ledger(tmp_path),
         )
 
     assert _event_title(destination) == "Keep this data"
+
+def test_restore_replays_account_erasure_before_replacing_database(tmp_path) -> None:
+    source = tmp_path / "live.sqlite3"
+    backup = tmp_path / "backups" / "gatherly.sqlite3"
+    restored = tmp_path / "restore" / "gatherly.sqlite3"
+    _create_database(source)
+    connection = connect(source)
+    try:
+        connection.execute(
+            "INSERT INTO users(id, created_at) VALUES (?, ?)",
+            ("deleted-user", "2026-11-14T00:00:00Z"),
+        )
+        connection.execute(
+            "INSERT INTO auth_identities(id, user_id, provider, provider_subject, "
+            "password_hash, verified_at, created_at) VALUES (?, ?, 'email', ?, ?, ?, ?)",
+            (
+                "deleted-identity",
+                "deleted-user",
+                "deleted@example.test",
+                "password-hash",
+                "2026-11-14T00:00:00Z",
+                "2026-11-14T00:00:00Z",
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    backup_database(source, backup)
+
+    ledger = _ledger(tmp_path)
+    ledger.record_deletion(
+        user_id="deleted-user",
+        deleted_at=datetime(2026, 11, 15, tzinfo=UTC),
+    )
+    restore_database(
+        backup,
+        restored,
+        confirm_application_stopped=True,
+        erasure_ledger=ledger,
+    )
+
+    connection = connect(restored)
+    try:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM users WHERE id = ?", ("deleted-user",)
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM auth_identities WHERE id = ?",
+            ("deleted-identity",),
+        ).fetchone()[0] == 0
+        connection.execute(
+            "INSERT INTO users(id, created_at) VALUES (?, ?)",
+            ("new-user", "2026-11-16T00:00:00Z"),
+        )
+        connection.commit()
+        assert connection.execute(
+            "SELECT COUNT(*) FROM users WHERE id = ?", ("new-user",)
+        ).fetchone()[0] == 1
+    finally:
+        connection.close()
+
+
+def test_restore_rejects_tampered_erasure_ledger_without_overwriting_target(
+    tmp_path,
+) -> None:
+    source = tmp_path / "backup.sqlite3"
+    destination = tmp_path / "restore.sqlite3"
+    _create_database(source, title="Snapshot")
+    _create_database(destination, title="Keep existing")
+    ledger = _ledger(tmp_path)
+    ledger.record_deletion(
+        user_id="deleted-user", deleted_at=datetime.now(UTC)
+    )
+    event_file = next((tmp_path / "erasure-ledger").glob("*.json"))
+    event_file.write_text('{"tampered":true}', encoding="utf-8")
+
+    with pytest.raises(ErasureLedgerError, match="failed verification"):
+        restore_database(
+            source,
+            destination,
+            confirm_application_stopped=True,
+            erasure_ledger=ledger,
+        )
+    assert _event_title(destination) == "Keep existing"
+

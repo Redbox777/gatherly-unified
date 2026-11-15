@@ -1276,6 +1276,15 @@ def test_production_responses_include_hsts(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv(
         "PARTICIPANT_INVITATION_URL", "https://app.example.com/accept-invitation"
     )
+    monkeypatch.setenv(
+        "GATHERLY_ERASURE_LEDGER_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    )
+    monkeypatch.setenv("GATHERLY_ERASURE_LEDGER_PATH", str(tmp_path / "erasure-ledger"))
+    monkeypatch.setenv("GATHERLY_ERASURE_LEDGER_REMOTE", "s3:app-erasure/production")
+    monkeypatch.setattr(
+        "app.infrastructure.database.erasure_ledger.subprocess.run",
+        lambda *args, **kwargs: None,
+    )
     app = create_app(tmp_path / "production-security-headers.sqlite3")
 
     with TestClient(app, headers={"Origin": "http://testserver"}) as client:

@@ -2,7 +2,9 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import base64
 import math
+from pathlib import Path
 from urllib.parse import urlsplit
 
 
@@ -146,3 +148,48 @@ def validate_runtime_configuration(environ: Mapping[str, str]) -> None:
             or parsed.hostname.casefold() in _LOCAL_HOSTS
         ):
             raise ValueError(f"{setting} must be an absolute HTTPS URL in production")
+
+    ledger_key = environ.get("GATHERLY_ERASURE_LEDGER_KEY", "").strip()
+    ledger_path = environ.get("GATHERLY_ERASURE_LEDGER_PATH", "").strip()
+    ledger_remote = environ.get("GATHERLY_ERASURE_LEDGER_REMOTE", "").strip()
+    if not ledger_key:
+        raise ValueError("GATHERLY_ERASURE_LEDGER_KEY is required in production")
+    try:
+        decoded_ledger_key = base64.b64decode(
+            ledger_key.encode("ascii"), altchars=b"-_", validate=True
+        )
+    except ValueError as error:
+        raise ValueError(
+            "GATHERLY_ERASURE_LEDGER_KEY must be a base64-encoded key"
+        ) from error
+    if len(decoded_ledger_key) != 32:
+        raise ValueError(
+            "GATHERLY_ERASURE_LEDGER_KEY must decode to exactly 32 bytes"
+        )
+    if not ledger_path:
+        raise ValueError("GATHERLY_ERASURE_LEDGER_PATH is required in production")
+    ledger_directory = Path(ledger_path).expanduser()
+    if not ledger_directory.is_absolute():
+        raise ValueError("GATHERLY_ERASURE_LEDGER_PATH must be an absolute persistent path")
+    backup_directory = Path(
+        environ.get("GATHERLY_BACKUP_DIR", "/var/backups/gatherly")
+    ).expanduser().resolve()
+    resolved_ledger_directory = ledger_directory.resolve()
+    if (
+        resolved_ledger_directory == backup_directory
+        or resolved_ledger_directory in backup_directory.parents
+        or backup_directory in resolved_ledger_directory.parents
+    ):
+        raise ValueError(
+            "GATHERLY_ERASURE_LEDGER_PATH must be separate from GATHERLY_BACKUP_DIR"
+        )
+    if not ledger_remote or ":" not in ledger_remote or ledger_remote.startswith(":"):
+        raise ValueError(
+            "GATHERLY_ERASURE_LEDGER_REMOTE must name a configured off-host rclone remote"
+        )
+    backup_remote = environ.get("GATHERLY_BACKUP_REMOTE", "").strip()
+    if backup_remote and ledger_remote == backup_remote:
+        raise ValueError(
+            "GATHERLY_ERASURE_LEDGER_REMOTE must be separate from GATHERLY_BACKUP_REMOTE"
+        )
+
