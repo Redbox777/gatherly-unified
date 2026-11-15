@@ -83,3 +83,10 @@ linking and Web Push subscription management are separate follow-up stages.
 ## Production worker configuration
 
 The worker is a separate process and does not inherit FastAPI startup validation. It therefore validates production settings itself before opening SQLite or attempting delivery. Configure the same production environment variables for both the web process and the worker. A correctly configured web process does not compensate for a worker launched with a different or incomplete environment.
+
+
+## Worker concurrency and delivery guarantees
+
+The scheduled notification worker uses an expiring SQLite lease named `notifications`. Lease acquisition is an atomic write transaction, so overlapping worker processes that share the same database cannot process the notification queue at the same time. The worker renews its lease around each provider request and releases it when the run exits normally. If the process crashes, another worker can take over after the lease expires.
+
+The lease prevents concurrent workers from selecting the same pending queue at once; it does not provide exactly-once delivery. If an email, Telegram message, or browser push is accepted by its provider and the worker crashes before recording success, a later run may retry that delivery. Delivery is therefore at-least-once across that crash window. Provider-side idempotency would be needed to close that final gap.

@@ -3,11 +3,15 @@
 from datetime import UTC, datetime, timedelta
 import logging
 import os
+from uuid import uuid4
 
 from app.infrastructure.database.bug_report_retention import load_bug_report_retention_days
 from app.infrastructure.database.bug_reports_repository import BugReportsRepository
 from app.infrastructure.database.connection import connect, migrate
 from app.infrastructure.database.notifications_repository import NotificationsRepository
+from app.infrastructure.database.notification_worker_leases_repository import (
+    NotificationWorkerLeaseRepository,
+)
 from app.infrastructure.database.push_subscriptions_repository import (
     PushSubscriptionsRepository,
     decode_subscription_encryption_key,
@@ -30,9 +34,46 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
     path = database_path or os.environ.get(
         "GATHERLY_DATABASE_PATH", "var/gatherly.sqlite3"
     )
+    lease_duration = _worker_lease_duration()
     connection = connect(path)
+    lease_repository: NotificationWorkerLeaseRepository | None = None
+    lease_acquired = False
+    worker_name = "notifications"
+    worker_token = str(uuid4())
     try:
         migrate(connection)
+        lease_repository = NotificationWorkerLeaseRepository(connection)
+        lease_acquired = lease_repository.acquire(
+            worker_name=worker_name,
+            owner_token=worker_token,
+            now=datetime.now(UTC),
+            lease_duration=lease_duration,
+        )
+        if not lease_acquired:
+            logger.info(
+                "Notification worker skipped because another process holds the lease",
+                extra={"event": "notification.worker.skipped", "component": "notifications_worker"},
+            )
+            return 0, 0, 0, 0
+
+        def renew_worker_lease() -> bool:
+            assert lease_repository is not None
+            renewed = lease_repository.renew(
+                worker_name=worker_name,
+                owner_token=worker_token,
+                now=datetime.now(UTC),
+                lease_duration=lease_duration,
+            )
+            if not renewed:
+                logger.error(
+                    "Notification worker lost its lease; stopping delivery",
+                    extra={
+                        "event": "notification.worker.lease_lost",
+                        "component": "notifications_worker",
+                    },
+                )
+            return renewed
+
         now = datetime.now(UTC)
         deleted_reports = BugReportsRepository(connection).delete_older_than(
             created_before=now - timedelta(days=retention_days)
@@ -51,6 +92,8 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
         rate_limits = SmtpRateLimitsRepository(connection)
         created = repository.materialize_due_reminders(now=now)
         sent = 0
+        telegram_sent = 0
+        push_sent = 0
         if os.environ.get("SMTP_HOST") and os.environ.get("SMTP_SENDER"):
             sender = SmtpEmailSender(
                 host=os.environ.get("SMTP_HOST", "localhost"),
@@ -70,6 +113,8 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                 )
                 if retry_after is not None:
                     continue
+                if not renew_worker_lease():
+                    return created, sent, telegram_sent, push_sent
                 try:
                     sender.send_text(
                         recipient=message["email"],
@@ -77,6 +122,8 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                         body=message["body"],
                     )
                 except Exception as error:
+                    if not renew_worker_lease():
+                        return created, sent, telegram_sent, push_sent
                     repository.record_email_failure(
                         notification_id=message["id"],
                         error_name=type(error).__name__,
@@ -90,12 +137,13 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                         },
                     )
                 else:
+                    if not renew_worker_lease():
+                        return created, sent, telegram_sent, push_sent
                     repository.record_email_sent(
                         notification_id=message["id"], now=datetime.now(UTC)
                     )
                     sent += 1
 
-        telegram_sent = 0
         telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
         if telegram_token:
             telegram_sender = TelegramBotSender(
@@ -103,12 +151,16 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                 timeout=float(os.environ.get("TELEGRAM_TIMEOUT", "10")),
             )
             for message in repository.pending_telegram(limit=20):
+                if not renew_worker_lease():
+                    return created, sent, telegram_sent, push_sent
                 try:
                     telegram_sender.send_text(
                         chat_id=message["chat_id"],
                         text=f"{message['title']}\n\n{message['body']}",
                     )
                 except Exception as error:
+                    if not renew_worker_lease():
+                        return created, sent, telegram_sent, push_sent
                     repository.record_telegram_failure(
                         notification_id=message["id"],
                         error_name=type(error).__name__,
@@ -122,11 +174,12 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                         },
                     )
                 else:
+                    if not renew_worker_lease():
+                        return created, sent, telegram_sent, push_sent
                     repository.record_telegram_sent(
                         notification_id=message["id"], now=datetime.now(UTC)
                     )
                     telegram_sent += 1
-        push_sent = 0
         push_settings = (
             os.environ.get("WEB_PUSH_VAPID_PRIVATE_KEY", "").strip(),
             os.environ.get("WEB_PUSH_VAPID_SUBJECT", "").strip(),
@@ -152,6 +205,8 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                 subscription_info = delivery["subscription_info"]
                 if not isinstance(subscription_info, dict):
                     continue
+                if not renew_worker_lease():
+                    return created, sent, telegram_sent, push_sent
                 try:
                     push_sender.send(
                         subscription_info=subscription_info,
@@ -162,6 +217,8 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                         },
                     )
                 except WebPushDeliveryError as error:
+                    if not renew_worker_lease():
+                        return created, sent, telegram_sent, push_sent
                     delivery_id = str(delivery["delivery_id"])
                     subscription_id = str(delivery["subscription_id"])
                     push_repository.record_failure(
@@ -184,6 +241,8 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                         },
                     )
                 except Exception as error:
+                    if not renew_worker_lease():
+                        return created, sent, telegram_sent, push_sent
                     push_repository.record_failure(
                         delivery_id=str(delivery["delivery_id"]),
                         error_name=type(error).__name__,
@@ -198,6 +257,8 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                         },
                     )
                 else:
+                    if not renew_worker_lease():
+                        return created, sent, telegram_sent, push_sent
                     push_repository.record_sent(
                         delivery_id=str(delivery["delivery_id"]),
                         now=datetime.now(UTC),
@@ -205,7 +266,20 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                     push_sent += 1
         return created, sent, telegram_sent, push_sent
     finally:
+        if lease_acquired and lease_repository is not None:
+            lease_repository.release(
+                worker_name=worker_name,
+                owner_token=worker_token,
+            )
         connection.close()
+
+
+def _worker_lease_duration() -> timedelta:
+    timeout_names = ("SMTP_TIMEOUT", "TELEGRAM_TIMEOUT", "WEB_PUSH_TIMEOUT")
+    configured_timeouts = [
+        float(os.environ.get(name, "10")) for name in timeout_names
+    ]
+    return timedelta(seconds=max(300.0, max(configured_timeouts, default=10.0) + 60.0))
 
 
 def main() -> None:

@@ -534,6 +534,17 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON push_deliveries(sent_at, attempts, updated_at);
         """,
     ),
+    (
+        22,
+        """
+        CREATE TABLE notification_worker_leases (
+            worker_name TEXT PRIMARY KEY CHECK (length(trim(worker_name)) > 0),
+            owner_token TEXT NOT NULL CHECK (length(trim(owner_token)) > 0),
+            lease_expires_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        """,
+    ),
 )
 
 
