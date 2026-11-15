@@ -23,16 +23,19 @@ class BugReportsRepository:
         module: str,
         error_code: str,
         stack: str,
+        diagnostics_json: str = "[]",
     ) -> str:
         if created_at.tzinfo is None or created_at.utcoffset() is None:
             raise ValueError("created_at must be timezone-aware")
+        if len(diagnostics_json) > 16000:
+            raise ValueError("diagnostics_json exceeds the storage limit")
         report_id = uuid4().hex
         with transaction(self._connection):
             self._connection.execute(
                 """INSERT INTO bug_reports(
                     id, created_at, app_version, browser, operating_system,
-                    module, error_code, stack
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    module, error_code, stack, diagnostics_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     report_id,
                     created_at.astimezone(UTC).isoformat(),
@@ -42,6 +45,7 @@ class BugReportsRepository:
                     module,
                     error_code,
                     stack,
+                    diagnostics_json,
                 ),
             )
         return report_id
