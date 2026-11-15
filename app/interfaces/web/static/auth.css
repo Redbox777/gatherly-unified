@@ -65,3 +65,9 @@ button:focus-visible,a:focus-visible{outline:3px solid #2bbdb1;outline-offset:3p
 @media(max-width:680px){.auth-layout{grid-template-columns:1fr}.auth-aside{min-height:205px;padding:22px 23px 20px}.auth-brand{font-size:19px}.auth-brand-mark{width:36px;height:36px}.auth-brand-mark svg{width:32px;height:32px}.auth-aside-copy{margin:22px 0 5px}.auth-aside-copy .auth-kicker{margin-bottom:6px;font-size:9px}.auth-aside h1{font-size:31px;letter-spacing:-1.3px;margin-bottom:8px}.auth-aside-copy>p:last-child{font-size:10px;line-height:1.5;margin:0}.auth-aside-foot{display:none}.auth-aside:before{width:300px;height:300px;right:-150px;top:-80px}.auth-aside:after{width:220px;height:220px;right:-105px;top:-35px}.auth-main{padding:22px 17px 28px;justify-content:flex-start}.auth-topline{margin-bottom:18px}.auth-card{padding:27px 22px 22px;border-radius:18px}.auth-heading h2{font-size:25px}.auth-heading{margin-bottom:20px}.legal-note{margin-top:14px}}
 @media(max-width:360px){.auth-card{padding:23px 17px 19px}.auth-topline{gap:10px}.secure-note{font-size:9px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;scroll-behavior:auto!important}}
+
+.demo-submit{margin-top:10px;background:linear-gradient(110deg,#e8f7f2,#d7f1e9);color:#08756f;box-shadow:none;border:1px solid #ccebe1}
+.demo-submit span{color:#078b83}
+.demo-submit:hover{filter:brightness(.98)}
+
+#demo-login-button[hidden]{display:none}

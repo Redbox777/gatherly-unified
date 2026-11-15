@@ -1774,3 +1774,47 @@ def test_participant_creation_succeeds_when_secondary_notification_fails(
         finally:
             connection.close()
         assert {row["display_name"] for row in rows} == {"Linked guest", "New guest"}
+
+
+def test_demo_login_is_disabled_unless_explicitly_enabled_in_codespaces(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.delenv("GATHERLY_DEMO_MODE", raising=False)
+    monkeypatch.setenv("CODESPACES", "true")
+    app = create_app(tmp_path / "demo-disabled.sqlite3")
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
+        assert client.get("/auth/demo/status").json() == {"enabled": False}
+        assert client.post("/auth/demo/login").status_code == 404
+        assert client.get("/auth/me").status_code == 401
+
+
+def test_demo_login_creates_isolated_server_managed_session(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("GATHERLY_DEMO_MODE", "true")
+    monkeypatch.setenv("CODESPACES", "true")
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    app = create_app(tmp_path / "demo-enabled.sqlite3")
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
+        assert client.get("/auth/demo/status").json() == {"enabled": True}
+        signed_in = client.post("/auth/demo/login")
+        assert signed_in.status_code == 200
+        assert "gatherly_session" in signed_in.cookies
+        identity = client.get("/auth/me")
+        assert identity.status_code == 200
+        first_user_id = identity.json()["user_id"]
+        assert client.post("/events", json={"title": "Demo-only event"}).status_code == 201
+
+        client.post("/auth/logout")
+        assert client.get("/auth/me").status_code == 401
+        assert client.post("/auth/demo/login").status_code == 200
+        assert client.get("/auth/me").json()["user_id"] == first_user_id
+        assert client.get("/events").status_code == 200
+
+
+def test_demo_login_gate_is_closed_in_production(monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("GATHERLY_DEMO_MODE", "true")
+    monkeypatch.setenv("CODESPACES", "true")
+    assert http_api._demo_login_enabled() is False

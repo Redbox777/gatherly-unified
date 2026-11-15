@@ -3,7 +3,7 @@
 from collections.abc import Awaitable, Callable, Iterator
 from datetime import UTC, datetime
 from time import perf_counter
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 import hashlib
 import logging
 import os
@@ -127,6 +127,15 @@ GENERIC_REGISTRATION_RESPONSE = {
 }
 
 
+def _demo_login_enabled() -> bool:
+    """Keep passwordless demo access explicit and impossible in production."""
+    return (
+        os.environ.get("APP_ENV", "development").strip().casefold() != "production"
+        and os.environ.get("GATHERLY_DEMO_MODE", "").strip().casefold() == "true"
+        and os.environ.get("CODESPACES", "").strip().casefold() == "true"
+    )
+
+
 GENERIC_RESET_RESPONSE = {
     "message": (
         "If an eligible account exists for that email address, "
@@ -235,6 +244,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     )
     rate_limit_paths = {
         "/auth/login",
+        "/auth/demo/login",
         "/auth/telegram/login",
         "/auth/register",
         "/auth/password-reset/request",
@@ -641,6 +651,40 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="Invalid or expired verification token")
         return {"message": "Email verified"}
 
+    @app.get("/auth/demo/status")
+    def demo_login_status() -> dict[str, bool]:
+        """Expose only whether the local Codespaces demo button should be shown."""
+        return {"enabled": _demo_login_enabled()}
+
+    @app.post("/auth/demo/login")
+    def demo_login(response: Response, deps: ServiceDependency) -> dict[str, str]:
+        """Issue a normal server-managed session for the isolated demo account."""
+        if not _demo_login_enabled():
+            raise HTTPException(status_code=404, detail="Not found")
+
+        now = datetime.now(UTC)
+        demo_user_id = str(
+            uuid5(NAMESPACE_URL, "https://gatherly.local/system/codespaces-demo-user/v1")
+        )
+        with transaction(deps.connection):
+            deps.connection.execute(
+                "INSERT INTO users(id, created_at) VALUES (?, ?) "
+                "ON CONFLICT(id) DO NOTHING",
+                (demo_user_id, now.isoformat()),
+            )
+
+        session = deps.sessions.create(user_id=demo_user_id, now=now)
+        response.set_cookie(
+            key=SESSION_COOKIE,
+            value=session.raw_token,
+            httponly=True,
+            secure=os.environ.get("COOKIE_SECURE", "true").casefold() == "true",
+            samesite="lax",
+            path=SESSION_COOKIE_PATH,
+            max_age=max(0, int((session.expires_at - session.created_at).total_seconds())),
+        )
+        return {"message": "Signed in to the demo"}
+    
     @app.post("/auth/login")
     def login(payload: LoginRequest, response: Response, deps: ServiceDependency) -> dict[str, str]:
         session = deps.authentication.login_email(
