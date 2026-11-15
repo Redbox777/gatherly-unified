@@ -7,7 +7,7 @@
     connectionStatus.hidden = navigator.onLine;
     connectionStatus.textContent = navigator.onLine
       ? ""
-      : "Нет подключения к интернету. Сейчас доступна только оболочка приложения; данные встреч и изменения не синхронизируются.";
+      : "Нет подключения к интернету. Доступны оболочка и ранее сохранённые данные встреч, если включено локальное хранение. Новые изменения не синхронизируются.";
   };
 
   const offlineSetting = document.getElementById("offline-storage-enabled");

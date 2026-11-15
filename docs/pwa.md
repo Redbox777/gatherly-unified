@@ -31,3 +31,10 @@ The static shell is cached for application startup. This is not offline-first da
 - Switching to another authenticated account clears the previous active account's IndexedDB records. A successful logout clears the current account's records. Disabling the option also clears the current account's records.
 - This foundation does not yet cache API responses or allow offline writes. That follows in the next S6.2 step after the account boundary is tested.
 - IndexedDB is browser-managed storage and is **not separately encrypted by this application**. Device access controls still matter. Do not enable this on shared devices.
+
+
+## Read-only offline event cache (S6.2)
+
+When a user has explicitly enabled local storage, successful GET responses are stored in IndexedDB for the event list and details, participants, shared notes, tasks, and venue details. The API client uses cached data only after a network-level fetch failure. HTTP responses such as 401, 403, 404, 422, and 5xx are not replaced with cached data. Authentication, account management, notifications, finance, and all mutation methods remain network-only. The service worker still never caches private API responses.
+
+If the app starts without a network connection, it can use the last account namespace previously confirmed by the live auth endpoint, provided local storage was explicitly enabled. This is a device-local offline view, not proof of a current server session. Cached information can be stale; edits, deletions, and new records are not queued or synchronized.

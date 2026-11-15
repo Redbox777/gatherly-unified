@@ -66,6 +66,7 @@
       const nextUserId = typeof userId === "string" && userId.trim() ? userId : null;
       let previousUserId = activeUserId;
       try { previousUserId = previousUserId || window.localStorage.getItem(LAST_USER_KEY); } catch (_) {}
+      activeUserId = null;
       if (previousUserId && previousUserId !== nextUserId) await clearUser(previousUserId);
       activeUserId = nextUserId;
       try {
@@ -75,6 +76,13 @@
       return activeUserId;
     },
     getUser() { return activeUserId; },
+    getRememberedUser() {
+      if (!this.isEnabled()) return null;
+      try {
+        const userId = window.localStorage.getItem(LAST_USER_KEY);
+        return typeof userId === "string" && userId.trim() ? userId : null;
+      } catch (_) { return null; }
+    },
     async clearCurrentUser() {
       const previous = activeUserId;
       activeUserId = null;

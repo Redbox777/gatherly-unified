@@ -1,10 +1,32 @@
 (() => {
+  const offlineStore = window.GatherlyOfflineStore;
+  const cacheKeyFor = (url, method) => {
+    if (method !== "GET") return null;
+    let parsed;
+    try { parsed = new URL(url, window.location.origin); } catch (_) { return null; }
+    if (parsed.origin !== window.location.origin || parsed.search || parsed.hash) return null;
+    if (!/^\/events(?:\/[A-Za-z0-9_-]+(?:\/(?:participants|notes|tasks|venue))?)?$/.test(parsed.pathname)) return null;
+    return "GET:" + parsed.pathname;
+  };
   const api = async (url, options = {}) => {
-    const response = await fetch(url, {
-      credentials: "same-origin",
-      ...options,
-      headers: {"Content-Type":"application/json", ...(options.headers || {})}
-    });
+    const method = String(options.method || "GET").toUpperCase();
+    const cacheKey = cacheKeyFor(url, method);
+    let response;
+    try {
+      response = await fetch(url, {
+        credentials: "same-origin",
+        ...options,
+        headers: {"Content-Type":"application/json", ...(options.headers || {})}
+      });
+    } catch (networkError) {
+      if (cacheKey && offlineStore?.isEnabled() && offlineStore.getUser()) {
+        try {
+          const cached = await offlineStore.get(cacheKey);
+          if (cached !== null) return cached;
+        } catch (_) {}
+      }
+      throw networkError;
+    }
     if (response.status === 401) {
       window.location.replace("/auth.html?next=%2F");
       throw new Error("Требуется войти в аккаунт.");
@@ -22,7 +44,11 @@
       throw error;
     }
     if (response.status === 204) return null;
-    return response.json();
+    const data = await response.json();
+    if (cacheKey && offlineStore?.isEnabled() && offlineStore.getUser()) {
+      offlineStore.put(cacheKey, data).catch(() => {});
+    }
+    return data;
   };
   window.GatherlyApiClient = { request: api };
 })();
