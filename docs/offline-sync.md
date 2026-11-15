@@ -60,7 +60,7 @@ For every accepted command, one SQLite write transaction must:
 5. If the key exists with a different hash, return a deterministic conflict response; never reinterpret the key.
 6. Check current event membership/ownership and the expected event revision.
 7. Apply the domain command using the same validation and authorization rules as the online use cases.
-8. Store the resulting status/body and payload hash in the idempotency ledger in the **same transaction** as the domain change.
+8. Store the command kind, resulting status/body, and payload hash in the idempotency ledger in the **same transaction** as the domain change.
 9. Commit once. A crash before commit applies neither the change nor its idempotency record; a lost response after commit is safe to retry.
 
 A separate transaction that records the idempotency key after the domain write is not acceptable: a crash between those writes can duplicate creates.

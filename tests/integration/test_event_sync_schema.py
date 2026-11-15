@@ -98,13 +98,13 @@ def test_sync_idempotency_ledger_is_user_scoped_and_cascades_on_account_delete(t
         connection.execute("INSERT INTO users(id, created_at) VALUES (?, ?)", ("user-1", now))
         connection.execute("INSERT INTO users(id, created_at) VALUES (?, ?)", ("user-2", now))
         values = (
-            "user-1", "12345678-1234-1234-1234-123456789abc", "event-1",
+            "user-1", "12345678-1234-1234-1234-123456789abc", "event-1", "note.create",
             "a" * 64, 200, '{"ok":true}', now,
         )
         connection.execute(
             "INSERT INTO sync_idempotency_records("
-            "user_id, operation_id, event_id, payload_hash, response_status, "
-            "response_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "user_id, operation_id, event_id, command_kind, payload_hash, response_status, "
+            "response_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             values,
         )
         connection.commit()
@@ -120,8 +120,8 @@ def test_sync_idempotency_ledger_is_user_scoped_and_cascades_on_account_delete(t
         with pytest.raises(sqlite3.IntegrityError):
             connection.execute(
                 "INSERT INTO sync_idempotency_records("
-                "user_id, operation_id, event_id, payload_hash, response_status, "
-                "response_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "user_id, operation_id, event_id, command_kind, payload_hash, response_status, "
+                "response_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 values,
             )
         connection.rollback()

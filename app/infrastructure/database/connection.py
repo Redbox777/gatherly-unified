@@ -580,6 +580,7 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             operation_id TEXT NOT NULL CHECK (length(operation_id) = 36),
             event_id TEXT NOT NULL CHECK (length(trim(event_id)) > 0),
+            command_kind TEXT NOT NULL CHECK (length(trim(command_kind)) > 0),
             payload_hash TEXT NOT NULL CHECK (length(payload_hash) = 64),
             response_status INTEGER NOT NULL CHECK (response_status BETWEEN 100 AND 599),
             response_json TEXT NOT NULL,
