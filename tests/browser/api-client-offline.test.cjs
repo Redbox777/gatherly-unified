@@ -57,3 +57,40 @@ test("API client caches the initial revision and queues supported writes without
 
   assert.deepEqual(await api("/events/" + eventId + "/notes"), []);
 });
+
+
+test("successful account deletion purges the account-scoped offline cache and outbox", async () => {
+  await store.setEnabled(true);
+  await store.setUser("deleted-api-account");
+  await store.put("GET:/events", [{ id: eventId }]);
+  await store.setEventRevision(eventId, 3);
+  await store.enqueue({
+    eventId,
+    baseRevision: 3,
+    kind: "note.create",
+    payload: { content: "Private queued note", visibility: "private" }
+  });
+  assert.equal((await store.listOutbox()).length, 1);
+  assert.deepEqual(await store.get("GET:/events"), [{ id: eventId }]);
+
+  global.fetch = async (url, options = {}) => {
+    assert.equal(url, "/account");
+    assert.equal(options.method, "DELETE");
+    assert.equal(options.headers["x-account-deletion-confirmation"], "DELETE");
+    return new Response(null, { status: 204 });
+  };
+
+  const result = await global.GatherlyApiClient.request("/account", {
+    method: "DELETE",
+    headers: { "x-account-deletion-confirmation": "DELETE" }
+  });
+
+  assert.equal(result, null);
+  assert.equal(store.getUser(), null);
+  assert.equal(store.getRememberedUser(), null);
+
+  // Re-authenticate the same account namespace to verify its old rows are gone.
+  await store.setUser("deleted-api-account");
+  assert.deepEqual(await store.listOutbox(), []);
+  assert.equal(await store.get("GET:/events"), null);
+});
