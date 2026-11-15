@@ -3,6 +3,8 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi.testclient import TestClient
 
 import app.interfaces.web.http_api as http_api
+from app.infrastructure.database.connection import connect
+from app.infrastructure.database.notifications_repository import NotificationsRepository
 from app.interfaces.web.http_api import create_app
 
 
@@ -1702,3 +1704,73 @@ def test_public_origin_supports_csrf_checks_behind_tls_terminating_proxy(
 
     assert same_public_origin.status_code == 200
     assert foreign_origin.status_code == 403
+
+
+
+def test_participant_creation_succeeds_when_secondary_notification_fails(
+    tmp_path, monkeypatch
+) -> None:
+    sender = FakeEmailSender()
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(http_api, "_email_sender", lambda: sender)
+    app = create_app(tmp_path / "participant-notification-failure.sqlite3")
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
+        registration = client.post(
+            "/auth/register",
+            json={
+                "email": "participant-owner@example.test",
+                "password": "original password long enough",
+            },
+        )
+        assert registration.status_code == 202
+        token = sender.messages[-1][2].split("token=", maxsplit=1)[1].splitlines()[0]
+        assert client.post("/auth/verify-email", json={"token": token}).status_code == 200
+        assert client.post(
+            "/auth/login",
+            json={
+                "email": "participant-owner@example.test",
+                "password": "original password long enough",
+            },
+        ).status_code == 200
+
+        event = client.post("/events", json={"title": "Dinner"})
+        assert event.status_code == 201
+        event_id = event.json()["id"]
+        existing = client.post(
+            f"/events/{event_id}/participants", json={"display_name": "Linked guest"}
+        )
+        assert existing.status_code == 201
+
+        connection = connect(app.state.database_path)
+        try:
+            connection.execute(
+                "INSERT INTO users(id, created_at) VALUES (?, ?)",
+                ("linked-user", "2026-11-15T10:00:00Z"),
+            )
+            connection.execute(
+                "UPDATE event_participants SET linked_user_id = ? WHERE id = ?",
+                ("linked-user", existing.json()["id"]),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        def fail_notification(self, **kwargs):
+            raise OSError("notification storage unavailable")
+
+        monkeypatch.setattr(NotificationsRepository, "create", fail_notification)
+        added = client.post(
+            f"/events/{event_id}/participants", json={"display_name": "New guest"}
+        )
+
+        assert added.status_code == 201
+        assert added.json()["display_name"] == "New guest"
+        connection = connect(app.state.database_path)
+        try:
+            rows = connection.execute(
+                "SELECT display_name FROM event_participants WHERE event_id = ?",
+                (event_id,),
+            ).fetchall()
+        finally:
+            connection.close()
+        assert {row["display_name"] for row in rows} == {"Linked guest", "New guest"}

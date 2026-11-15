@@ -1202,21 +1202,29 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             )
             if recipient_id is None or recipient_id == user_id:
                 continue
-            preferences = deps.notifications.get_preferences(user_id=recipient_id)
-            if preferences["participant_added_enabled"]:
-                deps.notifications.create(
-                    user_id=recipient_id,
-                    event_id=str(event_id),
-                    kind="participant_added",
-                    title="Новый участник встречи",
-                    body=(
-                        f"К встрече «{event.title}» добавлен участник: "
-                        f"{participant.display_name}."
-                    ),
-                    dedupe_key=(
-                        f"participant-added:{participant.id}:{recipient_id}"
-                    ),
-                    now=notification_time,
+            try:
+                preferences = deps.notifications.get_preferences(user_id=recipient_id)
+                if preferences["participant_added_enabled"]:
+                    deps.notifications.create(
+                        user_id=recipient_id,
+                        event_id=str(event_id),
+                        kind="participant_added",
+                        title="Новый участник встречи",
+                        body=(
+                            f"К встрече «{event.title}» добавлен участник: "
+                            f"{participant.display_name}."
+                        ),
+                        dedupe_key=(
+                            f"participant-added:{participant.id}:{recipient_id}"
+                        ),
+                        now=notification_time,
+                    )
+            except Exception as error:
+                # Participant creation has already committed. A secondary inbox
+                # failure must not turn a successful mutation into an HTTP error.
+                logger.warning(
+                    "Participant-added notification creation failed (%s)",
+                    type(error).__name__,
                 )
         return {
             "id": str(participant.id),
