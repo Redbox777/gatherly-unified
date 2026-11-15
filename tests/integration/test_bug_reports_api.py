@@ -17,6 +17,18 @@ def _payload(**overrides: object) -> dict[str, object]:
             "private/path?token=must-not-be-stored\n"
             "at line 58, column 3"
         ),
+        "diagnostics": [
+            {
+                "occurred_at": "2026-11-15T12:00:00Z",
+                "subsystem": "api",
+                "event_code": "api_http_error",
+                "route_category": "event_detail",
+                "method": "POST",
+                "status_code": 503,
+                "duration_ms": 250,
+                "request_id": "a" * 32,
+            }
+        ],
     }
     payload.update(overrides)
     return payload
@@ -50,6 +62,8 @@ def test_bug_report_requires_consent_and_stores_only_allowlisted_diagnostics(tmp
         assert "token" not in row["stack"]
         assert "email" not in row.keys()
         assert "user_id" not in row.keys()
+        assert '"event_code":"api_http_error"' in row["diagnostics_json"]
+        assert "private/path" not in row["diagnostics_json"]
     finally:
         connection.close()
 
@@ -57,6 +71,23 @@ def test_bug_report_requires_consent_and_stores_only_allowlisted_diagnostics(tmp
 def test_bug_report_rejects_unexpected_personal_fields(tmp_path) -> None:
     app = create_app(tmp_path / "bug-report-extra.sqlite3")
     payload = _payload(email="person@example.com", user_id="private-user")
+    with TestClient(app) as client:
+        response = client.post(
+            "/diagnostics/bug-reports", json=payload,
+            headers={"Origin": "http://testserver"},
+        )
+    assert response.status_code == 422
+
+
+def test_bug_report_rejects_untrusted_diagnostic_fields(tmp_path) -> None:
+    app = create_app(tmp_path / "bug-report-event-extra.sqlite3")
+    payload = _payload()
+    payload["diagnostics"] = [{
+        "occurred_at": "2026-11-15T12:00:00Z",
+        "subsystem": "api",
+        "event_code": "api_http_error",
+        "request_body": "private note text",
+    }]
     with TestClient(app) as client:
         response = client.post(
             "/diagnostics/bug-reports", json=payload,
