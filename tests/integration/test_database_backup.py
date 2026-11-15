@@ -11,7 +11,10 @@ from app.infrastructure.database.backup import (
     restore_database,
 )
 from app.infrastructure.database.connection import connect, migrate
-from app.infrastructure.database.erasure_ledger import AccountErasureLedger
+from app.infrastructure.database.erasure_ledger import (
+    AccountErasureLedger,
+    ErasureLedgerError,
+)
 
 
 def _create_database(path, title="Backed up event"):
@@ -301,7 +304,7 @@ def test_restore_rejects_tampered_erasure_ledger_without_overwriting_target(
     event_file = next((tmp_path / "erasure-ledger").glob("*.json"))
     event_file.write_text('{"tampered":true}', encoding="utf-8")
 
-    with pytest.raises(Exception, match="failed verification"):
+    with pytest.raises(ErasureLedgerError, match="failed verification"):
         restore_database(
             source,
             destination,
