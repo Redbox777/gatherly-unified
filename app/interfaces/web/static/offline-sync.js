@@ -23,6 +23,14 @@
     return item.kind;
   };
   const setStatus = message => { if (status) status.textContent = message || ""; };
+  const verifySession = async expectedUserId => {
+    try {
+      const response = await fetch("/auth/me", { credentials: "same-origin", headers: { "Accept": "application/json" } });
+      if (!response.ok) return false;
+      const identity = await response.json();
+      return Boolean(identity && identity.user_id === expectedUserId && store.getUser() === expectedUserId);
+    } catch (_) { return false; }
+  };
   const fetchRevision = async eventId => {
     const response = await fetch("/events/" + encodeURIComponent(eventId) + "/sync-state", {
       credentials: "same-origin", headers: { "Accept": "application/json" }
@@ -98,11 +106,15 @@
     try { return await callback(); }
     finally { await store.releaseLease(eventId, ownerId); }
   };
-  const sendEventQueue = async eventId => withEventLock(eventId, async () => {
+  const sendEventQueue = async (eventId, expectedUserId) => withEventLock(eventId, async () => {
     let items = (await store.listOutbox())
       .filter(item => item.eventId === eventId)
       .sort((a, b) => a.createdAt - b.createdAt);
     for (const item of items) {
+      if (store.getUser() !== expectedUserId || !await verifySession(expectedUserId)) {
+        setStatus("Синхронизация приостановлена: активный аккаунт изменился или не подтверждён.");
+        return "auth";
+      }
       if (item.state === "done") {
         await store.removeOutboxItem(item.operationId);
         continue;
@@ -220,11 +232,16 @@
     if (syncButton) syncButton.disabled = true;
     setStatus("Синхронизируем изменения…");
     try {
+      const expectedUserId = store.getUser();
+      if (!await verifySession(expectedUserId)) {
+        setStatus("Очередь заблокирована до подтверждения входа в исходный аккаунт.");
+        return;
+      }
       await store.recoverSending();
       const items = await store.listOutbox();
       const eventIds = [...new Set(items.map(item => item.eventId))];
       for (const eventId of eventIds) {
-        const result = await sendEventQueue(eventId);
+        const result = await sendEventQueue(eventId, expectedUserId);
         if (result === "auth") break;
       }
       setStatus("Проверка очереди завершена.");
@@ -253,6 +270,7 @@
     if (!window.confirm("Создать новую операцию на основе актуальной версии встречи? Содержимое изменения останется прежним.")) return;
     try {
       if (!navigator.onLine) throw new Error("Для повторного применения нужно подключение к интернету.");
+      if (!await verifySession(store.getUser())) throw new Error("Сначала подтвердите вход в исходный аккаунт.");
       const revision = await fetchRevision(item.eventId);
       const replacement = await store.enqueue({
         eventId: item.eventId,
