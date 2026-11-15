@@ -4,7 +4,6 @@ import base64
 import binascii
 import hashlib
 import hmac
-import secrets
 
 from argon2 import PasswordHasher, Type, extract_parameters
 from argon2.exceptions import InvalidHashError, VerificationError
