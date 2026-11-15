@@ -294,8 +294,13 @@
         })
       });
       if (!dialog.open || activeEvent?.id !== eventId) return;
-      renderVenue(venue);
-      venueStatus.textContent = "Место сохранено.";
+      if (venue?.offline_queued) {
+        venueStatus.textContent = "Изменение места сохранено на устройстве и ждёт синхронизации.";
+        window.GatherlyOfflineSync?.refresh();
+      } else {
+        renderVenue(venue);
+        venueStatus.textContent = "Место сохранено.";
+      }
     } catch (error) {
       if (dialog.open && activeEvent?.id === eventId) venueStatus.textContent = error.message;
     } finally {
@@ -308,10 +313,15 @@
     if (!window.confirm("Удалить место проведения этой встречи?")) return;
     venueDelete.disabled = true;
     try {
-      await api("/events/" + encodeURIComponent(eventId) + "/venue", {method:"DELETE"});
+      const result = await api("/events/" + encodeURIComponent(eventId) + "/venue", {method:"DELETE"});
       if (!dialog.open || activeEvent?.id !== eventId) return;
-      renderVenue(null);
-      venueStatus.textContent = "Место удалено.";
+      if (result?.offline_queued) {
+        venueStatus.textContent = "Удаление места сохранено в локальной очереди.";
+        window.GatherlyOfflineSync?.refresh();
+      } else {
+        renderVenue(null);
+        venueStatus.textContent = "Место удалено.";
+      }
     } catch (error) {
       if (dialog.open && activeEvent?.id === eventId) venueStatus.textContent = error.message;
     } finally {
