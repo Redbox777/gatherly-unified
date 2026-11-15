@@ -65,10 +65,15 @@
       check.addEventListener("change", async () => {
         check.disabled = true;
         try {
-          await api("/events/" + encodeURIComponent(eventId) + "/tasks/" + encodeURIComponent(task.id) + "/completion", {
+          const result = await api("/events/" + encodeURIComponent(eventId) + "/tasks/" + encodeURIComponent(task.id) + "/completion", {
             method:"PATCH", body:JSON.stringify({completed:check.checked})
           });
-          await loadTasks(eventId);
+          if (result?.offline_queued) {
+            taskStatus.textContent = "Изменение статуса сохранено на устройстве и ждёт синхронизации.";
+            window.GatherlyOfflineSync?.refresh();
+          } else {
+            await loadTasks(eventId);
+          }
         } catch (error) {
           check.checked = !check.checked;
           taskStatus.textContent = error.message;
@@ -119,9 +124,14 @@
         if (!window.confirm("Удалить задачу «" + task.title + "»?")) return;
         remove.disabled = true;
         try {
-          await api("/events/" + encodeURIComponent(eventId) + "/tasks/" + encodeURIComponent(task.id), {method:"DELETE"});
+          const result = await api("/events/" + encodeURIComponent(eventId) + "/tasks/" + encodeURIComponent(task.id), {method:"DELETE"});
           if (taskForm.dataset.editingTask === task.id) resetTaskForm();
-          await loadTasks(eventId);
+          if (result?.offline_queued) {
+            taskStatus.textContent = "Удаление задачи сохранено в локальной очереди.";
+            window.GatherlyOfflineSync?.refresh();
+          } else {
+            await loadTasks(eventId);
+          }
         } catch (error) {
           taskStatus.textContent = error.message;
           remove.disabled = false;
@@ -140,7 +150,7 @@
     taskSave.disabled = true;
     taskStatus.textContent = taskId ? "Сохраняем изменения…" : "Добавляем задачу…";
     try {
-      await api(
+      const result = await api(
         "/events/" + encodeURIComponent(getActiveEvent().id) + "/tasks" +
           (taskId ? "/" + encodeURIComponent(taskId) : ""),
         {
@@ -154,8 +164,13 @@
         }
       );
       resetTaskForm();
-      taskStatus.textContent = "Задача сохранена.";
-      await loadTasks(getActiveEvent().id);
+      if (result?.offline_queued) {
+        taskStatus.textContent = "Изменение задачи сохранено на устройстве и ждёт синхронизации.";
+        window.GatherlyOfflineSync?.refresh();
+      } else {
+        taskStatus.textContent = "Задача сохранена.";
+        await loadTasks(getActiveEvent().id);
+      }
     } catch (error) {
       taskStatus.textContent = error.message;
     } finally {
