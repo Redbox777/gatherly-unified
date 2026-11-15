@@ -1,5 +1,7 @@
 """Notification inbox, preferences, and event reminder HTTP routes."""
 
+import base64
+import binascii
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 import os
@@ -265,10 +267,18 @@ def _push_configuration_available() -> bool:
     )
     if any(not os.environ.get(name, "").strip() for name in required):
         return False
+    subject = os.environ["WEB_PUSH_VAPID_SUBJECT"].strip()
+    if not (subject.startswith("mailto:") or subject.startswith("https://")):
+        return False
+    public_key = os.environ["WEB_PUSH_VAPID_PUBLIC_KEY"].strip()
     try:
+        padded = public_key + "=" * ((4 - len(public_key) % 4) % 4)
+        decoded_public_key = base64.b64decode(
+            padded.encode("ascii"), altchars=b"-_", validate=True
+        )
         decode_subscription_encryption_key(
             os.environ["WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY"]
         )
-    except ValueError:
+    except (ValueError, binascii.Error, UnicodeEncodeError):
         return False
-    return True
+    return len(decoded_public_key) == 65
