@@ -13,6 +13,8 @@ BACKUP_FILE="$BACKUP_DIR/gatherly-$TIMESTAMP.sqlite3.enc"
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
 
+# Keep the independent account-erasure ledger replicated before taking a snapshot.
+python -m app.infrastructure.database.backup ledger-sync
 python -m app.infrastructure.database.backup backup "$GATHERLY_DB_PATH" "$BACKUP_FILE"
 rclone copyto "$BACKUP_FILE" "$GATHERLY_BACKUP_REMOTE/$(basename "$BACKUP_FILE")" --immutable
 python -m app.infrastructure.database.backup prune "$BACKUP_DIR" --retention-days "$RETENTION_DAYS"
