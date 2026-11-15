@@ -93,7 +93,10 @@ def create_notifications_router(
             if not deps.notifications.has_telegram_identity(user_id=user_id):
                 raise HTTPException(
                     status_code=409,
-                    detail="Connect a verified Telegram identity before enabling Telegram notifications",
+                    detail=(
+                        "Connect a verified Telegram identity before enabling "
+                        "Telegram notifications"
+                    ),
                 )
             if not os.environ.get("TELEGRAM_BOT_TOKEN", "").strip():
                 raise HTTPException(
