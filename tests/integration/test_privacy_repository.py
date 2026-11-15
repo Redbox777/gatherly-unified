@@ -1,5 +1,6 @@
 from app.infrastructure.database.connection import connect, migrate
 from app.infrastructure.database.privacy_repository import PrivacyRepository
+from app.infrastructure.database.erasure_ledger import AccountErasureLedger
 
 
 NOW = "2026-11-15T00:00:00Z"
@@ -102,7 +103,8 @@ def test_account_erasure_anonymizes_shared_participant_finance_records(tmp_path)
         connection.commit()
 
         deleted = PrivacyRepository(connection).delete_user_account(
-            user_id="deleting-user"
+            user_id="deleting-user",
+            erasure_ledger=AccountErasureLedger(tmp_path / "erasure-ledger", b"e" * 32),
         )
 
         assert deleted is True
