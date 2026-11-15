@@ -2,6 +2,8 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from threading import Barrier
 
+import pytest
+
 from app.infrastructure.database.connection import connect, migrate
 from app.infrastructure.database.notification_worker_leases_repository import (
     NotificationWorkerLeaseRepository,

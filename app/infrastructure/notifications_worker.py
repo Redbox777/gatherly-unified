@@ -3,6 +3,7 @@
 from datetime import UTC, datetime, timedelta
 import logging
 import os
+from uuid import uuid4
 
 from app.infrastructure.database.bug_report_retention import load_bug_report_retention_days
 from app.infrastructure.database.bug_reports_repository import BugReportsRepository
@@ -19,7 +20,6 @@ from app.infrastructure.database.smtp_rate_limits_repository import SmtpRateLimi
 from app.infrastructure.email.smtp_email_sender import SmtpEmailSender
 from app.infrastructure.observability import configure_application_logging
 from app.infrastructure.telegram_bot_sender import TelegramBotSender
-from uuid import uuid4
 from app.infrastructure.web_push_sender import WebPushDeliveryError, WebPushSender
 from app.interfaces.web.runtime_config import validate_runtime_configuration
 
@@ -89,6 +89,8 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
         rate_limits = SmtpRateLimitsRepository(connection)
         created = repository.materialize_due_reminders(now=now)
         sent = 0
+        telegram_sent = 0
+        push_sent = 0
         if os.environ.get("SMTP_HOST") and os.environ.get("SMTP_SENDER"):
             sender = SmtpEmailSender(
                 host=os.environ.get("SMTP_HOST", "localhost"),
@@ -139,7 +141,6 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                     )
                     sent += 1
 
-        telegram_sent = 0
         telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
         if telegram_token:
             telegram_sender = TelegramBotSender(
@@ -176,7 +177,6 @@ def run_once(database_path: str | None = None) -> tuple[int, int, int, int]:
                         notification_id=message["id"], now=datetime.now(UTC)
                     )
                     telegram_sent += 1
-        push_sent = 0
         push_settings = (
             os.environ.get("WEB_PUSH_VAPID_PRIVATE_KEY", "").strip(),
             os.environ.get("WEB_PUSH_VAPID_SUBJECT", "").strip(),

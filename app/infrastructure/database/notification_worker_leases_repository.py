@@ -20,8 +20,12 @@ class NotificationWorkerLeaseRepository:
         now: datetime,
         lease_duration: timedelta,
     ) -> bool:
-        self._validate(worker_name=worker_name, owner_token=owner_token, now=now,
-                       lease_duration=lease_duration)
+        self._validate(
+            worker_name=worker_name,
+            owner_token=owner_token,
+            now=now,
+            lease_duration=lease_duration,
+        )
         timestamp = self._format(now)
         expires_at = self._format(now + lease_duration)
         with transaction(self._connection):
@@ -46,8 +50,12 @@ class NotificationWorkerLeaseRepository:
         now: datetime,
         lease_duration: timedelta,
     ) -> bool:
-        self._validate(worker_name=worker_name, owner_token=owner_token, now=now,
-                       lease_duration=lease_duration)
+        self._validate(
+            worker_name=worker_name,
+            owner_token=owner_token,
+            now=now,
+            lease_duration=lease_duration,
+        )
         timestamp = self._format(now)
         with transaction(self._connection):
             cursor = self._connection.execute(
