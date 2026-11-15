@@ -22,7 +22,12 @@ def database(tmp_path):
     now = datetime.now(UTC).isoformat()
     connection.execute("INSERT INTO users(id, created_at) VALUES ('owner', ?)", (now,))
     connection.execute("INSERT INTO users(id, created_at) VALUES ('guest', ?)", (now,))
-    sessions = (("owner", "owner-session-token"), ("guest", "guest-session-token"))
+    connection.execute("INSERT INTO users(id, created_at) VALUES ('intruder', ?)", (now,))
+    sessions = (
+        ("owner", "owner-session-token"),
+        ("guest", "guest-session-token"),
+        ("intruder", "intruder-session-token"),
+    )
     for user_id, raw_token in sessions:
         connection.execute(
             "INSERT INTO auth_sessions(id, user_id, token_hash, created_at, expires_at) "
