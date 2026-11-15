@@ -142,11 +142,6 @@ def create_event_tools_router(
             payload.due_at.tzinfo is None or payload.due_at.utcoffset() is None
         ):
             raise HTTPException(status_code=422, detail="Task due date must include a timezone")
-        existing = deps.event_tasks.get_for_owner(
-            task_id=str(task_id), event_id=str(event_id), owner_id=owner_id
-        )
-        if existing is None:
-            raise HTTPException(status_code=404, detail="Task not found")
         try:
             task = deps.event_tasks.update(
                 task_id=str(task_id), event_id=str(event_id), owner_id=owner_id,
@@ -156,7 +151,6 @@ def create_event_tools_router(
                     str(payload.assignee_participant_id)
                     if payload.assignee_participant_id else None
                 ),
-                completed=bool(existing["completed"]),
             )
         except ValueError as error:
             raise HTTPException(status_code=422, detail="Invalid task data") from error
