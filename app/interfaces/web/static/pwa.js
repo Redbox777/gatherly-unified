@@ -7,7 +7,7 @@
     connectionStatus.hidden = navigator.onLine;
     connectionStatus.textContent = navigator.onLine
       ? ""
-      : "Нет подключения к интернету. Доступны оболочка и ранее сохранённые данные встреч, если включено локальное хранение. Новые изменения не синхронизируются.";
+      : "Нет подключения. Ранее сохранённые данные доступны локально; поддерживаемые заметки, задачи и место встречи можно поставить в очередь при включённом локальном хранении.";
   };
 
   const offlineSetting = document.getElementById("offline-storage-enabled");
@@ -19,13 +19,30 @@
       offlineSetting.disabled = true;
       if (offlineSettingStatus) offlineSettingStatus.textContent = "Сохраняем настройку…";
       try {
-        await offlineStore.setEnabled(offlineSetting.checked);
+        let discardPending = false;
+        if (!offlineSetting.checked && offlineStore.getUser()) {
+          const queued = await offlineStore.listOutbox();
+          const pending = queued.filter(item => item.state !== "done");
+          if (pending.length) {
+            discardPending = window.confirm(
+              "В очереди есть " + pending.length + " несинхронизированных изменений. " +
+              "Если выключить локальное хранение, они будут безвозвратно удалены. Продолжить?"
+            );
+            if (!discardPending) {
+              offlineSetting.checked = true;
+              if (offlineSettingStatus) offlineSettingStatus.textContent = "Настройка не изменена. Очередь сохранена.";
+              return;
+            }
+          }
+        }
+        await offlineStore.setEnabled(offlineSetting.checked, { discardPending });
         if (offlineSettingStatus) offlineSettingStatus.textContent = offlineSetting.checked
-          ? "Локальное хранение включено. Данные начнут сохраняться после следующего обновления встреч."
-          : "Локальное хранение выключено, локальные копии текущего аккаунта очищены.";
+          ? "Локальное хранение включено. Поддерживаемые изменения можно сохранить без сети и отправить вручную."
+          : "Локальное хранение выключено, локальные копии и очередь текущего аккаунта очищены.";
+        window.GatherlyOfflineSync?.refresh();
       } catch (_) {
-        offlineSetting.checked = false;
-        if (offlineSettingStatus) offlineSettingStatus.textContent = "Не удалось изменить настройку. Попробуйте ещё раз.";
+        offlineSetting.checked = offlineStore.isEnabled();
+        if (offlineSettingStatus) offlineSettingStatus.textContent = "Не удалось изменить настройку. Очередь не удалена.";
       } finally { offlineSetting.disabled = false; }
     });
   }

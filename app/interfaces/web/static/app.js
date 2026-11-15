@@ -136,6 +136,8 @@
     document.getElementById("detail-created").textContent = formatDate(event.created_at)
       ? "Создано " + formatDate(event.created_at) : "";
     if (!dialog.open) dialog.showModal();
+    try { await api("/events/" + encodeURIComponent(event.id) + "/sync-state"); } catch (_) {}
+    window.GatherlyOfflineSync?.refresh();
     participantStatus.textContent = "";
     participantsCount.textContent = "Загрузка…";
     participantsList.replaceChildren();
@@ -391,6 +393,7 @@
         const rememberedUserId = offlineStore?.getRememberedUser();
         if (!rememberedUserId) throw networkError;
         await offlineStore.setUser(rememberedUserId);
+        window.GatherlyOfflineSync?.refresh();
       }
       if (session) {
         if (session.status === 401) {
@@ -403,6 +406,7 @@
           throw new Error("Не удалось подтвердить аккаунт. Обновите страницу.");
         }
         await offlineStore?.setUser(identity.user_id);
+        window.GatherlyOfflineSync?.refresh();
       }
       const list = await api("/events");
       if (!Array.isArray(list)) throw new Error("Сервер вернул неожиданный ответ.");
@@ -498,6 +502,7 @@
     try {
       await api("/auth/logout", {method:"POST",body:"{}"});
       try { await offlineStore?.clearCurrentUser(); } catch (_) {}
+      window.GatherlyOfflineSync?.refresh();
       window.location.replace("/auth.html");
     } catch (_) {
       logout.disabled = false;
