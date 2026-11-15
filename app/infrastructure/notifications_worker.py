@@ -1,9 +1,11 @@
 """One-shot notification worker; schedule this command with cron or a platform scheduler."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import logging
 import os
 
+from app.infrastructure.database.bug_report_retention import load_bug_report_retention_days
+from app.infrastructure.database.bug_reports_repository import BugReportsRepository
 from app.infrastructure.database.connection import connect, migrate
 from app.infrastructure.database.notifications_repository import NotificationsRepository
 from app.infrastructure.database.smtp_rate_limits_repository import SmtpRateLimitsRepository
@@ -16,17 +18,31 @@ logger = logging.getLogger(__name__)
 
 
 def run_once(database_path: str | None = None) -> tuple[int, int]:
-    """Materialize due reminders and attempt pending email deliveries."""
+    """Materialize reminders, expire old diagnostics, and attempt pending email delivery."""
     validate_runtime_configuration(os.environ)
+    retention_days = load_bug_report_retention_days(os.environ)
     path = database_path or os.environ.get(
         "GATHERLY_DATABASE_PATH", "var/gatherly.sqlite3"
     )
     connection = connect(path)
     try:
         migrate(connection)
+        now = datetime.now(UTC)
+        deleted_reports = BugReportsRepository(connection).delete_older_than(
+            created_before=now - timedelta(days=retention_days)
+        )
+        if deleted_reports:
+            logger.info(
+                "Expired diagnostic reports deleted",
+                extra={
+                    "event": "diagnostics.retention.completed",
+                    "component": "notifications_worker",
+                    "deleted_reports": deleted_reports,
+                    "retention_days": retention_days,
+                },
+            )
         repository = NotificationsRepository(connection)
         rate_limits = SmtpRateLimitsRepository(connection)
-        now = datetime.now(UTC)
         created = repository.materialize_due_reminders(now=now)
         if not os.environ.get("SMTP_HOST") or not os.environ.get("SMTP_SENDER"):
             return created, 0
