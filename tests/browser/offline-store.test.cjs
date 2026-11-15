@@ -36,6 +36,12 @@ test("IndexedDB outbox is durable, account-scoped and protected from accidental 
     payload: { content: "Draft", visibility: "private" },
     createdAt: 1000
   });
+  const concurrent = await Promise.all([
+    store.enqueue({ eventId, baseRevision: 20, kind: "note.create", payload: { content: "Tab A" }, createdAt: 4000 }),
+    store.enqueue({ eventId, baseRevision: 20, kind: "note.create", payload: { content: "Tab B" }, createdAt: 4000 })
+  ]);
+  assert.deepEqual(concurrent.map(item => item.baseRevision).sort((a, b) => a - b), [20, 21]);
+  await Promise.all(concurrent.map(item => store.removeOutboxItem(item.operationId)));
   assert.match(first.operationId, /^[0-9a-f-]{36}$/i);
   assert.equal(first.state, "pending");
   assert.equal((await store.listOutbox()).length, 1);
