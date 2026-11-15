@@ -36,6 +36,12 @@ test("IndexedDB outbox is durable, account-scoped and protected from accidental 
     payload: { content: "Draft", visibility: "private" },
     createdAt: 1000
   });
+  const concurrent = await Promise.all([
+    store.enqueue({ eventId, baseRevision: 20, kind: "note.create", payload: { content: "Tab A" }, createdAt: 4000 }),
+    store.enqueue({ eventId, baseRevision: 20, kind: "note.create", payload: { content: "Tab B" }, createdAt: 4000 })
+  ]);
+  assert.deepEqual(concurrent.map(item => item.baseRevision).sort((a, b) => a - b), [20, 21]);
+  await Promise.all(concurrent.map(item => store.removeOutboxItem(item.operationId)));
   assert.match(first.operationId, /^[0-9a-f-]{36}$/i);
   assert.equal(first.state, "pending");
   assert.equal((await store.listOutbox()).length, 1);
@@ -52,12 +58,17 @@ test("IndexedDB outbox is durable, account-scoped and protected from accidental 
     eventId, baseRevision: 5, kind: "task.create", payload: { title: "Task" }, createdAt: 2000
   });
   assert.equal(task.payload.title, "Task");
+  const datedTask = await store.enqueue({
+    eventId, baseRevision: 6, kind: "task.create",
+    payload: { title: "Dated task", due_at: "2026-11-15T10:00:00+03:00" }, createdAt: 2000
+  });
+  assert.equal(datedTask.payload.due_at, "2026-11-15T10:00:00+03:00");
 
   await store.setUser(null);
   await store.setUser(userB);
   assert.equal((await store.listOutbox()).length, 0);
   await store.setUser(userA);
-  assert.equal((await store.listOutbox()).length, 2);
+  assert.equal((await store.listOutbox()).length, 3);
 
   assert.equal(await store.acquireLease(eventId, ownerOne), true);
   assert.equal(await store.acquireLease(eventId, ownerTwo), false);
@@ -72,9 +83,13 @@ test("IndexedDB outbox is durable, account-scoped and protected from accidental 
   assert.equal(recovered.attempts, 1);
 
   const next = (await store.listOutbox()).find(item => item.operationId === task.operationId);
-  await store.rebasePendingEvent(eventId, first.createdAt, 12);
+  const nextAfter = (await store.listOutbox()).find(item => item.operationId === datedTask.operationId);
+  await store.removeOutboxItem(first.operationId);
+  await store.rebasePendingEvent(eventId, 12);
   const rebased = (await store.listOutbox()).find(item => item.operationId === next.operationId);
+  const rebasedAfter = (await store.listOutbox()).find(item => item.operationId === nextAfter.operationId);
   assert.equal(rebased.baseRevision, 12);
+  assert.equal(rebasedAfter.baseRevision, 13);
 
   await assert.rejects(store.setEnabled(false), /несинхронизированные изменения/);
   await store.setEnabled(false, { discardPending: true });

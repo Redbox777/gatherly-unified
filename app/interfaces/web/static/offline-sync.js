@@ -99,17 +99,17 @@
     const name = "gatherly-offline-sync:" + eventId;
     if (navigator.locks?.request) {
       return navigator.locks.request(name, { mode: "exclusive", ifAvailable: true }, lock =>
-        lock ? callback() : false
+        lock ? callback() : "locked"
       );
     }
-    if (!await store.acquireLease(eventId, ownerId)) return false;
+    if (!await store.acquireLease(eventId, ownerId)) return "locked";
     try { return await callback(); }
     finally { await store.releaseLease(eventId, ownerId); }
   };
   const sendEventQueue = async (eventId, expectedUserId) => withEventLock(eventId, async () => {
     let items = (await store.listOutbox())
       .filter(item => item.eventId === eventId)
-      .sort((a, b) => a.createdAt - b.createdAt);
+      .sort((a, b) => a.baseRevision - b.baseRevision || a.createdAt - b.createdAt);
     for (const item of items) {
       if (store.getUser() !== expectedUserId || !await verifySession(expectedUserId)) {
         setStatus("Синхронизация приостановлена: активный аккаунт изменился или не подтверждён.");
@@ -125,6 +125,7 @@
       if (!navigator.locks?.request && !await store.acquireLease(eventId, ownerId)) return false;
 
       let completed = false;
+      let pauseReason = null;
       for (let attempt = 0; attempt < 3 && !completed; attempt += 1) {
         await store.updateOutboxState(item.operationId, "sending");
         await render();
@@ -184,6 +185,7 @@
             serverRevision: body.current_revision
           });
           setStatus("Есть конфликт версии. Последующие изменения этой встречи приостановлены.");
+          pauseReason = "conflict";
           break;
         }
         if (response.status === 429) {
@@ -199,6 +201,7 @@
             retryAt
           });
           setStatus("Сервер попросил подождать перед следующей синхронизацией.");
+          pauseReason = "rate";
           break;
         }
         if (response.status >= 500) {
@@ -217,10 +220,11 @@
         } catch (_) {}
         await store.updateOutboxState(item.operationId, "blocked", { error: detail });
         setStatus("Одно изменение заблокировано. Проверьте очередь перед продолжением.");
+        pauseReason = "blocked";
         break;
       }
       const current = (await store.listOutbox()).find(value => value.operationId === item.operationId);
-      if (current) break;
+      if (current) return pauseReason || "retry";
       items = items.filter(value => value.operationId !== item.operationId);
     }
     return true;
@@ -241,11 +245,23 @@
       await store.recoverSending();
       const items = await store.listOutbox();
       const eventIds = [...new Set(items.map(item => item.eventId))];
+      let authenticationPaused = false;
+      let partial = false;
       for (const eventId of eventIds) {
         const result = await sendEventQueue(eventId, expectedUserId);
-        if (result === "auth") break;
+        if (result === "auth") {
+          authenticationPaused = true;
+          break;
+        }
+        if (typeof result === "string") partial = true;
       }
-      setStatus("Проверка очереди завершена.");
+      if (authenticationPaused) {
+        setStatus("Синхронизация приостановлена: требуется вход в исходный аккаунт.");
+      } else if (partial) {
+        setStatus("Синхронизация завершена частично. Проверьте отложенные, конфликтные или заблокированные изменения.");
+      } else {
+        setStatus("Проверка очереди завершена.");
+      }
     } catch (_) {
       setStatus("Не удалось завершить синхронизацию. Очередь сохранена.");
     } finally {
@@ -260,7 +276,7 @@
       if (navigator.onLine) {
         try {
           const revision = await fetchRevision(item.eventId);
-          await store.rebasePendingEvent(item.eventId, item.createdAt, revision);
+          await store.rebasePendingEvent(item.eventId, revision);
         } catch (_) {}
       }
       setStatus("Локальное изменение удалено.");
@@ -276,12 +292,13 @@
       const replacement = await store.enqueue({
         eventId: item.eventId,
         baseRevision: revision,
+        forceBaseRevision: true,
         kind: item.kind,
         payload: item.payload,
         createdAt: item.createdAt - 0.5
       });
       await store.removeOutboxItem(item.operationId);
-      await store.rebasePendingEvent(item.eventId, item.createdAt, revision + 1, replacement.operationId);
+      await store.rebasePendingEvent(item.eventId, revision + 1, replacement.operationId);
       setStatus("Создана новая операция. Проверьте её перед синхронизацией.");
       await render();
     } catch (error) { setStatus(error.message || "Не удалось повторно применить изменение."); }
@@ -290,6 +307,6 @@
   if (syncButton) syncButton.addEventListener("click", syncNow);
   window.addEventListener("online", render);
   window.addEventListener("offline", render);
-  window.GatherlyOfflineSync = { refresh: render, syncNow };
+  window.GatherlyOfflineSync = { refresh: render, syncNow, reapplyItem, discardItem };
   render();
 })();

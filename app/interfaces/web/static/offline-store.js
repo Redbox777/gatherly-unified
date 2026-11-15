@@ -122,7 +122,7 @@
       }
       if (payload.due_at !== undefined && payload.due_at !== null) {
         if (typeof payload.due_at !== "string" || !Number.isFinite(Date.parse(payload.due_at)) ||
-            !/(Z|[+-]\\d{2}:?\\d{2})$/i.test(payload.due_at)) {
+            !/(Z|[+-]\d{2}:?\d{2})$/i.test(payload.due_at)) {
           throw new Error("Срок задачи должен содержать дату, время и часовой пояс.");
         }
       }
@@ -282,7 +282,21 @@
       };
       const db = await openDatabase();
       const tx = db.transaction("outbox", "readwrite");
-      tx.objectStore("outbox").add(record);
+      const outbox = tx.objectStore("outbox");
+      const existingRequest = outbox.index("by-user-event-created").getAll(
+        IDBKeyRange.bound([userId, command.eventId, 0], [userId, command.eventId, Number.MAX_SAFE_INTEGER])
+      );
+      existingRequest.onsuccess = () => {
+        const existing = existingRequest.result || [];
+        const nextRevision = command.forceBaseRevision === true
+          ? command.baseRevision
+          : existing.reduce(
+            (revision, item) => Math.max(revision, item.baseRevision + 1),
+            command.baseRevision
+          );
+        record.baseRevision = nextRevision;
+        outbox.add(record);
+      };
       await transactionDone(tx);
       return { ...record };
     },
@@ -377,7 +391,7 @@
       tx.objectStore("outbox").delete([userId, operationId]);
       await transactionDone(tx);
     },
-    async rebasePendingEvent(eventId, afterCreatedAt, startingRevision, skipOperationId) {
+    async rebasePendingEvent(eventId, startingRevision, skipOperationId) {
       const userId = requireActive();
       if (!isUuid(eventId) || !Number.isSafeInteger(startingRevision) || startingRevision < 1) return false;
       const db = await openDatabase();
@@ -385,14 +399,14 @@
       const done = transactionDone(tx);
       const store = tx.objectStore("outbox");
       const request = store.index("by-user-event-created").getAll(
-        IDBKeyRange.bound([userId, eventId, afterCreatedAt], [userId, eventId, Number.MAX_SAFE_INTEGER], true, false)
+        IDBKeyRange.bound([userId, eventId, 0], [userId, eventId, Number.MAX_SAFE_INTEGER])
       );
       request.onsuccess = () => {
-        const later = (request.result || [])
+        const pending = (request.result || [])
           .filter(item => item.operationId !== skipOperationId && item.state === "pending")
-          .sort((a, b) => a.createdAt - b.createdAt);
+          .sort((a, b) => a.baseRevision - b.baseRevision || a.createdAt - b.createdAt);
         let revision = startingRevision;
-        for (const item of later) {
+        for (const item of pending) {
           item.baseRevision = revision;
           item.updatedAt = Date.now();
           delete item.retryAt;

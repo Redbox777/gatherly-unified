@@ -94,4 +94,39 @@ test("foreground sender applies in order and pauses only a conflicted event", as
   assert.equal(remaining.find(item => item.operationId === later.operationId).state, "pending");
   assert.equal(await store.getEventRevision(eventOne), 2);
   assert.equal(await store.getEventRevision(eventTwo), 4);
+  assert.match(elements.get("offline-sync-status").textContent, /завершена частично/i);
+});
+
+
+test("reapplying a conflicted command uses the current server revision before rebasing later commands", async () => {
+  const conflict = (await store.listOutbox()).find(item => item.eventId === eventTwo && item.state === "conflict");
+  const later = (await store.listOutbox()).find(item => item.eventId === eventTwo && item.state === "pending");
+  assert.ok(conflict);
+  assert.ok(later);
+  global.fetch = async url => {
+    if (url === "/auth/me") {
+      return new Response(JSON.stringify({ user_id: "sender-account" }), { status: 200 });
+    }
+    if (url === "/events/" + eventTwo + "/sync-state") {
+      return new Response(JSON.stringify({ event_id: eventTwo, revision: 4 }), {
+        status: 200, headers: { "Content-Type": "application/json" }
+      });
+    }
+    throw new Error("Unexpected fetch URL: " + url);
+  };
+  const previousConfirm = global.window.confirm;
+  global.window.confirm = () => true;
+  try {
+    await global.GatherlyOfflineSync.reapplyItem(conflict);
+  } finally {
+    global.window.confirm = previousConfirm;
+  }
+  const remaining = (await store.listOutbox()).filter(item => item.eventId === eventTwo);
+  const replacement = remaining.find(item => item.operationId !== later.operationId);
+  const rebasedLater = remaining.find(item => item.operationId === later.operationId);
+  assert.ok(replacement);
+  assert.notEqual(replacement.operationId, conflict.operationId);
+  assert.equal(replacement.baseRevision, 4);
+  assert.equal(rebasedLater.baseRevision, 5);
+  assert.equal(replacement.state, "pending");
 });
