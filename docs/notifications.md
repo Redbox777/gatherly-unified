@@ -1,8 +1,8 @@
 # Notification delivery
 
-Gatherly stores notification inbox items in SQLite. The first delivery adapter is
-email; Telegram and browser push can be added as adapters without changing the
-notification records or event-level preferences.
+Gatherly stores notification inbox items in SQLite. Email and opt-in Telegram
+delivery use the same notification records; browser push can be added as another
+adapter without changing event-level notification generation.
 
 ## Event reminders
 
@@ -37,6 +37,30 @@ after the SMTP server accepts a message but before SQLite records success can ca
 a duplicate on the next run; SMTP does not provide an idempotency key, so delivery
 is at-least-once rather than mathematically exactly-once.
 
+## Telegram delivery
+
+Set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, and optionally
+`TELEGRAM_TIMEOUT` in the worker and web process environments. Keep the bot token
+in the secret manager; never commit it or log the Bot API URL. Configure the bot
+username so the settings panel can link to the correct bot.
+
+A user must have a verified Telegram identity on the current Gatherly account,
+open the configured bot, press **Start**, and explicitly enable Telegram in
+notification settings. Telegram is disabled by default. The API rejects enabling
+the channel if the account has no verified Telegram identity or the server has
+no bot token. The worker processes at most 20 Telegram messages per run and retries
+failures up to five attempts, recording only the exception type. Telegram may
+reject messages if the user has not started the bot, blocked it, or changed access.
+
+Telegram login identities and email identities are still separate accounts at
+this stage. An email-only account cannot receive Telegram notifications until
+cross-provider account linking is implemented. Do not auto-link accounts by email
+or display name.
+
+As with email, a process crash after Telegram accepts a message but before the
+worker marks it sent can produce a duplicate. The delivery guarantee is
+at-least-once, not exactly-once.
+
 ## Notification preferences
 
 Users can disable email delivery, event-change notices, participant-added notices,
@@ -49,8 +73,8 @@ adapter rather than duplicating notification generation logic.
 The inbox API is authenticated and user-scoped. Event owners configure reminders.
 Event changes and newly added participant records notify already-linked members
 who have that notification type enabled. Guest participants without an account
-continue to receive the existing invitation email flow. Telegram chat linking and
-Web Push subscription management are separate follow-up stages.
+continue to receive the existing invitation email flow. Cross-provider account
+linking and Web Push subscription management are separate follow-up stages.
 
 
 ## Production worker configuration
