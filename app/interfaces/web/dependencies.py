@@ -24,6 +24,7 @@ from app.infrastructure.database.event_expense_splits_repository import EventExp
 from app.infrastructure.database.event_finance_repository import EventFinanceRepository
 from app.infrastructure.database.event_venues_repository import EventVenuesRepository
 from app.infrastructure.database.notes_repository import NotesRepository
+from app.infrastructure.database.offline_sync_repository import OfflineSyncRepository
 from app.infrastructure.database.notifications_repository import NotificationsRepository
 from app.infrastructure.database.participant_invitations_repository import (
     ParticipantInvitationsRepository,
@@ -92,6 +93,7 @@ class Dependencies:
         self.email_sender = (email_sender_factory or _email_sender)()
         self.notifications = NotificationsRepository(connection)
         self.notes = NotesRepository(connection)
+        self.offline_sync = OfflineSyncRepository(connection)
         self.event_tasks = EventTasksRepository(connection)
         self.event_venues = EventVenuesRepository(connection)
         self.event_expenses = EventExpensesRepository(connection)
