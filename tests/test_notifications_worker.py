@@ -485,6 +485,7 @@ def test_worker_stops_delivery_when_lease_is_lost(
     FakeNotificationsRepository.messages = [
         {"id": "one", "email": "one@example.test", "title": "Reminder", "body": "Body"},
     ]
+    FakeRateLimitsRepository.retry_values = [None]
     FakeWorkerLeaseRepository.renew_result = False
 
     assert worker.run_once("worker.sqlite3") == (2, 0, 0, 0)
