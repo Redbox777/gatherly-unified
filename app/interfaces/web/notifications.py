@@ -98,7 +98,13 @@ def create_notifications_router(
                         "Telegram notifications"
                     ),
                 )
-            if not os.environ.get("TELEGRAM_BOT_TOKEN", "").strip():
+            current_preferences = deps.notifications.get_preferences(user_id=user_id)
+            username = os.environ.get("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+            valid_username = bool(re.fullmatch(r"[A-Za-z0-9_]{5,32}", username))
+            if not current_preferences["telegram_enabled"] and (
+                not os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+                or not valid_username
+            ):
                 raise HTTPException(
                     status_code=503,
                     detail="Telegram delivery is not configured on this server",
