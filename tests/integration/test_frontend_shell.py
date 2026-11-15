@@ -11,6 +11,7 @@ def test_frontend_homepage_is_served_with_security_headers(tmp_path) -> None:
     assert response.status_code == 200
     assert 'lang="ru"' in response.text
     assert "Рады видеть вас" in response.text
+    assert 'rel="manifest"' in response.text
     assert 'id="balances-list"' in response.text
     assert 'id="settlement-form"' in response.text
     assert 'id="meeting-grid"' in response.text
@@ -26,6 +27,11 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
         notifications = client.get("/notifications-ui.js")
         finance = client.get("/finance-ui.js")
         mark = client.get("/magpie.svg")
+        manifest = client.get("/manifest.webmanifest")
+        service_worker = client.get("/service-worker.js")
+        pwa_script = client.get("/pwa.js")
+        offline = client.get("/offline.html")
+        pwa_icon = client.get("/icon.svg")
 
     assert stylesheet.status_code == 200
     assert "grid-template-columns:1fr" in stylesheet.text
@@ -47,3 +53,17 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     assert ".split-participant" in stylesheet.text
     assert mark.status_code == 200
     assert "<svg" in mark.text
+    assert manifest.status_code == 200
+    assert manifest.headers["content-type"].startswith("application/manifest+json")
+    assert manifest.json()["display"] == "standalone"
+    assert manifest.json()["start_url"] == "/"
+    assert service_worker.status_code == 200
+    assert "gatherly-shell-v1" in service_worker.text
+    assert "application/json" in service_worker.text
+    assert pwa_script.status_code == 200
+    assert "serviceWorker.register" in pwa_script.text
+    assert offline.status_code == 200
+    assert "Нет подключения" in offline.text
+    assert "onclick=" not in offline.text
+    assert pwa_icon.status_code == 200
+    assert "<svg" in pwa_icon.text
