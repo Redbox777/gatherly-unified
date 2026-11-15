@@ -486,6 +486,15 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON notifications(telegram_sent_at, telegram_attempts, created_at);
         """,
     ),
+    (
+        20,
+        """
+        ALTER TABLE notification_preferences
+        ADD COLUMN telegram_consent_at TEXT NULL;
+        ALTER TABLE notification_preferences
+        ADD COLUMN telegram_consent_version TEXT NULL;
+        """,
+    ),
 )
 
 
