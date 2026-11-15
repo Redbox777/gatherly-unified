@@ -97,9 +97,9 @@ Suggested states:
 
 Do not delete an operation merely because a fetch timed out. The server may already have committed it; retry the same ID and payload to obtain the stored result.
 
-On logout, lock the outbox and do not display or send it. Preserve pending operations for the same user so an accidental logout does not silently destroy unsent work; resume only after a fresh `/auth/me` response proves the same user ID. On account switch, keep namespaces inaccessible to the new user. Account deletion and explicit “discard pending changes” must purge the matching outbox. If local storage is disabled while pending commands exist, require an explicit discard confirmation rather than silently deleting them.
+On logout, the current page clears the active user and hides the queue while preserving outbox rows for later re-authentication. The sender requires a fresh `/auth/me` response for the same user before sending. On account switch, outbox namespaces remain scoped to their original user. The store exposes `purgeCurrentUser()`, but automatic invocation from an account-deletion flow is not yet verified; treat that integration as a rollout prerequisite. Disabling local storage with pending commands requires an explicit discard confirmation.
 
-Because IndexedDB is not application-encrypted, the UI must disclose that queued drafts remain on the device until synchronized or explicitly discarded. No queue contents are exposed to another authenticated account.
+Because IndexedDB is not application-encrypted, queued drafts remain on the device until synchronized or explicitly discarded. The current panel shows abbreviated note/task summaries. A dedicated privacy disclosure and a review of shared-device exposure are still required before broad rollout. Account scoping in application code is not cryptographic isolation from another person with access to the same browser profile.
 
 ## Delivery, ordering, and retry
 
@@ -132,7 +132,7 @@ Because IndexedDB is not application-encrypted, the UI must disclose that queued
 
 ## Implementation sequence
 
-1. **S6.3a — server foundation: complete.** Migration 24 adds per-event revisions and a user-scoped idempotency ledger. The authenticated `/offline-sync/commands` endpoint validates the live session inside the same `BEGIN IMMEDIATE` transaction as authorization, revision check, domain mutation and replay receipt. The endpoint is not called by the PWA.
+1. **S6.3a — server foundation: complete.** Migration 24 adds per-event revisions and a user-scoped idempotency ledger. The authenticated `/offline-sync/commands` endpoint validates the live session inside the same `BEGIN IMMEDIATE` transaction as authorization, revision check, domain mutation and replay receipt. The foreground sender calls this endpoint only after the user presses the explicit sync button.
 2. **S6.3b — online-path consistency:** ensure every existing relevant mutation increments the same event revision; add endpoint and concurrency tests.
 3. **S6.3c — client outbox: merged.** IndexedDB outbox, strict command allowlist, account lock/unlock, revision cache and explicit discard safeguards.
 4. **S6.3d — foreground sync: merged.** Authenticated ordered sender, bounded retries, Retry-After handling, event-level conflict pause, explicit reapply/discard controls and queue status.
