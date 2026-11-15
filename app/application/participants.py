@@ -23,12 +23,13 @@ class ParticipantsService:
     def add_participant(
         self, *, event_id: UUID, owner_id: str, display_name: str
     ) -> EventParticipant:
-        self._events.get_event(event_id=event_id, owner_id=owner_id)
         participant = EventParticipant.create(
             event_id=event_id, display_name=display_name
         )
         try:
             with transaction(self._repository.connection):
+                # Keep authorization and the write under the same SQLite lock.
+                self._events.get_event(event_id=event_id, owner_id=owner_id)
                 self._repository.add(participant)
         except sqlite3.IntegrityError as exc:
             if (
@@ -45,8 +46,9 @@ class ParticipantsService:
     def remove_participant(
         self, *, event_id: UUID, owner_id: str, participant_id: UUID
     ) -> None:
-        self._events.get_event(event_id=event_id, owner_id=owner_id)
         with transaction(self._repository.connection):
+            # Do not authorize against an event snapshot read before the write lock.
+            self._events.get_event(event_id=event_id, owner_id=owner_id)
             removed = self._repository.delete_for_event(
                 participant_id=participant_id, event_id=event_id
             )
