@@ -109,7 +109,7 @@
   const sendEventQueue = async (eventId, expectedUserId) => withEventLock(eventId, async () => {
     let items = (await store.listOutbox())
       .filter(item => item.eventId === eventId)
-      .sort((a, b) => a.createdAt - b.createdAt);
+      .sort((a, b) => a.baseRevision - b.baseRevision || a.createdAt - b.createdAt);
     for (const item of items) {
       if (store.getUser() !== expectedUserId || !await verifySession(expectedUserId)) {
         setStatus("Синхронизация приостановлена: активный аккаунт изменился или не подтверждён.");
@@ -276,7 +276,7 @@
       if (navigator.onLine) {
         try {
           const revision = await fetchRevision(item.eventId);
-          await store.rebasePendingEvent(item.eventId, item.createdAt, revision);
+          await store.rebasePendingEvent(item.eventId, revision);
         } catch (_) {}
       }
       setStatus("Локальное изменение удалено.");
@@ -297,7 +297,7 @@
         createdAt: item.createdAt - 0.5
       });
       await store.removeOutboxItem(item.operationId);
-      await store.rebasePendingEvent(item.eventId, item.createdAt, revision + 1, replacement.operationId);
+      await store.rebasePendingEvent(item.eventId, revision + 1, replacement.operationId);
       setStatus("Создана новая операция. Проверьте её перед синхронизацией.");
       await render();
     } catch (error) { setStatus(error.message || "Не удалось повторно применить изменение."); }
