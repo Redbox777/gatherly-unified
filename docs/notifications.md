@@ -46,9 +46,10 @@ username so the settings panel can link to the correct bot.
 
 A user must have a verified Telegram identity on the current Gatherly account,
 open the configured bot, press **Start**, and explicitly enable Telegram in
-notification settings. Telegram is disabled by default. The API rejects enabling
-the channel if the account has no verified Telegram identity or the server has
-no bot token. The worker processes at most 20 Telegram messages per run and retries
+notification settings. Telegram is disabled by default. The explicit opt-in timestamp and consent-text
+version (`telegram-v1`) are stored when enabled and cleared when the user disables
+the channel. The API rejects enabling the channel if the account has no verified
+Telegram identity or the server has no bot token. The worker processes at most 20 Telegram messages per run and retries
 failures up to five attempts, recording only the exception type. Telegram may
 reject messages if the user has not started the bot, blocked it, or changed access.
 
