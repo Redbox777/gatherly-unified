@@ -1,13 +1,35 @@
+import base64
+import hashlib
+
 import pytest
 
-from app.domain.passwords import hash_password, verify_password
+from app.domain.passwords import (
+    hash_password,
+    password_hash_needs_rehash,
+    verify_password,
+)
 
 
-def test_hash_password_verifies_original_password() -> None:
+def _legacy_scrypt_hash(password: str) -> str:
+    salt = b"legacy-salt-1234"
+    digest = hashlib.scrypt(
+        password.encode("utf-8"),
+        salt=salt,
+        n=2**14,
+        r=8,
+        p=1,
+        dklen=32,
+    )
+    encode = lambda value: base64.urlsafe_b64encode(value).decode("ascii")
+    return "scrypt$16384$8$1$" + encode(salt) + "$" + encode(digest)
+
+
+def test_hash_password_uses_argon2id_and_verifies_original_password() -> None:
     encoded = hash_password("correct horse battery staple")
 
-    assert encoded.startswith("scrypt$16384$8$1$")
+    assert encoded.startswith("$argon2id$v=19$m=19456,t=2,p=1$")
     assert verify_password("correct horse battery staple", encoded)
+    assert not password_hash_needs_rehash(encoded)
 
 
 def test_hash_password_uses_a_fresh_salt() -> None:
@@ -19,18 +41,23 @@ def test_hash_password_uses_a_fresh_salt() -> None:
     assert verify_password("same password", second)
 
 
-def test_verify_password_rejects_wrong_password() -> None:
-    encoded = hash_password("correct password")
+def test_legacy_scrypt_hash_verifies_and_requires_upgrade() -> None:
+    encoded = _legacy_scrypt_hash("legacy password")
 
-    assert not verify_password("incorrect password", encoded)
+    assert verify_password("legacy password", encoded)
+    assert password_hash_needs_rehash(encoded)
+    assert not verify_password("wrong password", encoded)
 
 
-@pytest.mark.parametrize(
-    "encoded",
-    ["", "not-a-hash", "scrypt$1$1$1$a$b", "x$16384$8$1$a$b"],
-)
-def test_verify_password_rejects_malformed_or_unsupported_hash(encoded: str) -> None:
-    assert not verify_password("some password", encoded)
+def test_verify_password_rejects_argon2_hash_with_unbounded_parameters() -> None:
+    encoded = hash_password("correct password").replace("m=19456", "m=999999")
+
+    assert not verify_password("correct password", encoded)
+
+
+def test_verify_password_rejects_malformed_or_unsupported_hash() -> None:
+    for encoded in ("", "not-a-hash", "scrypt$1$1$1$a$b", "x$16384$8$1$a$b"):
+        assert not verify_password("some password", encoded)
 
 
 def test_hash_password_rejects_empty_password() -> None:
