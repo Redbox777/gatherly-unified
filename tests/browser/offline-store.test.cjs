@@ -52,6 +52,11 @@ test("IndexedDB outbox is durable, account-scoped and protected from accidental 
     eventId, baseRevision: 5, kind: "task.create", payload: { title: "Task" }, createdAt: 2000
   });
   assert.equal(task.payload.title, "Task");
+  const datedTask = await store.enqueue({
+    eventId, baseRevision: 6, kind: "task.create",
+    payload: { title: "Dated task", due_at: "2026-11-15T10:00:00+03:00" }, createdAt: 2500
+  });
+  assert.equal(datedTask.payload.due_at, "2026-11-15T10:00:00+03:00");
 
   await store.setUser(null);
   await store.setUser(userB);
