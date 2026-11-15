@@ -218,24 +218,10 @@ def restore_database(
         _copy_database(source_path, staged_path)
         events = erasure_ledger.load_events()
         if erasure_ledger.pending_merge_intents(events):
-            if not destination_path.is_file():
-                raise ValueError(
-                    "Cannot restore while account-merge intents are unresolved and no live database is available"
-                )
-            live_connection = connect(destination_path)
-            try:
-                live_identity_owners = {
-                    str(row["id"]): str(row["user_id"])
-                    for row in live_connection.execute(
-                        "SELECT id, user_id FROM auth_identities"
-                    ).fetchall()
-                }
-            finally:
-                live_connection.close()
-            erasure_ledger.resolve_pending_merge_intents(
-                identity_owners=live_identity_owners, events=events
+            raise ValueError(
+                "Cannot restore while account-merge intents are unresolved; "
+                "start the authoritative database once to reconcile the ledger first"
             )
-            events = erasure_ledger.load_events()
         connection = connect(staged_path)
         try:
             migrate(connection)
@@ -362,7 +348,24 @@ def main() -> None:
             if not os.environ.get("GATHERLY_ERASURE_LEDGER_PATH", "").strip():
                 raise ValueError("Production backups require GATHERLY_ERASURE_LEDGER_PATH")
         if ledger is not None:
-            ledger.load_events()
+            events = ledger.load_events()
+            if ledger.pending_merge_intents(events):
+                source_connection = connect(arguments.source)
+                try:
+                    identity_owners = {
+                        str(row["id"]): str(row["user_id"])
+                        for row in source_connection.execute(
+                            "SELECT id, user_id FROM auth_identities"
+                        ).fetchall()
+                    }
+                finally:
+                    source_connection.close()
+                ledger.resolve_pending_merge_intents(
+                    identity_owners=identity_owners, events=events
+                )
+                events = ledger.load_events()
+                if ledger.pending_merge_intents(events):
+                    raise ValueError("Account-merge ledger still contains unresolved intents")
         backup_database_encrypted(
             arguments.source,
             arguments.destination,
