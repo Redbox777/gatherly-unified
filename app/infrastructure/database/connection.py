@@ -467,9 +467,28 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
         CREATE INDEX idx_bug_reports_created_at ON bug_reports(created_at DESC);
         """,
     ),
+    (
+        19,
+        """
+        ALTER TABLE notification_preferences
+        ADD COLUMN telegram_enabled INTEGER NOT NULL DEFAULT 0
+            CHECK (telegram_enabled IN (0, 1));
+
+        ALTER TABLE notifications
+        ADD COLUMN telegram_sent_at TEXT NULL;
+        ALTER TABLE notifications
+        ADD COLUMN telegram_attempts INTEGER NOT NULL DEFAULT 0
+            CHECK (telegram_attempts >= 0);
+        ALTER TABLE notifications
+        ADD COLUMN telegram_last_error TEXT NULL;
+
+        CREATE INDEX idx_notifications_telegram_pending
+            ON notifications(telegram_sent_at, telegram_attempts, created_at);
+        """,
+    ),
 )
 
- 
+
 def connect(database_path: str | Path) -> sqlite3.Connection:
     """Open an independent SQLite connection for one unit of application work.
 
