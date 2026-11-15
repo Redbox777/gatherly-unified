@@ -1,7 +1,17 @@
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
+from threading import Barrier
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
 import app.interfaces.web.http_api as http_api
-from app.infrastructure.database.connection import connect
+from app.domain.auth_tokens import hash_token
+from app.domain.participant_invitations import ParticipantInvitation
+from app.infrastructure.database.connection import connect, migrate
+from app.infrastructure.database.participant_invitations_repository import (
+    ParticipantInvitationsRepository,
+)
 from app.interfaces.web.http_api import create_app
 
 
@@ -340,3 +350,193 @@ def test_removing_participant_invalidates_its_pending_invitation(
             app, "SELECT COUNT(*) FROM participant_invitations WHERE id = ?",
             (created.json()["id"],),
         )[0][0] == 0
+
+
+def test_invitation_acceptance_requires_verified_matching_email(tmp_path) -> None:
+    database_path = tmp_path / "invitation-identity-proof.sqlite3"
+    connection = connect(database_path)
+    try:
+        migrate(connection)
+        now = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
+        for user_id, email, verified_at in (
+            ("unverified", "invitee@example.test", None),
+            ("other", "other@example.test", now.isoformat()),
+        ):
+            connection.execute(
+                "INSERT INTO users(id, created_at) VALUES (?, ?)",
+                (user_id, now.isoformat()),
+            )
+            connection.execute(
+                """INSERT INTO auth_identities(
+                    id, user_id, provider, provider_subject, password_hash,
+                    verified_at, created_at
+                ) VALUES (?, ?, 'email', ?, ?, ?, ?)""",
+                (
+                    str(uuid4()),
+                    user_id,
+                    email,
+                    "argon2id-test-hash",
+                    verified_at,
+                    now.isoformat(),
+                ),
+            )
+        event_id = uuid4()
+        participant_id = uuid4()
+        other_participant_id = uuid4()
+        connection.execute(
+            """INSERT INTO events(id, owner_id, title, starts_at, created_at)
+               VALUES (?, ?, ?, NULL, ?)""",
+            (str(event_id), "owner", "Identity proof", now.isoformat()),
+        )
+        connection.executemany(
+            """INSERT INTO event_participants(
+                id, event_id, display_name, added_at
+            ) VALUES (?, ?, ?, ?)""",
+            [
+                (str(participant_id), str(event_id), "Invitee", now.isoformat()),
+                (str(other_participant_id), str(event_id), "Other", now.isoformat()),
+            ],
+        )
+        connection.commit()
+
+        raw_token = "one-time-invitation-token"
+        invitation = ParticipantInvitation.create(
+            participant_id=participant_id,
+            target_email="Invitee@Example.Test",
+            token_hash=hash_token(raw_token),
+            created_by_owner_id="owner",
+            now=now,
+        )
+        repository = ParticipantInvitationsRepository(connection)
+        assert repository.create_for_owner(
+            invitation,
+            owner_id="owner",
+            event_id=event_id,
+            now=now,
+        )
+
+        assert not repository.accept_for_verified_user(
+            token_hash=hash_token(raw_token), user_id="unverified", now=now
+        )
+        assert not repository.accept_for_verified_user(
+            token_hash=hash_token(raw_token), user_id="other", now=now
+        )
+        other_token = "verified-other-invitation-token"
+        other_invitation = ParticipantInvitation.create(
+            participant_id=other_participant_id,
+            target_email="Other@Example.Test",
+            token_hash=hash_token(other_token),
+            created_by_owner_id="owner",
+            now=now,
+        )
+        assert repository.create_for_owner(
+            other_invitation,
+            owner_id="owner",
+            event_id=event_id,
+            now=now,
+        )
+        assert repository.accept_for_verified_user(
+            token_hash=hash_token(other_token), user_id="other", now=now
+        )
+        linked = connection.execute(
+            "SELECT linked_user_id FROM event_participants WHERE id = ?",
+            (str(other_participant_id),),
+        ).fetchone()
+        assert linked["linked_user_id"] == "other"
+        unverified_participant = connection.execute(
+            "SELECT linked_user_id FROM event_participants WHERE id = ?",
+            (str(participant_id),),
+        ).fetchone()
+        assert unverified_participant["linked_user_id"] is None
+    finally:
+        connection.close()
+
+
+def test_concurrent_invitation_replay_links_participant_exactly_once(tmp_path) -> None:
+    database_path = tmp_path / "invitation-concurrent-acceptance.sqlite3"
+    connection = connect(database_path)
+    now = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
+    event_id = uuid4()
+    participant_id = uuid4()
+    raw_token = "concurrent-one-time-invitation"
+    try:
+        migrate(connection)
+        connection.execute(
+            "INSERT INTO users(id, created_at) VALUES (?, ?)",
+            ("invitee", now.isoformat()),
+        )
+        connection.execute(
+            """INSERT INTO auth_identities(
+                id, user_id, provider, provider_subject, password_hash,
+                verified_at, created_at
+            ) VALUES (?, 'invitee', 'email', ?, ?, ?, ?)""",
+            (
+                str(uuid4()),
+                "invitee@example.test",
+                "argon2id-test-hash",
+                now.isoformat(),
+                now.isoformat(),
+            ),
+        )
+        connection.execute(
+            """INSERT INTO events(id, owner_id, title, starts_at, created_at)
+               VALUES (?, ?, ?, NULL, ?)""",
+            (str(event_id), "owner", "Concurrent acceptance", now.isoformat()),
+        )
+        connection.execute(
+            """INSERT INTO event_participants(
+                id, event_id, display_name, added_at
+            ) VALUES (?, ?, ?, ?)""",
+            (str(participant_id), str(event_id), "Invitee", now.isoformat()),
+        )
+        connection.commit()
+        invitation = ParticipantInvitation.create(
+            participant_id=participant_id,
+            target_email="invitee@example.test",
+            token_hash=hash_token(raw_token),
+            created_by_owner_id="owner",
+            now=now,
+        )
+        assert ParticipantInvitationsRepository(connection).create_for_owner(
+            invitation,
+            owner_id="owner",
+            event_id=event_id,
+            now=now,
+        )
+    finally:
+        connection.close()
+
+    barrier = Barrier(2)
+
+    def accept() -> bool:
+        worker_connection = connect(database_path)
+        try:
+            barrier.wait(timeout=5)
+            return ParticipantInvitationsRepository(
+                worker_connection
+            ).accept_for_verified_user(
+                token_hash=hash_token(raw_token),
+                user_id="invitee",
+                now=now + timedelta(seconds=1),
+            )
+        finally:
+            worker_connection.close()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: accept(), range(2)))
+
+    assert sorted(results) == [False, True]
+    verification = connect(database_path)
+    try:
+        invitation_row = verification.execute(
+            "SELECT accepted_at FROM participant_invitations WHERE id = ?",
+            (str(invitation.id),),
+        ).fetchone()
+        participant_row = verification.execute(
+            "SELECT linked_user_id FROM event_participants WHERE id = ?",
+            (str(participant_id),),
+        ).fetchone()
+        assert invitation_row["accepted_at"] is not None
+        assert participant_row["linked_user_id"] == "invitee"
+    finally:
+        verification.close()
