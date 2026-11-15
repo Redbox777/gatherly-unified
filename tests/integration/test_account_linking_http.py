@@ -110,3 +110,68 @@ def test_linking_requires_authenticated_destination_session(tmp_path, monkeypatc
         )
 
     assert response.status_code == 401
+
+
+def test_linking_email_merges_verified_account_and_rotates_session(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    bot_token = "test-telegram-bot-token"
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", bot_token)
+    database_path = tmp_path / "account-linking-email-http.sqlite3"
+    app = create_app(database_path)
+    now = datetime.now(UTC)
+
+    connection = connect(database_path)
+    try:
+        identities = AuthIdentitiesRepository(connection)
+        target = identities.create_user_with_identity(
+            provider="telegram",
+            provider_subject="123456789",
+            now=now,
+            verified_at=now,
+        )
+        source = identities.create_user_with_identity(
+            provider="email",
+            provider_subject="source@example.test",
+            password_hash=hash_password("source account secure password"),
+            now=now,
+            verified_at=now,
+        )
+    finally:
+        connection.close()
+
+    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
+        payload = telegram_login_payload(
+            bot_token=bot_token, telegram_id="123456789", now=now
+        )
+        login = client.post("/auth/telegram/login", json=payload)
+        assert login.status_code == 200
+        old_session = client.cookies.get(SESSION_COOKIE)
+        assert old_session
+
+        linked = client.post(
+            "/account/link/email",
+            json={
+                "email": "source@example.test",
+                "password": "source account secure password",
+            },
+        )
+
+        assert linked.status_code == 200
+        assert client.cookies.get(SESSION_COOKIE) != old_session
+        assert client.get("/auth/me").json() == {"user_id": target.user_id}
+
+    connection = connect(database_path)
+    try:
+        linked_identity = connection.execute(
+            """SELECT user_id FROM auth_identities
+               WHERE provider = 'email' AND provider_subject = ?""",
+            ("source@example.test",),
+        ).fetchone()
+        assert linked_identity["user_id"] == target.user_id
+        assert connection.execute(
+            "SELECT 1 FROM users WHERE id = ?", (source.user_id,)
+        ).fetchone() is None
+    finally:
+        connection.close()
