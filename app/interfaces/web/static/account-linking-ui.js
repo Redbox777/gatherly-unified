@@ -88,7 +88,6 @@
       script.dataset.telegramLogin = widgetUsername;
       script.dataset.size = "large";
       script.dataset.userpic = "false";
-      script.dataset.requestAccess = "write";
       script.dataset.lang = "ru";
       script.dataset.onauth = "window.GatherlyAccountLink.onTelegramAuth(user)";
       telegramWidget.replaceChildren(script);
