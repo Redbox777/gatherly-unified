@@ -67,6 +67,7 @@ def test_notification_preferences_default_to_enabled_and_can_be_disabled(tmp_pat
             "event_updates_enabled": True,
             "participant_added_enabled": True,
             "reminders_enabled": True,
+            "telegram_enabled": False,
         }
         result = repository.set_preferences(
             user_id="user-1",
@@ -91,5 +92,107 @@ def test_reminder_offsets_reject_unsupported_values(tmp_path) -> None:
                 offsets=[30],
                 now=datetime(2026, 11, 13, 12, 0, tzinfo=UTC),
             )
+    finally:
+        connection.close()
+
+
+
+def test_telegram_notifications_require_verified_identity_and_explicit_opt_in(
+    tmp_path,
+) -> None:
+    connection = connect(tmp_path / "telegram-notifications.sqlite3")
+    try:
+        migrate(connection)
+        now = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
+        for user_id in ("telegram-user", "email-user"):
+            connection.execute(
+                "INSERT INTO users(id, created_at) VALUES (?, ?)",
+                (user_id, now.isoformat()),
+            )
+        connection.execute(
+            """INSERT INTO auth_identities(
+                id, user_id, provider, provider_subject, password_hash,
+                verified_at, created_at
+            ) VALUES (?, ?, 'telegram', ?, NULL, ?, ?)""",
+            ("telegram-identity", "telegram-user", "123456", now.isoformat(), now.isoformat()),
+        )
+        connection.execute(
+            """INSERT INTO auth_identities(
+                id, user_id, provider, provider_subject, password_hash,
+                verified_at, created_at
+            ) VALUES (?, ?, 'email', ?, ?, ?, ?)""",
+            (
+                "email-identity",
+                "email-user",
+                "email@example.test",
+                "argon2-hash",
+                now.isoformat(),
+                now.isoformat(),
+            ),
+        )
+        connection.commit()
+        repository = NotificationsRepository(connection)
+        repository.create(
+            user_id="telegram-user",
+            event_id=None,
+            kind="event_updated",
+            title="Event changed",
+            body="The event has changed.",
+            dedupe_key="telegram-user-event-changed",
+            now=now,
+        )
+        repository.create(
+            user_id="email-user",
+            event_id=None,
+            kind="event_updated",
+            title="Event changed",
+            body="The event has changed.",
+            dedupe_key="email-user-event-changed",
+            now=now,
+        )
+
+        assert repository.has_telegram_identity(user_id="telegram-user")
+        assert not repository.has_telegram_identity(user_id="email-user")
+        assert repository.pending_telegram() == []
+
+        repository.set_preferences(
+            user_id="telegram-user",
+            values={"telegram_enabled": True},
+            now=now,
+        )
+        consent = connection.execute(
+            """SELECT telegram_enabled, telegram_consent_at,
+                      telegram_consent_version
+               FROM notification_preferences WHERE user_id = ?""",
+            ("telegram-user",),
+        ).fetchone()
+        assert consent["telegram_enabled"] == 1
+        assert consent["telegram_consent_at"] is not None
+        assert consent["telegram_consent_version"] == "telegram-v1"
+        pending = repository.pending_telegram()
+
+        assert len(pending) == 1
+        assert pending[0]["chat_id"] == "123456"
+        assert pending[0]["title"] == "Event changed"
+
+        repository.record_telegram_sent(
+            notification_id=pending[0]["id"],
+            now=now + timedelta(minutes=1),
+        )
+        assert repository.pending_telegram() == []
+        repository.set_preferences(
+            user_id="telegram-user",
+            values={"telegram_enabled": False},
+            now=now + timedelta(minutes=2),
+        )
+        revoked_consent = connection.execute(
+            """SELECT telegram_enabled, telegram_consent_at,
+                      telegram_consent_version
+               FROM notification_preferences WHERE user_id = ?""",
+            ("telegram-user",),
+        ).fetchone()
+        assert revoked_consent["telegram_enabled"] == 0
+        assert revoked_consent["telegram_consent_at"] is None
+        assert revoked_consent["telegram_consent_version"] is None
     finally:
         connection.close()

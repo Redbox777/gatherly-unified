@@ -2,6 +2,8 @@
 
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
+import os
+import re
 from typing import Annotated
 from uuid import UUID
 
@@ -55,14 +57,24 @@ def create_notifications_router(
     @router.get("/notification-preferences")
     def get_notification_preferences(
         request: Request, deps: ServiceDependency
-    ) -> dict[str, bool]:
+    ) -> dict[str, bool | str]:
         token = request.cookies.get(SESSION_COOKIE, "")
         user_id = deps.authentication.resolve_session(
             raw_token=token, now=datetime.now(UTC)
         )
         if user_id is None:
             raise HTTPException(status_code=401, detail="Authentication required")
-        return deps.notifications.get_preferences(user_id=user_id)
+        username = os.environ.get("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+        valid_username = bool(re.fullmatch(r"[A-Za-z0-9_]{5,32}", username))
+        return {
+            **deps.notifications.get_preferences(user_id=user_id),
+            "telegram_linked": deps.notifications.has_telegram_identity(user_id=user_id),
+            "telegram_bot_url": f"https://t.me/{username}" if valid_username else "",
+            "telegram_available": (
+                valid_username and bool(os.environ.get("TELEGRAM_BOT_TOKEN", "").strip())
+                and deps.notifications.has_telegram_identity(user_id=user_id)
+            ),
+        }
 
     @router.put("/notification-preferences")
     def update_notification_preferences(
@@ -76,9 +88,30 @@ def create_notifications_router(
         )
         if user_id is None:
             raise HTTPException(status_code=401, detail="Authentication required")
+        values = payload.model_dump()
+        if values["telegram_enabled"]:
+            if not deps.notifications.has_telegram_identity(user_id=user_id):
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Connect a verified Telegram identity before enabling "
+                        "Telegram notifications"
+                    ),
+                )
+            current_preferences = deps.notifications.get_preferences(user_id=user_id)
+            username = os.environ.get("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+            valid_username = bool(re.fullmatch(r"[A-Za-z0-9_]{5,32}", username))
+            if not current_preferences["telegram_enabled"] and (
+                not os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+                or not valid_username
+            ):
+                raise HTTPException(
+                    status_code=503,
+                    detail="Telegram delivery is not configured on this server",
+                )
         return deps.notifications.set_preferences(
             user_id=user_id,
-            values=payload.model_dump(),
+            values=values,
             now=datetime.now(UTC),
         )
 

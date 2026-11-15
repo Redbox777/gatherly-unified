@@ -57,6 +57,20 @@
       document.getElementById("pref-updates").checked = preferences.event_updates_enabled;
       document.getElementById("pref-participants").checked = preferences.participant_added_enabled;
       document.getElementById("pref-reminders").checked = preferences.reminders_enabled;
+      const telegramToggle = document.getElementById("pref-telegram");
+      const telegramLink = document.getElementById("telegram-bot-link");
+      const telegramStatus = document.getElementById("telegram-preference-status");
+      telegramToggle.checked = preferences.telegram_enabled;
+      telegramToggle.disabled = !preferences.telegram_available && !preferences.telegram_enabled;
+      telegramLink.hidden = !preferences.telegram_available;
+      if (preferences.telegram_available) {
+        telegramLink.href = preferences.telegram_bot_url;
+        telegramStatus.textContent = "Откройте бота, нажмите Start, затем включите уведомления.";
+      } else if (!preferences.telegram_linked) {
+        telegramStatus.textContent = "Сначала подключите Telegram к аккаунту Gatherly.";
+      } else {
+        telegramStatus.textContent = "Telegram-уведомления пока не настроены на сервере.";
+      }
     } catch (error) {
       status.textContent = error.message;
     }
@@ -73,7 +87,8 @@
           email_enabled:document.getElementById("pref-email").checked,
           event_updates_enabled:document.getElementById("pref-updates").checked,
           participant_added_enabled:document.getElementById("pref-participants").checked,
-          reminders_enabled:document.getElementById("pref-reminders").checked
+          reminders_enabled:document.getElementById("pref-reminders").checked,
+          telegram_enabled:document.getElementById("pref-telegram").checked
         })
       });
       status.textContent = "Настройки сохранены.";

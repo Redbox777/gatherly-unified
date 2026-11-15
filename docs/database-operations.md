@@ -96,6 +96,8 @@ Current migration history:
 | 16 | Expense splits and allocations |
 | 17 | Event settlements and payer-name snapshots |
 | 18 | Voluntary bug reports |
+| 19 | Opt-in Telegram notification delivery state |
+| 20 | Telegram consent timestamp and text version |
 
 There is no automatic destructive rollback path. For a faulty migration, stop writes, restore a verified backup when data recovery is required, or add a forward-only corrective migration after assessing data impact.
 

@@ -1568,6 +1568,7 @@ def test_event_resource_access_matrix_for_owner_member_and_outsider(
             "event_updates_enabled": False,
             "participant_added_enabled": False,
             "reminders_enabled": False,
+            "telegram_enabled": False,
         }
         assert member.put(
             "/notification-preferences", json=member_preferences

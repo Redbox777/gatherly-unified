@@ -9,7 +9,9 @@ This checklist separates repository-level implementation from deployment and ope
 - [ ] Set `COOKIE_SECURE=true`.
 - [ ] Configure real SMTP host, sender, credentials, and STARTTLS. Keep SMTP credentials out of source control and logs.
 - [ ] Set public HTTPS verification, password-reset, and participant-invitation URLs.
-- [ ] Decide whether the current scrypt password-hash parameters are acceptable for launch or whether to migrate to Argon2id. If changing algorithms, use a versioned hash format and rehash-on-login/reset; never rewrite stored hashes without a verified migration path.
+- [x] New passwords use bounded Argon2id parameters; existing scrypt hashes are upgraded after successful login without forcing password resets.
+- [ ] Benchmark Argon2id latency and memory use on the intended production host under expected concurrent logins.
+- [ ] Configure `TELEGRAM_BOT_TOKEN` and `TELEGRAM_BOT_USERNAME` in both the web and worker environments if Telegram notifications are enabled. Users must start the bot and explicitly opt in.
 - [ ] Remember that Telegram and email/password currently create separate internal accounts. Do not promise cross-provider account linking.
 
 ## Reverse proxy and network boundary
@@ -34,8 +36,10 @@ This checklist separates repository-level implementation from deployment and ope
 - [ ] Provision a writable persistent log directory or collect standard error through the process manager.
 - [ ] Route process supervision to `/health/live` and traffic readiness to `/health/ready`.
 - [ ] Restrict database and log access to authorized operators.
-- [ ] Define a bug-report retention/deletion schedule and implement expiry before production.
-- [ ] Review the privacy notice, lawful basis, and consent wording for the jurisdictions where Gatherly will operate. The technical consent dialog is not a complete legal notice and does not itself establish GDPR compliance.
+- [x] Voluntary diagnostic reports have a configurable expiry policy (90 days by default); verify the configured value and worker schedule.
+- [x] Authenticated account data export and confirmed account erasure are implemented, including anonymization of linked participants in shared events.
+- [ ] Review the privacy notice, lawful basis, and consent wording for the jurisdictions where Gatherly will operate. Technical export/deletion controls and consent timestamps do not themselves establish GDPR compliance.
+- [ ] Review backup retention and define a durable process to reapply erasure requests after restoring an older backup.
 
 ## Repository controls
 

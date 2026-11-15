@@ -63,7 +63,7 @@ class NotificationsRepository:
     def get_preferences(self, *, user_id: str) -> dict[str, bool]:
         row = self._connection.execute(
             """SELECT email_enabled, event_updates_enabled,
-                      participant_added_enabled, reminders_enabled
+                      participant_added_enabled, reminders_enabled, telegram_enabled
                FROM notification_preferences WHERE user_id = ?""",
             (user_id,),
         ).fetchone()
@@ -73,12 +73,14 @@ class NotificationsRepository:
                 "event_updates_enabled": True,
                 "participant_added_enabled": True,
                 "reminders_enabled": True,
+                "telegram_enabled": False,
             }
         return {
             "email_enabled": bool(row["email_enabled"]),
             "event_updates_enabled": bool(row["event_updates_enabled"]),
             "participant_added_enabled": bool(row["participant_added_enabled"]),
             "reminders_enabled": bool(row["reminders_enabled"]),
+            "telegram_enabled": bool(row["telegram_enabled"]),
         }
 
     def set_preferences(
@@ -90,13 +92,18 @@ class NotificationsRepository:
             self._connection.execute(
                 """INSERT INTO notification_preferences(
                     user_id, email_enabled, event_updates_enabled,
-                    participant_added_enabled, reminders_enabled, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    participant_added_enabled, reminders_enabled,
+                    telegram_enabled, telegram_consent_at,
+                    telegram_consent_version, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     email_enabled = excluded.email_enabled,
                     event_updates_enabled = excluded.event_updates_enabled,
                     participant_added_enabled = excluded.participant_added_enabled,
                     reminders_enabled = excluded.reminders_enabled,
+                    telegram_enabled = excluded.telegram_enabled,
+                    telegram_consent_at = excluded.telegram_consent_at,
+                    telegram_consent_version = excluded.telegram_consent_version,
                     updated_at = excluded.updated_at""",
                 (
                     user_id,
@@ -104,6 +111,9 @@ class NotificationsRepository:
                     int(current["event_updates_enabled"]),
                     int(current["participant_added_enabled"]),
                     int(current["reminders_enabled"]),
+                    int(current["telegram_enabled"]),
+                    self._format(now) if current["telegram_enabled"] else None,
+                    "telegram-v1" if current["telegram_enabled"] else None,
                     self._format(now),
                 ),
             )
@@ -143,7 +153,7 @@ class NotificationsRepository:
             cursor = self._connection.execute(
                 """DELETE FROM notifications
                    WHERE event_id = ? AND kind = 'event_reminder'
-                     AND email_sent_at IS NULL""",
+                     AND email_sent_at IS NULL AND telegram_sent_at IS NULL""",
                 (event_id,),
             )
         return cursor.rowcount
@@ -216,6 +226,60 @@ class NotificationsRepository:
             (limit,),
         ).fetchall()
         return [dict(row) for row in rows]
+
+    def has_telegram_identity(self, *, user_id: str) -> bool:
+        """Return whether the account has a verified Telegram identity."""
+        row = self._connection.execute(
+            """SELECT 1 FROM auth_identities
+               WHERE user_id = ? AND provider = 'telegram'
+                 AND verified_at IS NOT NULL LIMIT 1""",
+            (user_id,),
+        ).fetchone()
+        return row is not None
+
+    def pending_telegram(self, *, limit: int = 20) -> list[dict[str, str]]:
+        """Return opted-in Telegram deliveries with verified chat identities."""
+        rows = self._connection.execute(
+            """SELECT notification.id, notification.title, notification.body,
+                      identity.provider_subject AS chat_id
+               FROM notifications AS notification
+               JOIN auth_identities AS identity
+                 ON identity.user_id = notification.user_id
+                AND identity.provider = 'telegram'
+                AND identity.verified_at IS NOT NULL
+               LEFT JOIN notification_preferences AS preference
+                 ON preference.user_id = notification.user_id
+               WHERE notification.telegram_sent_at IS NULL
+                 AND notification.telegram_attempts < 5
+                 AND COALESCE(preference.telegram_enabled, 0) = 1
+               ORDER BY notification.created_at, notification.id LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def record_telegram_failure(
+        self, *, notification_id: str, error_name: str
+    ) -> None:
+        """Count a failed Telegram delivery without storing provider response data."""
+        with transaction(self._connection):
+            self._connection.execute(
+                """UPDATE notifications
+                   SET telegram_attempts = telegram_attempts + 1,
+                       telegram_last_error = ?
+                   WHERE id = ? AND telegram_sent_at IS NULL""",
+                (error_name[:120], notification_id),
+            )
+
+    def record_telegram_sent(self, *, notification_id: str, now: datetime) -> None:
+        """Mark a Telegram delivery successful once."""
+        with transaction(self._connection):
+            self._connection.execute(
+                """UPDATE notifications
+                   SET telegram_attempts = telegram_attempts + 1,
+                       telegram_sent_at = ?, telegram_last_error = NULL
+                   WHERE id = ? AND telegram_sent_at IS NULL""",
+                (self._format(now), notification_id),
+            )
 
     def record_email_failure(
         self, *, notification_id: str, error_name: str
