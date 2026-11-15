@@ -63,7 +63,9 @@ class AccountErasureLedger:
         if not encoded:
             return None
         try:
-            key = base64.urlsafe_b64decode(encoded.encode("ascii"))
+            key = base64.b64decode(
+                encoded.encode("ascii"), altchars=b"-_", validate=True
+            )
         except ValueError as error:
             raise ValueError(
                 "GATHERLY_ERASURE_LEDGER_KEY must be a base64-encoded key"
