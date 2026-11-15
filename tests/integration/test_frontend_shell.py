@@ -76,7 +76,7 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     assert manifest.json()["display"] == "standalone"
     assert manifest.json()["start_url"] == "/"
     assert service_worker.status_code == 200
-    assert "gatherly-shell-v1" in service_worker.text
+    assert 'const CACHE_NAME = "gatherly-shell-' in service_worker.text
     assert "application/json" in service_worker.text
     assert 'addEventListener("push"' in service_worker.text
     assert 'addEventListener("notificationclick"' in service_worker.text
