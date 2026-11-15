@@ -381,3 +381,9 @@ button:disabled{opacity:.55;cursor:wait}
 .telegram-link-widget p{margin:0;color:#82999a;font-size:11px}
 .account-link-content .participant-status{margin:0;min-height:1.2em;font-size:11px;line-height:1.5}
 @media(max-width:600px){.account-link-content{padding:16px}.account-identity-row{align-items:flex-start;flex-direction:column;gap:4px}.account-identity-row span{text-align:left}.account-settings-button{padding:7px 9px}.topbar-right{gap:7px}}
+
+.connection-status{padding:10px 5.1%;background:#fff4df;border-bottom:1px solid #efd7a8;color:#76521b;font-size:12px;line-height:1.5}
+.pwa-install-button{border:1px solid var(--line);border-radius:9px;background:#f4fbf8;color:var(--deep);padding:8px 11px;font:600 11px Inter,ui-sans-serif,system-ui;cursor:pointer}
+.pwa-install-button:hover{background:var(--mint)}
+.pwa-install-button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+@media(max-width:760px){.connection-status{padding:9px 18px;font-size:11px}.pwa-install-button{padding:7px 8px;font-size:10px}}

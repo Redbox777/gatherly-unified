@@ -72,6 +72,11 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     assert 'addEventListener("notificationclick"' in service_worker.text
     assert pwa_script.status_code == 200
     assert "serviceWorker.register" in pwa_script.text
+    assert "beforeinstallprompt" in pwa_script.text
+    assert 'id="pwa-install-button"' in homepage.text
+    assert 'id="connection-status"' in homepage.text
+    assert "navigator.onLine" in pwa_script.text
+    assert "данные встреч и изменения не синхронизируются" in pwa_script.text
     assert offline.status_code == 200
     assert "Нет подключения" in offline.text
     assert "onclick=" not in offline.text
