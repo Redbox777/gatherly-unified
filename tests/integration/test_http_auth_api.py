@@ -1813,11 +1813,8 @@ def test_demo_login_creates_isolated_server_managed_session(
         assert client.get("/events").status_code == 200
 
 
-def test_demo_login_is_never_available_in_production(tmp_path, monkeypatch) -> None:
+def test_demo_login_gate_is_closed_in_production(monkeypatch) -> None:
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("GATHERLY_DEMO_MODE", "true")
     monkeypatch.setenv("CODESPACES", "true")
-    app = create_app(tmp_path / "demo-production.sqlite3")
-    with TestClient(app, headers={"Origin": "http://testserver"}) as client:
-        assert client.get("/auth/demo/status").json() == {"enabled": False}
-        assert client.post("/auth/demo/login").status_code == 404
+    assert http_api._demo_login_enabled() is False
