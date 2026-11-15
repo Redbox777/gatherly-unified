@@ -282,7 +282,19 @@
       };
       const db = await openDatabase();
       const tx = db.transaction("outbox", "readwrite");
-      tx.objectStore("outbox").add(record);
+      const outbox = tx.objectStore("outbox");
+      const existingRequest = outbox.index("by-user-event-created").getAll(
+        IDBKeyRange.bound([userId, command.eventId, 0], [userId, command.eventId, Number.MAX_SAFE_INTEGER])
+      );
+      existingRequest.onsuccess = () => {
+        const existing = existingRequest.result || [];
+        const nextRevision = existing.reduce(
+          (revision, item) => Math.max(revision, item.baseRevision + 1),
+          command.baseRevision
+        );
+        record.baseRevision = nextRevision;
+        outbox.add(record);
+      };
       await transactionDone(tx);
       return { ...record };
     },
