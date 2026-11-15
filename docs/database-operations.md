@@ -98,6 +98,7 @@ Current migration history:
 | 18 | Voluntary bug reports |
 | 19 | Opt-in Telegram notification delivery state |
 | 20 | Telegram consent timestamp and text version |
+| 21 | Encrypted Web Push subscriptions, deliveries, and consent |
 
 There is no automatic destructive rollback path. For a faulty migration, stop writes, restore a verified backup when data recovery is required, or add a forward-only corrective migration after assessing data impact.
 
