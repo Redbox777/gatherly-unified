@@ -52,8 +52,10 @@ self.addEventListener("fetch", event => {
   if (
     request.headers.get("accept")?.includes("application/json") ||
     url.pathname.startsWith("/auth/") ||
+    url.pathname === "/account" ||
     url.pathname.startsWith("/account/") ||
-    url.pathname.startsWith("/notifications")
+    url.pathname === "/notifications" ||
+    url.pathname.startsWith("/notifications/")
   ) return;
 
   if (request.mode === "navigate") {
