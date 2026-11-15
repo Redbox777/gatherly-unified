@@ -140,7 +140,10 @@
     },
     async setUser(userId) {
       const nextUserId = typeof userId === "string" && userId.trim() ? userId : null;
+      let previousUserId = activeUserId;
+      try { previousUserId = previousUserId || window.localStorage.getItem(LAST_USER_KEY); } catch (_) {}
       activeUserId = null;
+      if (previousUserId && previousUserId !== nextUserId) await clearUser(previousUserId);
       activeUserId = nextUserId;
       try {
         if (nextUserId) window.localStorage.setItem(LAST_USER_KEY, nextUserId);
@@ -160,8 +163,10 @@
       if (activeUserId) await clearUser(activeUserId);
     },
     async clearCurrentUser() {
+      const previous = activeUserId;
       activeUserId = null;
       try { window.localStorage.removeItem(LAST_USER_KEY); } catch (_) {}
+      if (previous) await clearUser(previous);
     },
     async purgeCurrentUser() {
       const previous = activeUserId;

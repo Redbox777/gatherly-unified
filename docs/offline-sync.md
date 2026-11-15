@@ -1,6 +1,6 @@
 # S6.3 — Safe offline mutation queue
 
-**Status:** S6.3a/b server foundation and S6.3c IndexedDB outbox data layer implemented. The authenticated command endpoint and atomic idempotency handler exist, and existing online writes advance event revisions. The browser can persist allowlisted, account-scoped pending commands, but it does not send them; foreground sync and user-facing queue controls remain disabled until S6.3d.
+**Status:** S6.3a and S6.3b server foundation implemented. The authenticated command endpoint and atomic idempotency handler exist, and existing online writes advance event revisions. The PWA does not call this endpoint; browser-side offline mutation remains disabled.
 
 ## Goal
 
@@ -140,8 +140,8 @@ Because IndexedDB is not application-encrypted, the UI must disclose that queued
 
 1. **S6.3a — server foundation: complete.** Migration 24 adds per-event revisions and a user-scoped idempotency ledger. The authenticated `/offline-sync/commands` endpoint validates the live session inside the same `BEGIN IMMEDIATE` transaction as authorization, revision check, domain mutation and replay receipt. The endpoint is not called by the PWA.
 2. **S6.3b — online-path consistency:** ensure every existing relevant mutation increments the same event revision; add endpoint and concurrency tests.
-3. **S6.3c — client outbox: complete in PR #94.** IndexedDB schema v2 adds a separate account-scoped `outbox` store, strict command/payload allowlist, stable operation IDs, queue states and metadata, account lock/unlock without deleting pending commands, and explicit purge. Disabling local storage refuses to discard unsynchronized commands unless the caller explicitly confirms discard. This is a persistence layer only: no UI enqueue path, network sender, retry loop, or background sync is enabled.
+3. **S6.3c — client outbox:** IndexedDB outbox, strict command allowlist, account lock/unlock, visible queue state. Do not send yet.
 4. **S6.3d — foreground sync:** ordered sender, retry rules, idempotent replay, conflict UI and browser tests.
 5. **S6.3e — controlled trial:** enable only for test accounts, inspect real-device behavior, then consider broader rollout.
 
-Do not start S6.3d until S6.3a/b are merged and their CI is green. This condition is satisfied after PRs #91–#93; S6.3c adds persistence only and deliberately does not send commands. No server deployment is required for designing or testing these changes locally/through CI, but the live PWA cannot synchronize until the updated backend is deployed.
+Do not start S6.3c/d until S6.3a/b are merged and their CI is green. This condition is satisfied after PRs #91–#93; proceed with S6.3c only after a separate review of the browser outbox design. No server deployment is required for designing or testing these changes locally/through CI, but the live PWA cannot synchronize until the updated backend is deployed.
