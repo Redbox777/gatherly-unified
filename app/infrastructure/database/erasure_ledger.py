@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
-from typing import Mapping
+from collections.abc import Mapping
 from uuid import UUID
 
 
@@ -212,7 +212,7 @@ class AccountErasureLedger:
             if not hmac.compare_digest(expected, supplied):
                 raise ValueError("Invalid event signature")
             return ErasureEvent(event_id, user_id_hash, timestamp)
-        except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
+        except (OSError, UnicodeError, KeyError, TypeError, ValueError) as error:
             raise ErasureLedgerError(
                 f"Erasure ledger event {path.name} failed verification"
             ) from error
