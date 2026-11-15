@@ -108,7 +108,13 @@
       if (cacheKey && offlineStore?.isEnabled() && offlineStore.getUser()) {
         try {
           const cached = await offlineStore.get(cacheKey);
-          if (cached !== null) return cached;
+          if (cached !== null) {
+            if (parsed && /\/sync-state$/i.test(parsed.pathname) &&
+                Number.isSafeInteger(cached?.revision)) {
+              await offlineStore.setEventRevision(eventId, cached.revision);
+            }
+            return cached;
+          }
         } catch (_) {}
       }
       const command = commandFromRequest(url, options);
