@@ -1,7 +1,6 @@
 """Notification inbox, preferences, and event reminder HTTP routes."""
 
 import base64
-import binascii
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 import os
