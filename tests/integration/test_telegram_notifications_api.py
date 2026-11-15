@@ -36,7 +36,7 @@ def _client_with_identity(tmp_path, monkeypatch, *, provider: str):
     finally:
         connection.close()
     client = TestClient(app, headers={"Origin": "http://testserver"})
-    client.cookies.set(SESSION_COOKIE, session.raw_token, domain="testserver", path="/")
+    client.cookies.set(SESSION_COOKIE, session.raw_token)
     return client, database_path
 
 
