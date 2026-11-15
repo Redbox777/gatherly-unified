@@ -2,7 +2,7 @@
 
 import json
 
-from pywebpush import WebPushException, webpush
+from pywebpush import WebPushException, webpush  # type: ignore[import-untyped]
 
 
 class WebPushDeliveryError(RuntimeError):
