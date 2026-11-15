@@ -169,6 +169,27 @@ class OfflineSyncRepository:
             )
         return status_code, response
 
+    def get_revision(self, *, event_id: str, user_id: str) -> int | None:
+        """Return an event revision only when the caller is still a member."""
+        row = self._connection.execute(
+            """SELECT events.owner_id, state.revision
+               FROM events
+               JOIN event_sync_state AS state ON state.event_id = events.id
+               WHERE events.id = ?""",
+            (event_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        if str(row["owner_id"]) != user_id:
+            member = self._connection.execute(
+                """SELECT 1 FROM event_participants
+                   WHERE event_id = ? AND linked_user_id = ?""",
+                (event_id, user_id),
+            ).fetchone()
+            if member is None:
+                return None
+        return int(row["revision"])
+
     @staticmethod
     def _canonical_envelope(
         *, event_id: str, base_revision: int, kind: str, payload: dict[str, object]

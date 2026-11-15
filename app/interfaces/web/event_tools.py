@@ -51,6 +51,23 @@ def create_event_tools_router(
         return JSONResponse(status_code=response_status, content=body)
 
 
+    @router.get("/events/{event_id}/sync-state")
+    def get_event_sync_state(
+        event_id: UUID, request: Request, deps: ServiceDependency
+    ) -> dict[str, object]:
+        """Return the revision only to a current event owner or member."""
+        user_id = deps.authentication.resolve_session(
+            raw_token=request.cookies.get(SESSION_COOKIE, ""), now=datetime.now(UTC)
+        )
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        revision = deps.offline_sync.get_revision(
+            event_id=str(event_id), user_id=user_id
+        )
+        if revision is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        return {"event_id": str(event_id), "revision": revision}
+
     @router.get("/events/{event_id}/venue")
     def get_event_venue(
         event_id: UUID, request: Request, deps: ServiceDependency

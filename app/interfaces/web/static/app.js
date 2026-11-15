@@ -136,6 +136,8 @@
     document.getElementById("detail-created").textContent = formatDate(event.created_at)
       ? "Создано " + formatDate(event.created_at) : "";
     if (!dialog.open) dialog.showModal();
+    try { await api("/events/" + encodeURIComponent(event.id) + "/sync-state"); } catch (_) {}
+    window.GatherlyOfflineSync?.refresh();
     participantStatus.textContent = "";
     participantsCount.textContent = "Загрузка…";
     participantsList.replaceChildren();
@@ -292,8 +294,13 @@
         })
       });
       if (!dialog.open || activeEvent?.id !== eventId) return;
-      renderVenue(venue);
-      venueStatus.textContent = "Место сохранено.";
+      if (venue?.offline_queued) {
+        venueStatus.textContent = "Изменение места сохранено на устройстве и ждёт синхронизации.";
+        window.GatherlyOfflineSync?.refresh();
+      } else {
+        renderVenue(venue);
+        venueStatus.textContent = "Место сохранено.";
+      }
     } catch (error) {
       if (dialog.open && activeEvent?.id === eventId) venueStatus.textContent = error.message;
     } finally {
@@ -306,10 +313,15 @@
     if (!window.confirm("Удалить место проведения этой встречи?")) return;
     venueDelete.disabled = true;
     try {
-      await api("/events/" + encodeURIComponent(eventId) + "/venue", {method:"DELETE"});
+      const result = await api("/events/" + encodeURIComponent(eventId) + "/venue", {method:"DELETE"});
       if (!dialog.open || activeEvent?.id !== eventId) return;
-      renderVenue(null);
-      venueStatus.textContent = "Место удалено.";
+      if (result?.offline_queued) {
+        venueStatus.textContent = "Удаление места сохранено в локальной очереди.";
+        window.GatherlyOfflineSync?.refresh();
+      } else {
+        renderVenue(null);
+        venueStatus.textContent = "Место удалено.";
+      }
     } catch (error) {
       if (dialog.open && activeEvent?.id === eventId) venueStatus.textContent = error.message;
     } finally {
@@ -391,6 +403,7 @@
         const rememberedUserId = offlineStore?.getRememberedUser();
         if (!rememberedUserId) throw networkError;
         await offlineStore.setUser(rememberedUserId);
+        window.GatherlyOfflineSync?.refresh();
       }
       if (session) {
         if (session.status === 401) {
@@ -403,6 +416,7 @@
           throw new Error("Не удалось подтвердить аккаунт. Обновите страницу.");
         }
         await offlineStore?.setUser(identity.user_id);
+        window.GatherlyOfflineSync?.refresh();
       }
       const list = await api("/events");
       if (!Array.isArray(list)) throw new Error("Сервер вернул неожиданный ответ.");
@@ -498,6 +512,7 @@
     try {
       await api("/auth/logout", {method:"POST",body:"{}"});
       try { await offlineStore?.clearCurrentUser(); } catch (_) {}
+      window.GatherlyOfflineSync?.refresh();
       window.location.replace("/auth.html");
     } catch (_) {
       logout.disabled = false;
