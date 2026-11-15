@@ -33,6 +33,7 @@ jobs:
       - run: node --check app/interfaces/web/static/service-worker.js
       - run: npm install --no-save --no-package-lock fake-indexeddb@6.2.4
       - run: node --test tests/browser/offline-store.test.cjs
+      - run: node --test tests/browser/offline-sync.test.cjs
       - run: npx --yes eslint@10.15.0 --config eslint.config.mjs app/interfaces/web/static/offline-store.js app/interfaces/web/static/pwa.js app/interfaces/web/static/account-linking-ui.js app/interfaces/web/static/api-client.js app/interfaces/web/static/date-utils.js app/interfaces/web/static/participants-ui.js app/interfaces/web/static/notes-ui.js app/interfaces/web/static/tasks-ui.js app/interfaces/web/static/notifications-ui.js app/interfaces/web/static/finance-ui.js app/interfaces/web/static/app.js app/interfaces/web/static/auth.js app/interfaces/web/static/diagnostics.js
       - run: python -m pip freeze --exclude-editable > /tmp/gatherly-audit-requirements.txt
       - run: pip-audit --strict -r /tmp/gatherly-audit-requirements.txt
