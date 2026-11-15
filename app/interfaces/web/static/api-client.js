@@ -11,6 +11,16 @@
   const api = async (url, options = {}) => {
     const method = String(options.method || "GET").toUpperCase();
     const cacheKey = cacheKeyFor(url, method);
+    let eventMutation = false;
+    try {
+      const parsed = new URL(url, window.location.origin);
+      eventMutation = method !== "GET" && parsed.origin === window.location.origin &&
+        /^\/events(?:\/[A-Za-z0-9_-]+(?:\/(?:participants|notes|tasks|venue))?)?$/.test(parsed.pathname);
+    } catch (_) {}
+    if (eventMutation && offlineStore?.isEnabled() && offlineStore.getUser()) {
+      try { await offlineStore.clearCurrentCache(); }
+      catch (_) { try { await offlineStore.setEnabled(false); } catch (_) {} }
+    }
     let response;
     try {
       response = await fetch(url, {
@@ -46,7 +56,7 @@
     if (response.status === 204) return null;
     const data = await response.json();
     if (cacheKey && offlineStore?.isEnabled() && offlineStore.getUser()) {
-      offlineStore.put(cacheKey, data).catch(() => {});
+      try { await offlineStore.put(cacheKey, data); } catch (_) {}
     }
     return data;
   };

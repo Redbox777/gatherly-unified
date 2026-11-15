@@ -83,6 +83,9 @@
         return typeof userId === "string" && userId.trim() ? userId : null;
       } catch (_) { return null; }
     },
+    async clearCurrentCache() {
+      if (activeUserId) await clearUser(activeUserId);
+    },
     async clearCurrentUser() {
       const previous = activeUserId;
       activeUserId = null;

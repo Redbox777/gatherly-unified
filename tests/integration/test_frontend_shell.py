@@ -45,6 +45,8 @@ def test_frontend_assets_are_served_by_fastapi(tmp_path) -> None:
     assert "cacheKeyFor" in api_client.text
     assert "offlineStore.put" in api_client.text
     assert "offlineStore.get" in api_client.text
+    assert "clearCurrentCache" in api_client.text
+    assert "clearCurrentCache" in offline_store.text
     assert "getRememberedUser" in offline_store.text
     assert "getRememberedUser" in script.text
     assert account_linking.status_code == 200
