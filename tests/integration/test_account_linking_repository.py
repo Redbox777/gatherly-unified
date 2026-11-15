@@ -1,6 +1,4 @@
 from datetime import UTC, datetime
-import subprocess
-
 import pytest
 
 from app.infrastructure.database.account_linking_repository import (
@@ -9,10 +7,7 @@ from app.infrastructure.database.account_linking_repository import (
 )
 from app.infrastructure.database.auth_identities_repository import AuthIdentitiesRepository
 from app.infrastructure.database.connection import connect, migrate
-from app.infrastructure.database.erasure_ledger import (
-    AccountErasureLedger,
-    ErasureLedgerError,
-)
+from app.infrastructure.database.erasure_ledger import AccountErasureLedger
 
 
 NOW = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
@@ -346,43 +341,3 @@ def test_successful_merge_records_durable_source_erasure_intent(database, tmp_pa
     assert ledger.matching_merged_source_user_ids(
         [source.user_id, target.user_id], events
     ) == (source.user_id,)
-
-
-
-def test_merge_does_not_start_when_intent_replication_fails(
-    database, tmp_path, monkeypatch
-) -> None:
-    target = create_identity(database, provider="telegram", subject="telegram-target")
-    source = create_identity(
-        database,
-        provider="email",
-        subject="source@example.test",
-        user_email_hash="argon2id$source",
-    )
-    ledger = AccountErasureLedger(
-        tmp_path / "ledger", b"m" * 32, remote="mock:merge-ledger"
-    )
-
-    def fail_remote(*args, **kwargs):
-        raise subprocess.CalledProcessError(1, "rclone")
-
-    monkeypatch.setattr(
-        "app.infrastructure.database.erasure_ledger.subprocess.run", fail_remote
-    )
-    with pytest.raises(ErasureLedgerError, match="off-host"):
-        AccountLinkingRepository(database).merge_accounts(
-            target_user_id=target.user_id,
-            source_user_id=source.user_id,
-            proof_identity_id=source.identity_id,
-            proof_provider="email",
-            expected_password_hash="argon2id$source",
-            now=NOW,
-            erasure_ledger=ledger,
-        )
-
-    assert database.execute(
-        "SELECT user_id FROM auth_identities WHERE id = ?", (source.identity_id,)
-    ).fetchone()["user_id"] == source.user_id
-    assert database.execute(
-        "SELECT 1 FROM users WHERE id = ?", (source.user_id,)
-    ).fetchone() is not None

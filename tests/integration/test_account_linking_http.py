@@ -31,7 +31,7 @@ def test_linking_telegram_merges_verified_account_and_rotates_session(
     monkeypatch.setenv("GATHERLY_ERASURE_LEDGER_PATH", str(tmp_path / "erasure-ledger"))
     monkeypatch.setenv(
         "GATHERLY_ERASURE_LEDGER_KEY",
-        "bW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbQ==",
+        "bW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW0=",
     )
     bot_token = "test-telegram-bot-token"
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", bot_token)
@@ -124,7 +124,7 @@ def test_linking_email_merges_verified_account_and_rotates_session(
     monkeypatch.setenv("GATHERLY_ERASURE_LEDGER_PATH", str(tmp_path / "erasure-ledger"))
     monkeypatch.setenv(
         "GATHERLY_ERASURE_LEDGER_KEY",
-        "bW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbQ==",
+        "bW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW0=",
     )
     bot_token = "test-telegram-bot-token"
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", bot_token)
