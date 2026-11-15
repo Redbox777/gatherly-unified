@@ -67,7 +67,7 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             row["version"]
             for row in connection.execute("SELECT version FROM schema_migrations").fetchall()
         }
-        assert versions == set(range(1, 19))
+        assert versions == set(range(1, 20))
     finally:
         connection.close()
 
