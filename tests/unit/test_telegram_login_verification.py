@@ -48,6 +48,13 @@ def test_rejects_missing_or_malformed_signature() -> None:
     assert not verify_telegram_login(payload=payload, bot_token=BOT_TOKEN, now=NOW)
 
 
+def test_rejects_non_ascii_signature_without_raising() -> None:
+    payload = signed_payload(auth_date=int(NOW.timestamp()))
+    payload["hash"] = "я" * 64
+
+    assert not verify_telegram_login(payload=payload, bot_token=BOT_TOKEN, now=NOW)
+
+
 @pytest.mark.parametrize("age", [timedelta(minutes=6), timedelta(seconds=-1)])
 def test_rejects_expired_or_future_auth_date(age: timedelta) -> None:
     payload = signed_payload(auth_date=int((NOW - age).timestamp()))
