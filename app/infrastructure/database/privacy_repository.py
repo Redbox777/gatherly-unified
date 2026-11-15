@@ -191,12 +191,6 @@ class PrivacyRepository:
                 "DELETE FROM event_reminder_preferences WHERE owner_id = ?",
                 (user_id,),
             )
-            owned_event_ids = {
-                str(row["id"])
-                for row in self._connection.execute(
-                    "SELECT id FROM events WHERE owner_id = ?", (user_id,)
-                ).fetchall()
-            }
             linked_participants = self._connection.execute(
                 """SELECT id FROM event_participants
                    WHERE linked_user_id = ? AND event_id NOT IN (
