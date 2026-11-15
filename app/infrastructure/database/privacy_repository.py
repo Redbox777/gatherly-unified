@@ -1,9 +1,11 @@
 """Privacy operations for user-access export and account erasure."""
 
 import sqlite3
+from datetime import UTC, datetime
 from typing import Any
 
 from app.infrastructure.database.connection import transaction
+from app.infrastructure.database.erasure_ledger import AccountErasureLedger
 
 
 class PrivacyRepository:
@@ -162,8 +164,10 @@ class PrivacyRepository:
             ],
         }
 
-    def delete_user_account(self, *, user_id: str) -> bool:
-        """Erase an account and owned data while detaching shared participant records."""
+    def delete_user_account(
+        self, *, user_id: str, erasure_ledger: AccountErasureLedger
+    ) -> bool:
+        """Record a durable tombstone before erasing the account transactionally."""
         if not user_id.strip():
             raise ValueError("User ID must not be blank")
         with transaction(self._connection):
@@ -172,71 +176,92 @@ class PrivacyRepository:
             ).fetchone()
             if user is None:
                 return False
-            email_addresses = [
-                str(row["provider_subject"])
-                for row in self._connection.execute(
-                    """SELECT provider_subject FROM auth_identities
-                       WHERE user_id = ? AND provider = 'email'""",
-                    (user_id,),
-                ).fetchall()
-            ]
-            self._connection.execute(
-                "DELETE FROM participant_invitations WHERE created_by_owner_id = ?",
-                (user_id,),
+            # The independent ledger is durably written and replicated before the
+            # SQLite transaction can commit. If the process crashes after this
+            # point, startup replay completes the erasure.
+            erasure_ledger.record_deletion(
+                user_id=user_id, deleted_at=datetime.now(UTC)
             )
-            for email in email_addresses:
-                self._connection.execute(
-                    "DELETE FROM participant_invitations WHERE lower(target_email) = lower(?)",
-                    (email,),
-                )
-            self._connection.execute(
-                "DELETE FROM event_reminder_preferences WHERE owner_id = ?",
+            return self._erase_user_account_in_transaction(user_id)
+
+    def apply_recorded_erasure(self, *, user_id: str) -> bool:
+        """Idempotently apply an already-recorded tombstone during recovery/startup."""
+        if not user_id.strip():
+            raise ValueError("User ID must not be blank")
+        with transaction(self._connection):
+            return self._erase_user_account_in_transaction(user_id)
+
+    def _erase_user_account_in_transaction(self, user_id: str) -> bool:
+        user = self._connection.execute(
+            "SELECT 1 FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        if user is None:
+            return False
+        email_addresses = [
+            str(row["provider_subject"])
+            for row in self._connection.execute(
+                """SELECT provider_subject FROM auth_identities
+                   WHERE user_id = ? AND provider = 'email'""",
                 (user_id,),
-            )
-            linked_participants = self._connection.execute(
-                """SELECT id FROM event_participants
-                   WHERE linked_user_id = ? AND event_id NOT IN (
-                       SELECT id FROM events WHERE owner_id = ?
-                   )""",
-                (user_id, user_id),
             ).fetchall()
-            for participant in linked_participants:
-                participant_id = str(participant["id"])
-                anonymized_name = f"Former member {participant_id[:8]}"
-                self._connection.execute(
-                    """UPDATE event_participants
-                       SET display_name = ?, linked_user_id = NULL WHERE id = ?""",
-                    (anonymized_name, participant_id),
-                )
-                self._connection.execute(
-                    """UPDATE event_expense_allocations
-                       SET participant_name = ? WHERE participant_id = ?""",
-                    (anonymized_name, participant_id),
-                )
-                self._connection.execute(
-                    """UPDATE event_expenses
-                       SET paid_by_participant_name = ?
-                       WHERE paid_by_participant_id = ?""",
-                    (anonymized_name, participant_id),
-                )
-                self._connection.execute(
-                    """UPDATE event_settlements
-                       SET from_participant_name = ?
-                       WHERE from_participant_id = ?""",
-                    (anonymized_name, participant_id),
-                )
-                self._connection.execute(
-                    """UPDATE event_settlements
-                       SET to_participant_name = ?
-                       WHERE to_participant_id = ?""",
-                    (anonymized_name, participant_id),
-                )
-            self._connection.execute("DELETE FROM events WHERE owner_id = ?", (user_id,))
-            # Foreign keys cascade identities, sessions, tokens, notifications,
-            # preferences, and authored notes. Shared event finance records are
-            # retained under a non-identifying participant label.
-            cursor = self._connection.execute("DELETE FROM users WHERE id = ?", (user_id,))
-            return cursor.rowcount == 1
+        ]
+        self._connection.execute(
+            "DELETE FROM participant_invitations WHERE created_by_owner_id = ?",
+            (user_id,),
+        )
+        for email in email_addresses:
+            self._connection.execute(
+                "DELETE FROM participant_invitations WHERE lower(target_email) = lower(?)",
+                (email,),
+            )
+        self._connection.execute(
+            "DELETE FROM event_reminder_preferences WHERE owner_id = ?",
+            (user_id,),
+        )
+        linked_participants = self._connection.execute(
+            """SELECT id FROM event_participants
+               WHERE linked_user_id = ? AND event_id NOT IN (
+                   SELECT id FROM events WHERE owner_id = ?
+               )""",
+            (user_id, user_id),
+        ).fetchall()
+        for participant in linked_participants:
+            participant_id = str(participant["id"])
+            anonymized_name = f"Former member {participant_id[:8]}"
+            self._connection.execute(
+                """UPDATE event_participants
+                   SET display_name = ?, linked_user_id = NULL WHERE id = ?""",
+                (anonymized_name, participant_id),
+            )
+            self._connection.execute(
+                """UPDATE event_expense_allocations
+                   SET participant_name = ? WHERE participant_id = ?""",
+                (anonymized_name, participant_id),
+            )
+            self._connection.execute(
+                """UPDATE event_expenses
+                   SET paid_by_participant_name = ?
+                   WHERE paid_by_participant_id = ?""",
+                (anonymized_name, participant_id),
+            )
+            self._connection.execute(
+                """UPDATE event_settlements
+                   SET from_participant_name = ?
+                   WHERE from_participant_id = ?""",
+                (anonymized_name, participant_id),
+            )
+            self._connection.execute(
+                """UPDATE event_settlements
+                   SET to_participant_name = ?
+                   WHERE to_participant_id = ?""",
+                (anonymized_name, participant_id),
+            )
+        self._connection.execute("DELETE FROM events WHERE owner_id = ?", (user_id,))
+        # Foreign keys cascade identities, sessions, tokens, notifications,
+        # preferences, and authored notes. Shared event finance records are
+        # retained under a non-identifying participant label.
+        cursor = self._connection.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        return cursor.rowcount == 1
 
     def _rows(self, query: str, parameters: tuple[Any, ...]) -> list[dict[str, Any]]:
         return [dict(row) for row in self._connection.execute(query, parameters).fetchall()]
