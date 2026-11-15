@@ -34,7 +34,8 @@ test("IndexedDB outbox is durable, account-scoped and protected from accidental 
     eventId,
     baseRevision: 4,
     kind: "note.create",
-    payload: { content: "Draft", visibility: "private" }
+    payload: { content: "Draft", visibility: "private" },
+    createdAt: 1000
   });
   assert.match(first.operationId, /^[0-9a-f-]{36}$/i);
   assert.equal(first.state, "pending");
@@ -49,7 +50,7 @@ test("IndexedDB outbox is durable, account-scoped and protected from accidental 
     /часовой пояс/
   );
   const task = await store.enqueue({
-    eventId, baseRevision: 5, kind: "task.create", payload: { title: "Task" }
+    eventId, baseRevision: 5, kind: "task.create", payload: { title: "Task" }, createdAt: 2000
   });
   assert.equal(task.payload.title, "Task");
 
