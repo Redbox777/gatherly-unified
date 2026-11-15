@@ -39,6 +39,9 @@ def test_offline_sync_endpoint_uses_session_and_replays_same_command(tmp_path, m
     app = create_app(tmp_path / "offline-sync-api.sqlite3")
 
     with TestClient(app, headers={"Origin": "http://testserver"}) as client:
+        unauthenticated_state = client.get(f"/events/{uuid4()}/sync-state")
+        assert unauthenticated_state.status_code == 401
+
         unauthenticated = client.post(
             "/offline-sync/commands",
             json={
