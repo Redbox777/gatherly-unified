@@ -12,6 +12,8 @@ The API rejects unexpected fields, accepts only fixed enumerations, and filters 
 
 ## Operational access and retention
 
-Bug reports are stored in the application database for operational review. Access to the database must be restricted to authorized operators. Define and implement a retention/deletion schedule before production launch; this feature does not yet automate expiry. Technical security/availability logs remain separate and may be generated regardless of whether a user submits a report.
+Bug reports are automatically deleted by the scheduled one-shot worker. The default retention period is 90 days and can be changed with `BUG_REPORT_RETENTION_DAYS` (allowed range: 1–3650 days). Expiry runs on each worker execution, even when SMTP delivery is not configured. Schedule the worker at least daily; the existing one-minute schedule also works. Deletion removes only reports strictly older than the cutoff.
 
-This document describes implementation behavior, not a complete GDPR privacy notice or legal basis. The production privacy notice, retention period, lawful basis, and any required consent language must be reviewed before release in the relevant jurisdictions.
+Access to the database must still be restricted to authorized operators. Confirm the default retention period against the actual purposes, legal basis, and jurisdictions before production; the technical default is not a legal determination. Technical security/availability logs remain separate and follow their own operational retention policy.
+
+This document describes implementation behavior, not a complete GDPR privacy notice or legal basis. The production privacy notice, lawful basis, retention period, and any required consent language must be reviewed before release in the relevant jurisdictions.
