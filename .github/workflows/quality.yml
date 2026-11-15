@@ -26,8 +26,9 @@ jobs:
       - run: node --check app/interfaces/web/static/finance-ui.js
       - run: node --check app/interfaces/web/static/app.js
       - run: node --check app/interfaces/web/static/auth.js
-      - run: node --check app/interfaces/web/static/diagnostics.js
+      - run: node --check app/interfaces/web/static/diagnostics.js app/interfaces/web/static/offline-sync.js
       - run: node --check app/interfaces/web/static/offline-store.js
+      - run: node --check app/interfaces/web/static/offline-sync.js
       - run: node --check app/interfaces/web/static/pwa.js
       - run: node --check app/interfaces/web/static/service-worker.js
       - run: npm install --no-save --no-package-lock fake-indexeddb@6.2.4
