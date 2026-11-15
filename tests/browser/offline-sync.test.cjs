@@ -5,6 +5,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const values = new Map();
+const diagnosticStates = [];
+global.GatherlyDiagnostics = { recordSyncState(state) { diagnosticStates.push(state); } };
 global.window = globalThis;
 global.localStorage = {
   getItem(key) { return values.has(key) ? values.get(key) : null; },
@@ -95,6 +97,9 @@ test("foreground sender applies in order and pauses only a conflicted event", as
   assert.equal(await store.getEventRevision(eventOne), 2);
   assert.equal(await store.getEventRevision(eventTwo), 4);
   assert.match(elements.get("offline-sync-status").textContent, /завершена частично/i);
+  assert.ok(diagnosticStates.includes("sending"));
+  assert.ok(diagnosticStates.includes("done"));
+  assert.ok(diagnosticStates.includes("conflict"));
 });
 
 
