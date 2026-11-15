@@ -97,9 +97,6 @@
     const eventId = parsed ? eventIdFromPath(parsed.pathname) : null;
     const eventMutation = Boolean(eventId && method !== "GET" &&
       /^\/events\/[0-9a-f-]+\/(?:participants|notes|tasks|venue)?(?:\/|$)/i.test(parsed.pathname));
-    if (eventMutation && offlineStore?.isEnabled() && offlineStore.getUser()) {
-      try { await offlineStore.clearCurrentCache(); } catch (_) {}
-    }
     let response;
     try {
       response = await fetch(url, {
@@ -137,12 +134,18 @@
       throw error;
     }
     if (response.status === 204) {
+      if (eventMutation && offlineStore?.isEnabled() && offlineStore.getUser()) {
+        try { await offlineStore.clearCurrentCache(); } catch (_) {}
+      }
       if (eventMutation) await refreshRevision(eventId);
       return null;
     }
     const data = await response.json();
     if (cacheKey && offlineStore?.isEnabled() && offlineStore.getUser()) {
       try { await offlineStore.put(cacheKey, data); } catch (_) {}
+    }
+    if (eventMutation && offlineStore?.isEnabled() && offlineStore.getUser()) {
+      try { await offlineStore.clearCurrentCache(); } catch (_) {}
     }
     if (eventMutation) await refreshRevision(eventId);
     return data;
