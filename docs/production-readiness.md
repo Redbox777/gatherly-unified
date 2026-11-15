@@ -13,6 +13,9 @@ This checklist separates repository-level implementation from deployment and ope
 - [ ] Benchmark Argon2id latency and memory use on the intended production host under expected concurrent logins.
 - [ ] Configure `TELEGRAM_BOT_TOKEN` and `TELEGRAM_BOT_USERNAME` in the web environment for Telegram login/account linking. Configure them in the worker environment as well if Telegram notifications are enabled. Notification delivery still requires users to start the bot and explicitly opt in.
 - [ ] On the deployed HTTPS origin, verify Email-to-Telegram and Telegram-to-Email account merges with test accounts, including provider-collision rejection, data transfer, and old-session revocation.
+- [ ] If Web Push is enabled, configure the VAPID public/private keys, VAPID subject, and separate subscription-encryption key in both web and worker environments. Keep private keys in the secret manager and verify the push provider/transfer review.
+- [x] PWA manifest, root service worker, static shell cache, and offline fallback are implemented; private API data is not cached.
+- [ ] Verify PWA installability and Web Push delivery on the actual HTTPS domain and supported target browsers/devices.
 - [ ] Account linking merges two existing accounts only when their provider sets do not overlap. It requires recent destination authentication and independent source-account proof; it does not attach a new provider identity or support unlinking.
 
 ## Reverse proxy and network boundary

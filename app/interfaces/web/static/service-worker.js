@@ -41,6 +41,58 @@ self.addEventListener("activate", event => {
   );
 });
 
+self.addEventListener("push", event => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch (_) {
+    payload = {};
+  }
+  const title = typeof payload.title === "string"
+    ? payload.title.slice(0, 100)
+    : "Gatherly";
+  const body = typeof payload.body === "string" ? payload.body.slice(0, 300) : "";
+  const requestedUrl = typeof payload.url === "string" ? payload.url : "/";
+  const safeUrl = requestedUrl.startsWith("/") && !requestedUrl.startsWith("//")
+    ? requestedUrl
+    : "/";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: "/icon.svg",
+      badge: "/icon.svg",
+      data: { url: safeUrl }
+    })
+  );
+});
+
+self.addEventListener("notificationclick", event => {
+  event.notification.close();
+  const requestedUrl = event.notification.data?.url;
+  const safeUrl = typeof requestedUrl === "string" &&
+    requestedUrl.startsWith("/") && !requestedUrl.startsWith("//")
+    ? requestedUrl
+    : "/";
+  const targetUrl = new URL(safeUrl, self.location.origin);
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true })
+      .then(async clients => {
+        const existing = clients.find(client => {
+          try {
+            return new URL(client.url).origin === self.location.origin;
+          } catch (_) {
+            return false;
+          }
+        });
+        if (existing) {
+          await existing.navigate(targetUrl.href);
+          return existing.focus();
+        }
+        return self.clients.openWindow(targetUrl.href);
+      })
+  );
+});
+
 self.addEventListener("fetch", event => {
   const request = event.request;
   if (request.method !== "GET") return;
