@@ -177,6 +177,7 @@ class PushSubscriptionsRepository:
                     AND subscription.revoked_at IS NULL
                    WHERE notification.created_at >= preference.push_consent_at
                      AND notification.created_at >= subscription.created_at
+                     AND notification.read_at IS NULL
                    ORDER BY notification.created_at, notification.id""",
             ).fetchall()
             for candidate in candidates:
@@ -208,6 +209,7 @@ class PushSubscriptionsRepository:
                 AND preference.push_enabled = 1
                WHERE delivery.sent_at IS NULL
                  AND delivery.attempts < 5
+                 AND notification.read_at IS NULL
                  AND subscription.revoked_at IS NULL
                ORDER BY delivery.created_at, delivery.id LIMIT ?""",
             (limit,),
