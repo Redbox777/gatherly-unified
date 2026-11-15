@@ -315,7 +315,7 @@ def test_worker_sends_opted_in_telegram_messages_without_smtp(
         }
     ]
 
-    assert worker.run_once("worker.sqlite3") == (2, 0, 1)
+    assert worker.run_once("worker.sqlite3") == (2, 0, 1, 0)
     assert FakeTelegramSender.sent == ["123456"]
     assert FakeNotificationsRepository.telegram_sent_ids == ["telegram-1"]
     assert worker_fakes.closed
