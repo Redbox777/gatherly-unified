@@ -80,6 +80,9 @@ def test_auth_migration_creates_account_identity_and_session_tables(tmp_path) ->
             "telegram_enabled",
             "telegram_consent_at",
             "telegram_consent_version",
+            "push_enabled",
+            "push_consent_at",
+            "push_consent_version",
         } <= preference_columns
         assert {"telegram_sent_at", "telegram_attempts", "telegram_last_error"} <= (
             notification_columns
