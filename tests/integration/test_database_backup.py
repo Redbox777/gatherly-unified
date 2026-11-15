@@ -95,7 +95,12 @@ def test_encrypted_backup_rejects_missing_or_wrong_key_without_overwriting_targe
     _create_database(restored, title="Keep this data")
 
     with pytest.raises(ValueError, match="requires the backup encryption key"):
-        restore_database(backup, restored, confirm_application_stopped=True, erasure_ledger=_ledger(tmp_path))
+        restore_database(
+            backup,
+            restored,
+            confirm_application_stopped=True,
+            erasure_ledger=_ledger(tmp_path),
+        )
 
     with pytest.raises(ValueError, match="authentication failed"):
         restore_database(
