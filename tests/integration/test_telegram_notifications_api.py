@@ -27,10 +27,11 @@ def _client_with_identity(tmp_path, monkeypatch, *, provider: str):
             now=NOW,
             verified_at=NOW,
         )
+        session_now = datetime.now(UTC)
         session = AuthSessionsRepository(connection).create(
             user_id=identity.user_id,
-            now=NOW,
-            expires_at=NOW + timedelta(days=1),
+            now=session_now,
+            expires_at=session_now + timedelta(days=1),
         )
     finally:
         connection.close()
