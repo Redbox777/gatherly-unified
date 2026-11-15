@@ -150,7 +150,10 @@ def backup_database(source: Path, destination: Path) -> None:
 
 def backup_database_encrypted(source: Path, destination: Path, key: bytes) -> None:
     """Create an online SQLite backup and encrypt it before publishing the file."""
+    source_path = source.expanduser().resolve()
     destination_path = destination.expanduser().resolve()
+    if source_path == destination_path:
+        raise ValueError("Source and destination must be different files")
     plaintext_path = _temporary_path(destination_path.parent, ".gatherly-plain-")
     try:
         _copy_database(source, plaintext_path)
@@ -170,6 +173,9 @@ def restore_database(
     if not confirm_application_stopped:
         raise ValueError("Stop the application and pass explicit restore confirmation")
     backup_path = backup.expanduser().resolve()
+    destination_path = destination.expanduser().resolve()
+    if backup_path == destination_path:
+        raise ValueError("Backup and destination must be different files")
     with backup_path.open("rb") as stream:
         is_encrypted = stream.read(len(_ENCRYPTED_BACKUP_MAGIC)) == _ENCRYPTED_BACKUP_MAGIC
     if is_encrypted:
