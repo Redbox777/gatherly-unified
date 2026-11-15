@@ -37,6 +37,10 @@ class FakeNotificationsRepository:
     telegram_messages: list[dict[str, str]] = []
     telegram_sent_ids: list[str] = []
     telegram_failed: list[tuple[str, str]] = []
+    push_messages: list[dict[str, Any]] = []
+    push_sent_ids: list[str] = []
+    push_failed: list[tuple[str, str]] = []
+    push_deleted_ids: list[str] = []
 
     def __init__(self, _connection: FakeConnection) -> None:
         pass
@@ -69,6 +73,30 @@ class FakeNotificationsRepository:
         self.telegram_sent_ids.append(notification_id)
 
 
+class FakePushSubscriptionsRepository:
+    def __init__(self, _connection: FakeConnection) -> None:
+        pass
+
+    def pending_deliveries(self, *, encryption_key, now, limit=100):
+        assert encryption_key
+        assert now.tzinfo is not None
+        assert limit == 100
+        return self.push_messages
+
+    def record_failure(self, *, delivery_id: str, error_name: str, now: datetime):
+        assert now.tzinfo is not None
+        self.push_failed.append((delivery_id, error_name))
+
+    def record_sent(self, *, delivery_id: str, now: datetime):
+        assert now.tzinfo is not None
+        self.push_sent_ids.append(delivery_id)
+
+    def delete_subscription(self, *, subscription_id: str, now: datetime):
+        assert now.tzinfo is not None
+        self.push_deleted_ids.append(subscription_id)
+        return True
+
+
 class FakeTelegramSender:
     outcomes: dict[str, Exception | None] = {}
     sent: list[str] = []
@@ -80,6 +108,21 @@ class FakeTelegramSender:
         assert text
         self.sent.append(chat_id)
         error = self.outcomes.get(chat_id)
+        if error is not None:
+            raise error
+
+
+class FakeWebPushSender:
+    outcomes: dict[str, Exception] = {}
+    sent: list[tuple[str, dict[str, str]]] = []
+
+    def __init__(self, **_kwargs: Any) -> None:
+        pass
+
+    def send(self, *, subscription_info: dict[str, object], payload: dict[str, str]) -> None:
+        endpoint = str(subscription_info["endpoint"])
+        self.sent.append((endpoint, payload))
+        error = self.outcomes.get(endpoint)
         if error is not None:
             raise error
 
@@ -126,11 +169,17 @@ def worker_fakes(monkeypatch: pytest.MonkeyPatch) -> FakeConnection:
     FakeNotificationsRepository.telegram_messages = []
     FakeNotificationsRepository.telegram_sent_ids = []
     FakeNotificationsRepository.telegram_failed = []
+    FakePushSubscriptionsRepository.push_messages = []
+    FakePushSubscriptionsRepository.push_sent_ids = []
+    FakePushSubscriptionsRepository.push_failed = []
+    FakePushSubscriptionsRepository.push_deleted_ids = []
     FakeRateLimitsRepository.retry_values = []
     FakeSender.outcomes = {}
     FakeSender.sent = []
     FakeTelegramSender.outcomes = {}
     FakeTelegramSender.sent = []
+    FakeWebPushSender.outcomes = {}
+    FakeWebPushSender.sent = []
     monkeypatch.setattr(worker, "connect", lambda _path: connection)
     monkeypatch.setattr(worker, "migrate", lambda _connection: None)
     monkeypatch.setattr(worker, "BugReportsRepository", FakeBugReportsRepository)
@@ -138,8 +187,15 @@ def worker_fakes(monkeypatch: pytest.MonkeyPatch) -> FakeConnection:
     monkeypatch.setattr(worker, "SmtpRateLimitsRepository", FakeRateLimitsRepository)
     monkeypatch.setattr(worker, "SmtpEmailSender", FakeSender)
     monkeypatch.setattr(worker, "TelegramBotSender", FakeTelegramSender)
+    monkeypatch.setattr(
+        worker, "PushSubscriptionsRepository", FakePushSubscriptionsRepository
+    )
+    monkeypatch.setattr(worker, "WebPushSender", FakeWebPushSender)
     monkeypatch.delenv("BUG_REPORT_RETENTION_DAYS", raising=False)
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("WEB_PUSH_VAPID_PRIVATE_KEY", raising=False)
+    monkeypatch.delenv("WEB_PUSH_VAPID_SUBJECT", raising=False)
+    monkeypatch.delenv("WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY", raising=False)
     return connection
 
 
@@ -149,7 +205,7 @@ def test_worker_materializes_reminders_without_smtp(
     monkeypatch.delenv("SMTP_HOST", raising=False)
     monkeypatch.delenv("SMTP_SENDER", raising=False)
 
-    assert worker.run_once("worker.sqlite3") == (2, 0, 0)
+    assert worker.run_once("worker.sqlite3") == (2, 0, 0, 0)
     assert len(FakeBugReportsRepository.cutoffs) == 1
     assert worker_fakes.closed
 
@@ -162,7 +218,7 @@ def test_worker_expires_diagnostic_reports_without_smtp(
     monkeypatch.setenv("BUG_REPORT_RETENTION_DAYS", "30")
     FakeBugReportsRepository.deleted = 4
 
-    assert worker.run_once("worker.sqlite3") == (2, 0, 0)
+    assert worker.run_once("worker.sqlite3") == (2, 0, 0, 0)
     assert len(FakeBugReportsRepository.cutoffs) == 1
     assert worker_fakes.closed
 
@@ -180,7 +236,7 @@ def test_worker_sends_pending_emails_and_records_failures(
     FakeRateLimitsRepository.retry_values = [30, None, None]
     FakeSender.outcomes = {"failed@example.test": TimeoutError()}
 
-    assert worker.run_once("worker.sqlite3") == (2, 1, 0)
+    assert worker.run_once("worker.sqlite3") == (2, 1, 0, 0)
     assert FakeSender.sent == ["sent@example.test", "failed@example.test"]
     assert FakeNotificationsRepository.sent_ids == ["sent"]
     assert FakeNotificationsRepository.failed == [("failed", "TimeoutError")]
@@ -198,7 +254,7 @@ def test_worker_uses_database_environment_fallback(
         worker, "connect", lambda path: connected.append(str(path)) or worker_fakes
     )
 
-    assert worker.run_once() == (2, 0, 0)
+    assert worker.run_once() == (2, 0, 0, 0)
     assert connected == ["from-env.sqlite3"]
 
 
@@ -207,7 +263,7 @@ def test_worker_main_configures_logging_and_reports_counts(
 ) -> None:
     configured: list[bool] = []
     monkeypatch.setattr(worker, "configure_application_logging", lambda: configured.append(True))
-    monkeypatch.setattr(worker, "run_once", lambda: (3, 2, 1))
+    monkeypatch.setattr(worker, "run_once", lambda: (3, 2, 1, 4))
 
     worker.main()
 
@@ -218,6 +274,7 @@ def test_worker_main_configures_logging_and_reports_counts(
     assert record.notifications_created == 3
     assert record.emails_sent == 2
     assert record.telegram_messages_sent == 1
+    assert record.push_messages_sent == 4
 
 
 def test_worker_rejects_insecure_production_smtp_before_opening_database(
@@ -280,10 +337,85 @@ def test_worker_records_telegram_delivery_failures_without_leaking_details(
     ]
     FakeTelegramSender.outcomes = {"987654": TimeoutError("private provider detail")}
 
-    assert worker.run_once("worker.sqlite3") == (2, 0, 0)
+    assert worker.run_once("worker.sqlite3") == (2, 0, 0, 0)
     assert FakeNotificationsRepository.telegram_failed == [
         ("telegram-failed", "TimeoutError")
     ]
     assert "private provider detail" not in caplog.text
     assert "private-test-token" not in caplog.text
+    assert worker_fakes.closed
+
+
+
+def test_worker_sends_push_messages_when_vapid_configuration_is_present(
+    worker_fakes: FakeConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+    monkeypatch.delenv("SMTP_SENDER", raising=False)
+    monkeypatch.setenv("WEB_PUSH_VAPID_PRIVATE_KEY", "private-vapid-key")
+    monkeypatch.setenv("WEB_PUSH_VAPID_SUBJECT", "mailto:ops@example.test")
+    monkeypatch.setenv(
+        "WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY",
+        "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY",
+    )
+    FakePushSubscriptionsRepository.push_messages = [
+        {
+            "delivery_id": "push-delivery-1",
+            "subscription_id": "push-subscription-1",
+            "subscription_info": {
+                "endpoint": "https://push.example.test/send/device"
+            },
+            "title": "Встреча скоро",
+            "body": "Начало через час",
+        }
+    ]
+
+    assert worker.run_once("worker.sqlite3") == (2, 0, 0, 1)
+    assert FakeWebPushSender.sent == [
+        (
+            "https://push.example.test/send/device",
+            {"title": "Встреча скоро", "body": "Начало через час", "url": "/"},
+        )
+    ]
+    assert FakePushSubscriptionsRepository.push_sent_ids == ["push-delivery-1"]
+    assert worker_fakes.closed
+
+
+def test_worker_revokes_expired_push_endpoint_without_logging_subscription_data(
+    worker_fakes: FakeConnection, monkeypatch: pytest.MonkeyPatch, caplog
+) -> None:
+    from app.infrastructure.web_push_sender import WebPushDeliveryError
+
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+    monkeypatch.delenv("SMTP_SENDER", raising=False)
+    monkeypatch.setenv("WEB_PUSH_VAPID_PRIVATE_KEY", "private-vapid-key")
+    monkeypatch.setenv("WEB_PUSH_VAPID_SUBJECT", "mailto:ops@example.test")
+    monkeypatch.setenv(
+        "WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY",
+        "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY",
+    )
+    FakePushSubscriptionsRepository.push_messages = [
+        {
+            "delivery_id": "push-delivery-410",
+            "subscription_id": "push-subscription-410",
+            "subscription_info": {
+                "endpoint": "https://push.example.test/private-endpoint"
+            },
+            "title": "Meeting",
+            "body": "Reminder",
+        }
+    ]
+    FakeWebPushSender.outcomes = {
+        "https://push.example.test/private-endpoint": WebPushDeliveryError(410)
+    }
+
+    assert worker.run_once("worker.sqlite3") == (2, 0, 0, 0)
+    assert FakePushSubscriptionsRepository.push_failed == [
+        ("push-delivery-410", "WebPushDeliveryError")
+    ]
+    assert FakePushSubscriptionsRepository.push_deleted_ids == [
+        "push-subscription-410"
+    ]
+    assert "private-endpoint" not in caplog.text
+    assert "private-vapid-key" not in caplog.text
     assert worker_fakes.closed
