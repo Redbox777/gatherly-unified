@@ -76,8 +76,9 @@
       <header class="topbar">
         <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Открыть меню" aria-expanded="false"><svg class="ui-icon" aria-hidden="true"><use href="#icon-menu"></use></svg></button>
         <div class="breadcrumb">Моё пространство <span>/</span> Обзор</div>
-        <div class="topbar-right"><span class="account-label">Моё пространство</span><button class="account-settings-button" id="account-settings-open" type="button" aria-haspopup="dialog">Аккаунт</button><button class="notification-toggle" id="notification-toggle" type="button" aria-expanded="false" aria-controls="notification-panel">Уведомления <span id="notification-count" aria-label="Непрочитанные">0</span></button><button class="logout-button" id="logout-button" type="button">Выйти</button><div class="avatar" aria-hidden="true">G</div></div>
+        <div class="topbar-right"><span class="account-label">Моё пространство</span><button class="pwa-install-button" id="pwa-install-button" type="button" hidden>Установить</button><button class="account-settings-button" id="account-settings-open" type="button" aria-haspopup="dialog">Аккаунт</button><button class="notification-toggle" id="notification-toggle" type="button" aria-expanded="false" aria-controls="notification-panel">Уведомления <span id="notification-count" aria-label="Непрочитанные">0</span></button><button class="logout-button" id="logout-button" type="button">Выйти</button><div class="avatar" aria-hidden="true">G</div></div>
       </header>
+      <div class="connection-status" id="connection-status" role="status" aria-live="polite" hidden></div>
 
       <section class="notification-panel" id="notification-panel" hidden aria-labelledby="notification-heading">
         <div class="notification-panel-heading"><h2 id="notification-heading">Уведомления</h2><button type="button" id="notification-close" class="text-button">Закрыть</button></div>

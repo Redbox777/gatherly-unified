@@ -6,6 +6,8 @@ Gatherly now exposes an installable PWA shell:
 - `/service-worker.js` registers at the root scope and pre-caches the static application shell.
 - `/offline.html` provides a minimal offline fallback.
 - `/pwa.js` registers the service worker only in secure contexts (HTTPS or localhost).
+- When the browser exposes `beforeinstallprompt`, the app shows an explicit install action. Browsers that do not expose this event retain their native install/share menu.
+- A visible offline status warns that only the cached application shell is available and that event data and changes are not synchronized.
 
 ## Cache boundary
 
