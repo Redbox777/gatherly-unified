@@ -1,6 +1,4 @@
 from datetime import UTC, datetime
-import sqlite3
-
 import pytest
 
 from app.infrastructure.database.account_linking_repository import (
