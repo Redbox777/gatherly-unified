@@ -279,6 +279,6 @@ def _push_configuration_available() -> bool:
         decode_subscription_encryption_key(
             os.environ["WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY"]
         )
-    except (ValueError, binascii.Error, UnicodeEncodeError):
+    except ValueError:
         return False
     return len(decoded_public_key) == 65
