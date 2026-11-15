@@ -22,7 +22,8 @@ def database(tmp_path):
     now = datetime.now(UTC).isoformat()
     connection.execute("INSERT INTO users(id, created_at) VALUES ('owner', ?)", (now,))
     connection.execute("INSERT INTO users(id, created_at) VALUES ('guest', ?)", (now,))
-    for user_id, raw_token in (("owner", "owner-session-token"), ("guest", "guest-session-token")):
+    sessions = (("owner", "owner-session-token"), ("guest", "guest-session-token"))
+    for user_id, raw_token in sessions:
         connection.execute(
             "INSERT INTO auth_sessions(id, user_id, token_hash, created_at, expires_at) "
             "VALUES (?, ?, ?, ?, ?)",
@@ -229,6 +230,19 @@ def test_failed_idempotency_receipt_rolls_back_domain_write(database) -> None:
     assert connection.execute(
         "SELECT COUNT(*) FROM offline_sync_idempotency"
     ).fetchone()[0] == 0
+
+
+
+def test_revoked_session_cannot_apply_or_replay_command(database) -> None:
+    _, connection = database
+    connection.execute(
+        "UPDATE auth_sessions SET revoked_at = ? WHERE token_hash = ?",
+        ("2026-11-14T00:00:00Z", hash_token("owner-session-token")),
+    )
+    connection.commit()
+    with pytest.raises(OfflineSyncError) as error:
+        _command(OfflineSyncRepository(connection))
+    assert error.value.status_code == 401
 
 
 def test_concurrent_duplicate_requests_apply_once(tmp_path) -> None:
