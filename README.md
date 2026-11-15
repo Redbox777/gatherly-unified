@@ -22,6 +22,7 @@ A modular backend foundation for Gatherly with shared application logic and web/
 - Invitation email delivery through the SMTP adapter; failed delivery revokes the newly issued invitation before returning an error.
 - Authenticated notification inbox, per-user email/Telegram preferences, and event reminders at 24 hours, 1 hour, or 15 minutes.
 - Opt-in Telegram Bot API notification delivery for users with a verified Telegram identity who have started the configured bot.
+- Installable PWA shell with a root-scoped service worker and safe static-asset caching.
 - One-shot notification worker for scheduled email delivery, with shared SMTP quotas and bounded retries.
 - SQLite persistence, versioned migrations, and integration tests.
 - CI checks for linting, typing, and tests.
@@ -127,5 +128,6 @@ Event notes support private entries and shared entries. Private notes are visibl
 - Production configuration and release gates: [production readiness checklist](docs/production-readiness.md).
 - Account export, erasure, retention, and legal review requirements: [privacy and data rights](docs/privacy-and-data-rights.md).
 - Email and Telegram notification delivery, opt-in requirements, and worker scheduling: [notifications](docs/notifications.md).
+- Installable PWA shell and offline cache boundaries: [PWA](docs/pwa.md).
 
 Gatherly currently targets a single-host SQLite deployment. Do not run multiple application hosts against one SQLite file. Production launch still requires an exercised restore drill, correct public-origin/reverse-proxy configuration, a reviewed privacy notice and retention schedule, and verified repository branch protection.
