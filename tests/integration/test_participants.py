@@ -137,3 +137,27 @@ def test_linking_requires_matching_event_and_existing_account() -> None:
         )[0].linked_user_id is None
     finally:
         connection.close()
+
+
+
+def test_participant_mutations_check_event_ownership_inside_write_transaction(
+    services: tuple[EventsService, ParticipantsService], monkeypatch
+) -> None:
+    events, participants = services
+    event = events.create_event(owner_id="alice", title="Game night")
+    original_get_event = events.get_event
+    transaction_states: list[bool] = []
+
+    def tracked_get_event(*, event_id, owner_id):
+        transaction_states.append(events._repository.connection.in_transaction)
+        return original_get_event(event_id=event_id, owner_id=owner_id)
+
+    monkeypatch.setattr(events, "get_event", tracked_get_event)
+    guest = participants.add_participant(
+        event_id=event.id, owner_id="alice", display_name="Bob"
+    )
+    participants.remove_participant(
+        event_id=event.id, owner_id="alice", participant_id=guest.id
+    )
+
+    assert transaction_states == [True, True]
