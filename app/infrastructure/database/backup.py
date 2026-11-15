@@ -332,7 +332,7 @@ def main() -> None:
             if ledger is None or ledger.remote is None:
                 raise ValueError("Production backups require the off-host account-erasure ledger")
         if ledger is not None:
-            ledger.sync_to_remote()
+            ledger.load_events()
         backup_database_encrypted(
             arguments.source,
             arguments.destination,
@@ -364,7 +364,7 @@ def main() -> None:
         )
         if ledger.remote is None:
             raise ValueError("GATHERLY_ERASURE_LEDGER_REMOTE is required")
-        ledger.sync_to_remote()
+        ledger.load_events()
     else:
         prune_backups(arguments.directory, retention_days=arguments.retention_days)
 
