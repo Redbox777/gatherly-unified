@@ -1,5 +1,6 @@
 """Operational health and voluntary diagnostics HTTP routes."""
 
+import json
 import logging
 import re
 import sqlite3
@@ -76,6 +77,11 @@ def create_bug_report(payload: BugReportRequest, request: Request) -> dict[str, 
             module=payload.module,
             error_code=payload.error_code,
             stack="\n".join(safe_frames),
+            diagnostics_json=json.dumps(
+                [event.model_dump(mode="json") for event in payload.diagnostics],
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ),
         )
     finally:
         connection.close()
