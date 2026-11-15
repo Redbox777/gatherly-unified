@@ -93,14 +93,17 @@ class NotificationsRepository:
                 """INSERT INTO notification_preferences(
                     user_id, email_enabled, event_updates_enabled,
                     participant_added_enabled, reminders_enabled,
-                    telegram_enabled, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    telegram_enabled, telegram_consent_at,
+                    telegram_consent_version, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     email_enabled = excluded.email_enabled,
                     event_updates_enabled = excluded.event_updates_enabled,
                     participant_added_enabled = excluded.participant_added_enabled,
                     reminders_enabled = excluded.reminders_enabled,
                     telegram_enabled = excluded.telegram_enabled,
+                    telegram_consent_at = excluded.telegram_consent_at,
+                    telegram_consent_version = excluded.telegram_consent_version,
                     updated_at = excluded.updated_at""",
                 (
                     user_id,
@@ -109,6 +112,8 @@ class NotificationsRepository:
                     int(current["participant_added_enabled"]),
                     int(current["reminders_enabled"]),
                     int(current["telegram_enabled"]),
+                    self._format(now) if current["telegram_enabled"] else None,
+                    "telegram-v1" if current["telegram_enabled"] else None,
                     self._format(now),
                 ),
             )
