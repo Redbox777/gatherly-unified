@@ -377,7 +377,7 @@
       tx.objectStore("outbox").delete([userId, operationId]);
       await transactionDone(tx);
     },
-    async rebasePendingEvent(eventId, afterCreatedAt, startingRevision, skipOperationId) {
+    async rebasePendingEvent(eventId, startingRevision, skipOperationId) {
       const userId = requireActive();
       if (!isUuid(eventId) || !Number.isSafeInteger(startingRevision) || startingRevision < 1) return false;
       const db = await openDatabase();
@@ -385,14 +385,14 @@
       const done = transactionDone(tx);
       const store = tx.objectStore("outbox");
       const request = store.index("by-user-event-created").getAll(
-        IDBKeyRange.bound([userId, eventId, afterCreatedAt], [userId, eventId, Number.MAX_SAFE_INTEGER], true, false)
+        IDBKeyRange.bound([userId, eventId, 0], [userId, eventId, Number.MAX_SAFE_INTEGER])
       );
       request.onsuccess = () => {
-        const later = (request.result || [])
+        const pending = (request.result || [])
           .filter(item => item.operationId !== skipOperationId && item.state === "pending")
-          .sort((a, b) => a.createdAt - b.createdAt);
+          .sort((a, b) => a.baseRevision - b.baseRevision || a.createdAt - b.createdAt);
         let revision = startingRevision;
-        for (const item of later) {
+        for (const item of pending) {
           item.baseRevision = revision;
           item.updatedAt = Date.now();
           delete item.retryAt;
