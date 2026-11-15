@@ -359,7 +359,6 @@ def test_invitation_acceptance_requires_verified_matching_email(tmp_path) -> Non
         migrate(connection)
         now = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
         for user_id, email, verified_at in (
-            ("invitee", "invitee@example.test", now.isoformat()),
             ("unverified", "invitee@example.test", None),
             ("other", "other@example.test", now.isoformat()),
         ):
@@ -383,16 +382,20 @@ def test_invitation_acceptance_requires_verified_matching_email(tmp_path) -> Non
             )
         event_id = uuid4()
         participant_id = uuid4()
+        other_participant_id = uuid4()
         connection.execute(
             """INSERT INTO events(id, owner_id, title, starts_at, created_at)
                VALUES (?, ?, ?, NULL, ?)""",
             (str(event_id), "owner", "Identity proof", now.isoformat()),
         )
-        connection.execute(
+        connection.executemany(
             """INSERT INTO event_participants(
                 id, event_id, display_name, added_at
             ) VALUES (?, ?, ?, ?)""",
-            (str(participant_id), str(event_id), "Invitee", now.isoformat()),
+            [
+                (str(participant_id), str(event_id), "Invitee", now.isoformat()),
+                (str(other_participant_id), str(event_id), "Other", now.isoformat()),
+            ],
         )
         connection.commit()
 
@@ -418,14 +421,33 @@ def test_invitation_acceptance_requires_verified_matching_email(tmp_path) -> Non
         assert not repository.accept_for_verified_user(
             token_hash=hash_token(raw_token), user_id="other", now=now
         )
+        other_token = "verified-other-invitation-token"
+        other_invitation = ParticipantInvitation.create(
+            participant_id=other_participant_id,
+            target_email="Other@Example.Test",
+            token_hash=hash_token(other_token),
+            created_by_owner_id="owner",
+            now=now,
+        )
+        assert repository.create_for_owner(
+            other_invitation,
+            owner_id="owner",
+            event_id=event_id,
+            now=now,
+        )
         assert repository.accept_for_verified_user(
-            token_hash=hash_token(raw_token), user_id="invitee", now=now
+            token_hash=hash_token(other_token), user_id="other", now=now
         )
         linked = connection.execute(
             "SELECT linked_user_id FROM event_participants WHERE id = ?",
+            (str(other_participant_id),),
+        ).fetchone()
+        assert linked["linked_user_id"] == "other"
+        unverified_participant = connection.execute(
+            "SELECT linked_user_id FROM event_participants WHERE id = ?",
             (str(participant_id),),
         ).fetchone()
-        assert linked["linked_user_id"] == "invitee"
+        assert unverified_participant["linked_user_id"] is None
     finally:
         connection.close()
 
