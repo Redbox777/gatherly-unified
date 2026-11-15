@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 import base64
 import math
+from pathlib import Path
 from urllib.parse import urlsplit
 
 
@@ -132,8 +133,6 @@ def validate_runtime_configuration(environ: Mapping[str, str]) -> None:
         )
     if not ledger_path:
         raise ValueError("GATHERLY_ERASURE_LEDGER_PATH is required in production")
-    from pathlib import Path
-
     ledger_directory = Path(ledger_path).expanduser()
     if not ledger_directory.is_absolute():
         raise ValueError("GATHERLY_ERASURE_LEDGER_PATH must be an absolute persistent path")
