@@ -42,6 +42,14 @@ The script first synchronizes the account-erasure ledger to its off-host remote,
 - `GATHERLY_ERASURE_LEDGER_KEY`: independent 32-byte base64 key used to pseudonymize account IDs and authenticate tombstones. Do not reuse the database backup encryption key.
 - `GATHERLY_ERASURE_LEDGER_REMOTE`: dedicated off-host rclone directory for the immutable erasure ledger, separate from the backup destination.
 
+Generate a separate ledger key (do not reuse the backup-encryption key) and store it in the secret manager:
+
+```bash
+python -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
+```
+
+The local ledger directory must be on persistent storage and survive application restarts. The off-host remote must be separately permissioned from the backup remote. Enable provider-side object versioning and Object Lock/WORM where available; rclone's `--immutable` option is a client-side guard, not a substitute for provider-side protection.
+
 Configure object-storage bucket versioning and a lifecycle/retention policy independently. Restrict remote access to the backup service identity. Keep at least one backup outside the application host and preferably outside the hosting account/region. Do not expose the remote bucket publicly.
 
 ## Restore and recovery drill
