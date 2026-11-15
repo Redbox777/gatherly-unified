@@ -49,6 +49,20 @@ class AuthSessionsService:
         """Resolve an active session token to its internal user ID."""
         return self._repository.get_active_user_id(raw_token=raw_token, now=now)
 
+    def is_recently_authenticated(
+        self,
+        *,
+        raw_token: str,
+        now: datetime,
+        max_age_seconds: int = 600,
+    ) -> bool:
+        """Check whether the active session was created within the re-auth window."""
+        return self._repository.is_recently_authenticated(
+            raw_token=raw_token,
+            now=now,
+            max_age_seconds=max_age_seconds,
+        )
+
     def revoke(self, *, raw_token: str, now: datetime) -> bool:
         """Invalidate an active session token."""
         return self._repository.revoke(raw_token=raw_token, now=now)
