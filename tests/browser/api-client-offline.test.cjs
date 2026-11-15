@@ -60,7 +60,7 @@ test("API client caches the initial revision and queues supported writes without
   assert.deepEqual(await api("/events/" + eventId + "/notes"), []);
   assert.equal(diagnosticEvents.length, 2);
   assert.ok(diagnosticEvents.every(event => event.network_error === true));
-  assert.ok(diagnosticEvents.every(event => event.route_category === undefined));
+  assert.ok(diagnosticEvents.every(event => event.path === "/events/" + eventId + "/notes"));
 });
 
 
