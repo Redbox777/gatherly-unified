@@ -255,7 +255,7 @@ class OfflineSyncRepository:
                 payload, {"title"}, {"description", "due_at", "assignee_participant_id"}
             )
             title = self._text(payload, "title", 160)
-            description = self._text(payload, "description", 2000, default="")
+            description = self._text(payload, "description", 2000, default="", allow_empty=True)
             due_at = self._due_at(payload.get("due_at"))
             assignee = self._optional_text(payload.get("assignee_participant_id"), 80)
             self._validate_assignee(event_id, assignee)
@@ -405,14 +405,16 @@ class OfflineSyncRepository:
 
     @staticmethod
     def _text(
-        payload: dict[str, object], key: str, maximum: int, *, default: str | None = None
+        payload: dict[str, object], key: str, maximum: int, *, default: str | None = None,
+        allow_empty: bool = False,
     ) -> str:
         value = payload.get(key, default)
         if not isinstance(value, str):
             raise OfflineSyncError(422, f"{key} must be text")
         normalized = value.strip()
-        if not normalized or len(normalized) > maximum:
-            raise OfflineSyncError(422, f"{key} must contain 1 to {maximum} characters")
+        if (not normalized and not allow_empty) or len(normalized) > maximum:
+            minimum = 0 if allow_empty else 1
+            raise OfflineSyncError(422, f"{key} must contain {minimum} to {maximum} characters")
         return normalized
 
     @staticmethod
